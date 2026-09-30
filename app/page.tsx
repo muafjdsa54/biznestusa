@@ -28,12 +28,12 @@ export const metadata: Metadata = {
   title: "BizNestUSA | USA Business, Professional & Jobs Directory Platform",
   description: "Discover verified local businesses, skilled professionals, and career opportunities across all 50 US states. Search by category, profession, city, or state.",
   alternates: {
-    canonical: 'https://biznestusa.com/',
+    canonical: 'https://www.biznestusa.com/',
   },
   openGraph: {
     title: "BizNestUSA | USA Business, Professional & Jobs Directory Platform",
     description: "Discover verified local businesses, skilled professionals, and career opportunities across all 50 US states.",
-    url: 'https://biznestusa.com/',
+    url: 'https://www.biznestusa.com/',
     siteName: 'BizNestUSA',
     locale: 'en_US',
     type: 'website',
@@ -90,10 +90,10 @@ export default async function HomePage() {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
     name: 'BizNestUSA',
-    url: 'https://biznestusa.com/',
+    url: 'https://www.biznestusa.com/',
     potentialAction: {
       '@type': 'SearchAction',
-      target: 'https://biznestusa.com/search?q={search_term_string}',
+      target: 'https://www.biznestusa.com/search?q={search_term_string}',
       'query-input': 'required name=search_term_string'
     },
     description: 'USA business directory, professional network, and jobs platform'

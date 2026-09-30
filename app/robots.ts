@@ -23,6 +23,6 @@ export default function robots(): MetadataRoute.Robots {
         '/filter/*',
       ],
     },
-    sitemap: 'https://biznestusa.com/sitemap.xml',
+    sitemap: 'https://www.biznestusa.com/sitemap.xml',
   }
 }

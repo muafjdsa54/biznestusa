@@ -270,8 +270,8 @@ export async function runComprehensiveSeoAudit(): Promise<SeoAuditReport> {
 
   // Core Landing Pages
   sampleDiagnostics.push({
-    url: 'https://biznestusa.com/',
-    canonicalUrl: 'https://biznestusa.com/',
+    url: 'https://www.biznestusa.com/',
+    canonicalUrl: 'https://www.biznestusa.com/',
     isCanonicalMatch: true,
     title: 'BizNestUSA | Find Trusted Local Businesses Across America',
     titleLength: 57,

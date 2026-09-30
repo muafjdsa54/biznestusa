@@ -14,7 +14,7 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 export const metadata: Metadata = {
   title: "BizNestUSA | Find Trusted Local Businesses Across America",
   description: "Find trusted local businesses, home services, professionals, and jobs across the United States. Discover your neighborhood on BizNestUSA.",
-  metadataBase: new URL('https://biznestusa.com'),
+  metadataBase: new URL('https://www.biznestusa.com'),
   keywords: [
     'BizNestUSA United States',
     'United States business directory',
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "BizNestUSA | Find Trusted Local Businesses Across America",
     description: "Find trusted local businesses, home services, professionals, and jobs across the United States. Discover your neighborhood on BizNestUSA.",
-    url: 'https://biznestusa.com/',
+    url: 'https://www.biznestusa.com/',
     siteName: 'BizNestUSA',
     locale: 'en_US',
     type: 'website',
@@ -63,10 +63,10 @@ export default function RootLayout({
     '@context': 'https://schema.org',
     '@type': 'WebSite',
     name: 'BizNestUSA',
-    url: 'https://biznestusa.com/',
+    url: 'https://www.biznestusa.com/',
     potentialAction: {
       '@type': 'SearchAction',
-      target: 'https://biznestusa.com/search?q={search_term_string}',
+      target: 'https://www.biznestusa.com/search?q={search_term_string}',
       'query-input': 'required name=search_term_string'
     }
   }
@@ -75,8 +75,8 @@ export default function RootLayout({
     '@context': 'https://schema.org',
     '@type': 'Organization',
     name: 'BizNestUSA',
-    url: 'https://biznestusa.com/',
-    logo: 'https://biznestusa.com/logo.png',
+    url: 'https://www.biznestusa.com/',
+    logo: 'https://www.biznestusa.com/logo.png',
     email: 'admin@biznestusa.com',
     contactPoint: {
       '@type': 'ContactPoint',

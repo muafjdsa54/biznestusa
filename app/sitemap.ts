@@ -20,7 +20,7 @@ function safeDate(input?: string | null, fallback: Date = new Date()): Date {
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = 'https://biznestusa.com'
+  const baseUrl = 'https://www.biznestusa.com'
   const currentDate = new Date()
   const canonicalUrl = (path: string) => path === '/' ? `${baseUrl}/` : `${baseUrl}/${path.replace(/^\/+|\/+$/g, '')}/`
 

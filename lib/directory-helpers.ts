@@ -3,7 +3,7 @@ import { CATEGORIES, CITIES, BusinessItem } from './data'
 export const VERIFICATION_DISCLAIMER =
   "BizNestUSA verification indicates that the business or professional profile completed our basic validation process. Verification does not independently guarantee every claim made by the lister."
 
-export const CANONICAL_DOMAIN = 'https://biznestusa.com'
+export const CANONICAL_DOMAIN = 'https://www.biznestusa.com'
 
 export function toCanonicalUrl(path: string): string {
   const clean = path.replace(/^\/+|\/+$/g, '')

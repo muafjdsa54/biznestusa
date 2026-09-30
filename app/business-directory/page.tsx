@@ -9,12 +9,12 @@ export const metadata: Metadata = {
   title: 'USA Business Directory | Discover Verified Local Businesses & Services',
   description: 'Search America\'s verified business directory across all 50 states. Discover local home service contractors, healthcare clinics, automotive shops, and professional firms.',
   alternates: {
-    canonical: 'https://biznestusa.com/business-directory',
+    canonical: 'https://www.biznestusa.com/business-directory/',
   },
   openGraph: {
     title: 'USA Business Directory | Discover Verified Local Businesses & Services',
     description: 'Explore verified US businesses by category and metropolitan area. Free self-service business listing profiles.',
-    url: 'https://biznestusa.com/business-directory',
+    url: 'https://www.biznestusa.com/business-directory/',
     type: 'website',
   },
 }
@@ -25,7 +25,7 @@ export default function BusinessDirectoryHub() {
     '@type': 'CollectionPage',
     name: 'USA Business Directory',
     description: 'Comprehensive directory of verified local businesses, licensed trade contractors, and commercial providers across all 50 US states.',
-    url: 'https://biznestusa.com/business-directory',
+    url: 'https://www.biznestusa.com/business-directory/',
   }
 
   const breadcrumbSchema = {
@@ -36,13 +36,13 @@ export default function BusinessDirectoryHub() {
         '@type': 'ListItem',
         position: 1,
         name: 'Home',
-        item: 'https://biznestusa.com',
+        item: 'https://www.biznestusa.com/',
       },
       {
         '@type': 'ListItem',
         position: 2,
         name: 'Business Directory',
-        item: 'https://biznestusa.com/business-directory',
+        item: 'https://www.biznestusa.com/business-directory/',
       },
     ],
   }

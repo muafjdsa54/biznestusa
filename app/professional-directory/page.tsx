@@ -9,12 +9,12 @@ export const metadata: Metadata = {
   title: 'USA Professional Directory | Discover Verified Experts & Freelancers',
   description: 'Search America\'s verified professional directory. Connect with independent software engineers, UX designers, marketing consultants, licensed attorneys, and certified trades specialists.',
   alternates: {
-    canonical: 'https://biznestusa.com/professional-directory',
+    canonical: 'https://www.biznestusa.com/professional-directory/',
   },
   openGraph: {
     title: 'USA Professional Directory | Discover Verified Experts & Freelancers',
     description: 'Find verified American professionals by specialization and location. Dedicated portfolio profiles for independent specialists.',
-    url: 'https://biznestusa.com/professional-directory',
+    url: 'https://www.biznestusa.com/professional-directory/',
     type: 'website',
   },
 }
@@ -25,7 +25,7 @@ export default function ProfessionalDirectoryHub() {
     '@type': 'CollectionPage',
     name: 'USA Professional Directory',
     description: 'Directory of verified independent professionals, engineers, consultants, and trade practitioners across the United States.',
-    url: 'https://biznestusa.com/professional-directory',
+    url: 'https://www.biznestusa.com/professional-directory/',
   }
 
   const breadcrumbSchema = {
@@ -36,13 +36,13 @@ export default function ProfessionalDirectoryHub() {
         '@type': 'ListItem',
         position: 1,
         name: 'Home',
-        item: 'https://biznestusa.com',
+        item: 'https://www.biznestusa.com/',
       },
       {
         '@type': 'ListItem',
         position: 2,
         name: 'Professional Directory',
-        item: 'https://biznestusa.com/professional-directory',
+        item: 'https://www.biznestusa.com/professional-directory/',
       },
     ],
   }
