@@ -1,0 +1,115 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper: checks if requester is authenticated
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Helper: checks if requester is an authorized platform administrator
+    function isAdmin() {
+      return signedIn()
+        && (
+          request.auth.token.email == 'admin@biznestusa.com' ||
+          request.auth.token.email == 'contact@biznestusa.com' ||
+          request.auth.token.admin == true
+        );
+    }
+
+    // Helper: checks if user is the resource creator / owner
+    function hasOwner() {
+      return signedIn() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.email == request.auth.token.email ||
+        resource.data.ownerEmail == request.auth.token.email
+      );
+    }
+
+    // 1. BUSINESSES DIRECTORY
+    match /businesses/{businessId} {
+      // Public directory visitors can view businesses
+      allow read: if true;
+      // Anyone can submit a listing (creates with pending status)
+      allow create: if true;
+      // Only the listing owner or administrator can modify or delete
+      allow update, delete: if isAdmin() || hasOwner();
+    }
+
+    // 2. PROFESSIONALS DIRECTORY
+    match /professionals/{professionalId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if isAdmin() || hasOwner();
+    }
+
+    // 3. COMPANIES
+    match /companies/{companyId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if isAdmin() || hasOwner();
+    }
+
+    // 4. JOBS
+    match /jobs/{jobId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if isAdmin() || hasOwner();
+    }
+
+    // 5. JOB APPLICATIONS
+    match /jobApplications/{applicationId} {
+      // Job seekers can submit job applications
+      allow create: if true;
+      // Only applicant, employer, or admin can read/manage application
+      allow read, update, delete: if isAdmin() || hasOwner() || (signedIn() && resource.data.applicantEmail == request.auth.token.email);
+    }
+
+    // 6. CONTACT MESSAGES & INQUIRIES
+    match /contact_messages/{messageId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /contactMessages/{messageId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /professional_inquiries/{inquiryId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin() || hasOwner() || (signedIn() && resource.data.senderEmail == request.auth.token.email);
+    }
+
+    // 7. ADMIN USERS & SYSTEM CONFIG
+    match /adminUsers/{userId} {
+      allow read, write: if isAdmin();
+    }
+
+    // 8. CMS CONTENT & PLATFORM SETTINGS
+    match /cms_categories/{categoryId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /cms_locations/{locationId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /cms_articles/{articleId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /platform_settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Default lock down for everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

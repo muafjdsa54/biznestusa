@@ -1,0 +1,29 @@
+{
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
+  "installCommand": "npm install",
+  "framework": "nextjs",
+  "outputDirectory": ".next",
+  "regions": ["sin1"],
+  "env": {
+    "NEXT_PUBLIC_FIREBASE_API_KEY": "AIzaSyC1dRJtLFMhBqieIj6JrtZsd4j0jd1xM_Y",
+    "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN": "branches-app-ff0a2.firebaseapp.com",
+    "NEXT_PUBLIC_FIREBASE_PROJECT_ID": "branches-app-ff0a2",
+    "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET": "branches-app-ff0a2.appspot.com",
+    "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "817543103901",
+    "NEXT_PUBLIC_FIREBASE_APP_ID": "1:817543103901:web:0f1de5eacc949505dc9b74",
+    "FIREBASE_ADMIN_PRIVATE_KEY": "-----BEGIN PRIVATE KEY-----\nYour_Private_Key_Here\n-----END PRIVATE KEY-----\n",
+    "FIREBASE_ADMIN_CLIENT_EMAIL": "firebase-adminsdk-xxxxx@branches-app-ff0a2.iam.gserviceaccount.com",
+    "FIREBASE_ADMIN_PROJECT_ID": "branches-app-ff0a2"
+  },
+  "build": {
+    "env": {
+      "NEXT_PUBLIC_FIREBASE_API_KEY": "AIzaSyC1dRJtLFMhBqieIj6JrtZsd4j0jd1xM_Y",
+      "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN": "branches-app-ff0a2.firebaseapp.com",
+      "NEXT_PUBLIC_FIREBASE_PROJECT_ID": "branches-app-ff0a2",
+      "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET": "branches-app-ff0a2.appspot.com",
+      "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "817543103901",
+      "NEXT_PUBLIC_FIREBASE_APP_ID": "1:817543103901:web:0f1de5eacc949505dc9b74"
+    }
+  }
+}

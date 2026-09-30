@@ -1,0 +1,41 @@
+# BizNest USA (formerly ListPak)
+
+BizNest USA is a nationwide United States business directory, verified professional directory, and employment platform designed for discovering local businesses, certified independent professionals, and active jobs across all 50 states.
+
+## Official Identity
+- **Name**: BizNest USA
+- **Legacy / Transition Brand**: ListPak USA
+- **Website**: https://biznestusa.com/
+- **Type**: United States Business Directory, Professional Portfolio Directory & Job Board
+- **Country**: United States (USA)
+- **Primary language**: English (en-US)
+- **Core purpose**: Connect American consumers, businesses, and employers with verified local businesses, licensed trade and creative professionals, and active employment opportunities.
+
+## What BizNest USA Offers
+- **Business Directory**: Verified company profiles across all 50 US states with services, operational hours, verified physical addresses, phone numbers, and direct contact options.
+- **Professional Directory**: Dedicated public portfolio profiles for US developers, designers, consultants, healthcare practitioners, and licensed trade specialists.
+- **Jobs Board**: Searchable employment vacancies across technology, healthcare, trades, finance, and marketing with remote, hybrid, and on-site filters.
+- **User-Generated Content (UGC)**: Genuine self-service business listings and professional profile builder.
+- **Topical Authority**: Comprehensive editorial guides on business compliance, state contractor licensing boards, local SEO, and hiring frameworks.
+
+## Coverage
+Nationwide coverage across all 50 United States and the District of Columbia, including major metropolitan areas such as New York, Los Angeles, Chicago, Houston, Phoenix, Philadelphia, San Antonio, San Diego, Dallas, Austin, Seattle, Denver, Atlanta, Miami, and Boston.
+
+## Key URLs
+- **Homepage**: https://biznestusa.com/
+- **Search & Discovery**: https://biznestusa.com/search/
+- **Business Categories**: https://biznestusa.com/categories/
+- **States & Metros**: https://biznestusa.com/cities/
+- **Professional Directory**: https://biznestusa.com/professionals/
+- **Jobs Marketplace**: https://biznestusa.com/jobs/
+- **List Your Business**: https://biznestusa.com/add-business/
+- **Create Professional Profile**: https://biznestusa.com/register/professional/
+- **Post a Job Vacancy**: https://biznestusa.com/post-job/
+- **About & Governance**: https://biznestusa.com/about/
+- **Verification Policy**: https://biznestusa.com/verification-policy/
+- **Editorial Policy**: https://biznestusa.com/editorial-policy/
+
+## Technical Specifications
+- Built on Next.js App Router with server-side rendering and static optimization.
+- Fully compliant with Schema.org standards (Organization, WebSite, LocalBusiness, Person, JobPosting, BreadcrumbList).
+- CMS-controlled directory taxonomy, category metadata, location hubs, and editorial guides.

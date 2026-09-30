@@ -1,0 +1,5 @@
+# BizNest USA Authorized Digital Sellers (ads.txt)
+# Website: https://biznestusa.com
+# Google AdSense Publisher Record
+google.com, pub-3836871693569517, DIRECT, f08c47fec0942fa0
+
