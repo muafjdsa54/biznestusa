@@ -95,19 +95,7 @@ const nextConfig = {
   },
 
   async redirects() {
-    return [
-      {
-        source: '/:path*',
-        has: [
-          {
-            type: 'host',
-            value: 'www.biznestusa.com',
-          },
-        ],
-        destination: 'https://biznestusa.com/:path*',
-        permanent: true,
-      },
-    ]
+    return []
   },
 
   async rewrites() {
