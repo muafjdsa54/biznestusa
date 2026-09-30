@@ -13,14 +13,14 @@ export default function Footer() {
         {/* Top Branding & NAP Bar */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center pb-12 border-b border-slate-800/80 gap-6">
           <div className="flex flex-col gap-3">
-            <Link href="/" aria-label="BizNestUSA Home Page" className="inline-block group">
+            <Link href="/" aria-label="BizNestUSA Home Page" className="inline-block group bg-white/95 px-3 py-1.5 rounded-xl shadow-sm self-start transition-transform duration-200 group-hover:scale-105">
               <Image
                 src="/logo.png"
                 alt="BizNestUSA - United States Business Directory"
-                width={160}
-                height={48}
+                width={150}
+                height={40}
                 loading="lazy"
-                className="h-12 w-auto object-contain transition-transform duration-200 group-hover:scale-105"
+                className="h-9 w-auto object-contain"
               />
             </Link>
             <p className="text-xs text-slate-400 max-w-md leading-relaxed">

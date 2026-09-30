@@ -24,7 +24,10 @@ export const metadata: Metadata = {
     'BizNestUSA business and careers ecosystem'
   ],
   icons: {
-    icon: [{ url: '/favicon.png', sizes: 'any' }],
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/favicon.png', sizes: 'any' }
+    ],
     apple: [{ url: '/apple-icon.png', sizes: '180x180', type: 'image/png' }],
   },
   openGraph: {

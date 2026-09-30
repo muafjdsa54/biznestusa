@@ -1,0 +1,15 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="64" height="64" rx="14" fill="#0A192F"/>
+  <path d="M32 6L54 14V32C54 46.5 44 57 32 60C20 57 10 46.5 10 32V14L32 6Z" fill="#0F2B48" stroke="#1E40AF" stroke-width="2"/>
+  
+  <!-- Left Wing Crimson -->
+  <path d="M17 22C22 23 29 27 32 34C26 33 20 29 15 24L17 22Z" fill="#DC2626"/>
+  <path d="M14 28C19 29 26 33 29 40C24 39 18 35 12 30L14 28Z" fill="#EF4444"/>
+  
+  <!-- Right Wing White / Navy -->
+  <path d="M32 17C35 20 42 22 49 21C45 25 39 28 33 29C37 32 44 34 50 34C45 38 38 40 32 41C31 34 29 28 26 24C28 21 30 19 32 17Z" fill="#FFFFFF"/>
+  <path d="M32 17L34 20H30L32 17Z" fill="#F59E0B"/>
+  
+  <!-- Lower Accent -->
+  <path d="M22 48L32 54L42 48" stroke="#DC2626" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
