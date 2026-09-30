@@ -4,12 +4,13 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --brand-navy: #123047;
-  --brand-blue: #176b87;
-  --brand-sky: #2b9ab3;
-  --brand-emerald: #1f9d76;
-  --brand-amber: #f2a93b;
-  --brand-orange: #e47c3c;
+  --brand-navy: #0a192f;
+  --brand-blue: #1e40af;
+  --brand-sky: #2563eb;
+  --brand-red: #dc2626;
+  --brand-crimson: #ef4444;
+  --brand-gold: #f59e0b;
+  --brand-emerald: #059669;
 
   --background: #f8fafc;
   --foreground: #0f172a;
@@ -17,21 +18,21 @@
   --card: #ffffff;
   --card-foreground: #0f172a;
 
-  --primary: #176b87;
+  --primary: #1e40af;
   --primary-foreground: #ffffff;
 
-  --secondary: #0f172a;
+  --secondary: #0a192f;
   --secondary-foreground: #ffffff;
 
   --muted: #f1f5f9;
   --muted-foreground: #64748b;
 
-  --accent: #2b9ab3;
+  --accent: #dc2626;
   --accent-foreground: #ffffff;
 
   --border: #e2e8f0;
   --input: #e2e8f0;
-  --ring: #2b9ab3;
+  --ring: #1e40af;
 
   --radius: 0.75rem;
 

@@ -12,8 +12,6 @@ const navLinks = [
   { href: '/professionals', label: 'Professionals', icon: Users },
   { href: '/jobs', label: 'Jobs', icon: Briefcase },
   { href: '/categories', label: 'Categories', icon: Grid },
-  { href: '/cities', label: 'Locations', icon: MapPin },
-  { href: '/blog', label: 'Guides', icon: BookOpen },
 ]
 
 export default function Navbar() {
@@ -23,17 +21,17 @@ export default function Navbar() {
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 sm:h-20">
+        <div className="flex items-center justify-between h-20 sm:h-22">
           
           {/* Brand Logo */}
           <Link href="/" aria-label="BizNestUSA Home Page" className="flex items-center gap-2 group py-1">
             <Image
               src="/logo.png"
               alt="BizNestUSA - USA Directory"
-              width={160}
-              height={44}
+              width={240}
+              height={64}
               priority
-              className="h-9 sm:h-11 w-auto object-contain transition-transform duration-150 group-hover:opacity-90"
+              className="h-11 sm:h-14 md:h-15 w-auto object-contain transition-transform duration-150 group-hover:opacity-95"
             />
           </Link>
 
@@ -49,7 +47,7 @@ export default function Navbar() {
                   href={link.href}
                   className={`text-sm font-medium transition-colors px-3 py-2 rounded-md ${
                     isActive
-                      ? 'text-blue-600 bg-blue-50 font-semibold'
+                      ? 'text-[#1E40AF] bg-blue-50 font-bold'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
                   }`}
                 >
@@ -94,7 +92,7 @@ export default function Navbar() {
 
             <Link
               href="/add-business"
-              className="text-xs md:text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 rounded-lg shadow-xs hover:shadow-sm transition-all inline-flex items-center gap-1.5"
+              className="text-xs md:text-sm font-bold bg-[#DC2626] hover:bg-[#B91C1C] text-white px-3.5 py-2 rounded-lg shadow-sm hover:shadow transition-all inline-flex items-center gap-1.5"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>List Your Business</span>

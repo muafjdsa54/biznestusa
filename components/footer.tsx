@@ -13,14 +13,14 @@ export default function Footer() {
         {/* Top Branding & NAP Bar */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center pb-12 border-b border-slate-800/80 gap-6">
           <div className="flex flex-col gap-3">
-            <Link href="/" aria-label="BizNestUSA Home Page" className="inline-block group bg-white/95 px-3 py-1.5 rounded-xl shadow-sm self-start transition-transform duration-200 group-hover:scale-105">
+            <Link href="/" aria-label="BizNestUSA Home Page" className="inline-block group bg-white px-4 py-2 rounded-2xl shadow-md self-start transition-transform duration-200 group-hover:scale-105">
               <Image
                 src="/logo.png"
                 alt="BizNestUSA - United States Business Directory"
-                width={150}
-                height={40}
+                width={220}
+                height={60}
                 loading="lazy"
-                className="h-9 w-auto object-contain"
+                className="h-11 sm:h-13 w-auto object-contain"
               />
             </Link>
             <p className="text-xs text-slate-400 max-w-md leading-relaxed">
@@ -69,7 +69,6 @@ export default function Footer() {
               <li><Link href="/business-directory" className="hover:text-blue-400 transition-colors">Business Directory Hub</Link></li>
               <li><Link href="/professional-directory" className="hover:text-blue-400 transition-colors">Professional Directory Hub</Link></li>
               <li><Link href="/categories" className="hover:text-blue-400 transition-colors">All Categories</Link></li>
-              <li><Link href="/cities" className="hover:text-blue-400 transition-colors">All Cities</Link></li>
               <li><Link href="/search" className="hover:text-blue-400 transition-colors">Business Search</Link></li>
               <li><Link href="/add-business" className="hover:text-blue-400 transition-colors">Add Business</Link></li>
               <li><Link href="/professionals" className="hover:text-blue-400 transition-colors">Professional Profiles</Link></li>
@@ -78,13 +77,14 @@ export default function Footer() {
             </ul>
           </div>
 
-          {/* Section 2: Major Cities */}
+          {/* Section 2: Major Cities & Locations */}
           <div>
             <h3 className="font-bold text-white text-sm tracking-wider uppercase mb-4 text-emerald-400 flex items-center gap-2">
               <MapPin className="w-4 h-4 text-emerald-400" />
-              <span>Top Hubs</span>
+              <span>Locations &amp; Metros</span>
             </h3>
             <ul className="space-y-2 text-xs text-slate-300">
+              <li className="pb-1"><Link href="/cities" className="font-bold text-emerald-300 hover:text-white transition-colors flex items-center gap-1">All 50 States &amp; Cities &rarr;</Link></li>
               <li><Link href="/city/new-york" className="hover:text-emerald-400 transition-colors">New York Directory</Link></li>
               <li><Link href="/city/los-angeles" className="hover:text-emerald-400 transition-colors">Los Angeles Directory</Link></li>
               <li><Link href="/city/chicago" className="hover:text-emerald-400 transition-colors">Chicago Directory</Link></li>
@@ -95,15 +95,15 @@ export default function Footer() {
             </ul>
           </div>
 
-          {/* Section 3: Company & Trust */}
+          {/* Section 3: Guides & Research */}
           <div>
             <h3 className="font-bold text-white text-sm tracking-wider uppercase mb-4 text-amber-400 flex items-center gap-2">
               <Globe className="w-4 h-4 text-amber-400" />
-              <span>Company</span>
+              <span>Guides &amp; Resources</span>
             </h3>
             <ul className="space-y-2 text-xs text-slate-300">
+              <li className="pb-1"><Link href="/blog" className="font-bold text-amber-300 hover:text-white transition-colors flex items-center gap-1">All Guides &amp; Research &rarr;</Link></li>
               <li><Link href="/about" className="hover:text-amber-400 transition-colors">About Us</Link></li>
-              <li><Link href="/blog" className="hover:text-amber-400 transition-colors">Guides &amp; Research</Link></li>
               <li><Link href="/contact" className="hover:text-amber-400 transition-colors">Contact Us</Link></li>
               <li><Link href="/careers" className="hover:text-amber-400 transition-colors">Careers</Link></li>
               <li><Link href="/advertise-with-us" className="hover:text-amber-400 transition-colors">Advertise With Us</Link></li>

@@ -48,7 +48,10 @@ export const metadata: Metadata = {
     follow: true,
   },
   verification: {
-    google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION || undefined,
+    google: 'j0hBai_GiUhcTsm3fJPgN5izwzEMxIbXjUWHdayOPbo',
+    other: {
+      'msvalidate.01': '32107703ABE97F472472231CBA07F2E5',
+    },
   },
 }
 
@@ -85,6 +88,8 @@ export default function RootLayout({
   return (
     <html lang="en" className={plusJakartaSans.variable}>
       <head>
+        <meta name="google-site-verification" content="j0hBai_GiUhcTsm3fJPgN5izwzEMxIbXjUWHdayOPbo" />
+        <meta name="msvalidate.01" content="32107703ABE97F472472231CBA07F2E5" />
         <link rel="preconnect" href="https://images.unsplash.com" crossOrigin="anonymous" />
         <link rel="preconnect" href="https://firebasestorage.googleapis.com" crossOrigin="anonymous" />
         <script
