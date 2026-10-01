@@ -9,30 +9,47 @@ import { Mail, Lock, User, ShieldCheck, ArrowRight, CheckCircle2, AlertCircle, E
 import { toast } from 'sonner'
 import { auth } from '@/lib/firebase'
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth'
+import { isValidPersonName, validatePersonName, filterPersonNameInput, isValidUsPhone, validateUsPhone, formatUsPhone, isValidEmail } from '@/lib/validation'
+import { Phone } from 'lucide-react'
 
 export default function ProfessionalRegisterPage() {
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
+  const [fullNameError, setFullNameError] = useState('')
+  const [phoneError, setPhoneError] = useState('')
   const router = useRouter()
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
     setErrorMsg('')
+    setFullNameError('')
+    setPhoneError('')
 
-    if (!fullName.trim()) {
-      setErrorMsg('Full Name is required.')
+    const nameVal = validatePersonName(fullName)
+    if (!nameVal.isValid) {
+      const err = nameVal.error || 'Full Name must contain only alphabetic letters (numbers like "232" are strictly not allowed).'
+      setFullNameError(err)
+      setErrorMsg(err)
       return
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(email.trim())) {
+    if (!isValidEmail(email)) {
       setErrorMsg('Please enter a valid email address.')
+      return
+    }
+
+    const phoneVal = validateUsPhone(phone)
+    if (!phoneVal.isValid) {
+      const err = phoneVal.error || 'Please enter a valid 10-digit US phone number: +1 (XXX) XXX-XXXX.'
+      setPhoneError(err)
+      setErrorMsg(err)
       return
     }
 
@@ -68,6 +85,7 @@ export default function ProfessionalRegisterPage() {
       const proSession = JSON.stringify({
         name: fullName.trim(),
         email: email.trim(),
+        phone: phone.trim(),
         role: 'professional',
         hasProfile: false
       })
@@ -76,7 +94,7 @@ export default function ProfessionalRegisterPage() {
 
       toast.success('Professional account created successfully! Redirecting to profile setup...')
       setTimeout(() => {
-        router.push(`/add-professional?name=${encodeURIComponent(fullName.trim())}&email=${encodeURIComponent(email.trim())}`)
+        router.push(`/add-professional?name=${encodeURIComponent(fullName.trim())}&email=${encodeURIComponent(email.trim())}&phone=${encodeURIComponent(phone.trim())}`)
       }, 700)
     } catch (err: any) {
       setErrorMsg(err?.message || 'Failed to create account. Please try again.')
@@ -116,11 +134,21 @@ export default function ProfessionalRegisterPage() {
                   type="text"
                   required
                   value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
+                  onChange={(e) => {
+                    setFullName(filterPersonNameInput(e.target.value))
+                    setFullNameError('')
+                  }}
                   placeholder="e.g. David Miller"
-                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-600"
+                  className={`w-full pl-10 pr-4 py-3 bg-slate-50 border rounded-xl text-sm focus:outline-none ${
+                    fullNameError ? 'border-red-500 bg-red-50/20' : 'border-slate-200 focus:border-blue-600'
+                  }`}
                 />
               </div>
+              {fullNameError ? (
+                <p className="text-[11px] text-red-600 font-semibold mt-1">{fullNameError}</p>
+              ) : (
+                <p className="text-[11px] text-slate-400 mt-1">Real person name (letters only, no numbers like &quot;232&quot;).</p>
+              )}
             </div>
 
             <div>
@@ -136,6 +164,32 @@ export default function ProfessionalRegisterPage() {
                   className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-600"
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">Phone Number (USA Standard) *</label>
+              <div className="relative">
+                <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="tel"
+                  required
+                  maxLength={17}
+                  value={phone}
+                  onChange={(e) => {
+                    setPhone(formatUsPhone(e.target.value))
+                    setPhoneError('')
+                  }}
+                  placeholder="+1 (555) 234-5678"
+                  className={`w-full pl-10 pr-4 py-3 bg-slate-50 border rounded-xl text-sm focus:outline-none ${
+                    phoneError ? 'border-red-500 bg-red-50/20' : 'border-slate-200 focus:border-blue-600'
+                  }`}
+                />
+              </div>
+              {phoneError ? (
+                <p className="text-[11px] text-red-600 font-semibold mt-1">{phoneError}</p>
+              ) : (
+                <p className="text-[11px] text-slate-400 mt-1">USA format: +1 (XXX) XXX-XXXX (exactly 10 digits).</p>
+              )}
             </div>
 
             <div>

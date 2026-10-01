@@ -23,6 +23,7 @@ import {
   onAuthStateChanged, 
   updateProfile 
 } from 'firebase/auth'
+import { isValidPersonName, validatePersonName, filterPersonNameInput, isValidUsPhone, validateUsPhone, formatUsPhone, isValidEmail } from '@/lib/validation'
 import { toast } from 'sonner'
 
 const US_PAYMENT_CHANNELS = [
@@ -386,15 +387,17 @@ export default function AddBusinessClient() {
     e.preventDefault()
     setSignupError('')
 
-    if (!signupName.trim()) {
-      setSignupError('Please provide your Full Name.')
+    const nameVal = validatePersonName(signupName)
+    if (!nameVal.isValid) {
+      setSignupError(nameVal.error || 'Full Name must contain only alphabetic letters (no numbers like "232" or special symbols).')
       return
     }
-    if (!signupPhone.trim()) {
-      setSignupError('Please provide your Phone / WhatsApp number.')
+    const phoneVal = validateUsPhone(signupPhone)
+    if (!phoneVal.isValid) {
+      setSignupError(phoneVal.error || 'Please provide a valid 10-digit US phone number: +1 (XXX) XXX-XXXX.')
       return
     }
-    if (!signupEmail.trim() || !signupEmail.includes('@')) {
+    if (!isValidEmail(signupEmail)) {
       setSignupError('Please provide a valid email address.')
       return
     }
@@ -682,7 +685,26 @@ export default function AddBusinessClient() {
           }
         })
       }
-      if (!formData.phone.trim()) errs.phone = 'Phone number is required'
+      if (!formData.phone.trim()) {
+        errs.phone = 'Phone number is required'
+      } else {
+        const pVal = validateUsPhone(formData.phone)
+        if (!pVal.isValid) {
+          errs.phone = pVal.error || 'Please provide a valid 10-digit US phone number: +1 (XXX) XXX-XXXX'
+        }
+      }
+      if (formData.whatsapp?.trim()) {
+        const wVal = validateUsPhone(formData.whatsapp)
+        if (!wVal.isValid) {
+          errs.whatsapp = wVal.error || 'Please provide a valid 10-digit US phone number: +1 (XXX) XXX-XXXX for WhatsApp'
+        }
+      }
+      if (formData.ownerName?.trim()) {
+        const oVal = validatePersonName(formData.ownerName)
+        if (!oVal.isValid) {
+          errs.ownerName = oVal.error || 'Owner name must contain only alphabetic letters (no numbers like "232").'
+        }
+      }
       if (!currentUser) {
         if (!formData.email.trim() || !formData.email.includes('@')) {
           errs.email = 'Valid business email is required for account creation'
@@ -1234,26 +1256,29 @@ export default function AddBusinessClient() {
                       type="text"
                       required
                       value={signupName}
-                      onChange={(e) => setSignupName(e.target.value)}
+                      onChange={(e) => setSignupName(filterPersonNameInput(e.target.value))}
                       placeholder="e.g. Michael Miller"
                       className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                     />
                   </div>
+                  <p className="text-[10px] text-slate-400 mt-1">Alphabetic letters only (no numbers like &quot;232&quot;).</p>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Phone / WhatsApp Number *</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Phone / WhatsApp Number (USA Standard) *</label>
                   <div className="relative">
                     <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
                       type="tel"
                       required
+                      maxLength={17}
                       value={signupPhone}
-                      onChange={(e) => setSignupPhone(e.target.value)}
+                      onChange={(e) => setSignupPhone(formatUsPhone(e.target.value))}
                       placeholder="e.g. +1 (555) 123-4567"
                       className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                     />
                   </div>
+                  <p className="text-[10px] text-slate-400 mt-1">USA format: +1 (XXX) XXX-XXXX (exactly 10 digits).</p>
                 </div>
 
                 <div>
@@ -2373,37 +2398,50 @@ const availableCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-slate-100">
                             <div>
                               <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                                Phone Number (Calls) *
+                                Phone Number (Calls - USA Standard) *
                               </label>
                               <div className="relative">
                                 <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                 <input
-                                  type="text"
+                                  type="tel"
+                                  maxLength={17}
                                   value={formData.phone}
-                                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                  onChange={(e) => setFormData({ ...formData, phone: formatUsPhone(e.target.value) })}
                                   placeholder="+1 (555) 123-4567"
                                   className={`w-full pl-10 pr-4 py-3 bg-slate-50/80 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
                                     errors.phone ? 'border-red-500 bg-red-50/30' : 'border-slate-200'
                                   }`}
                                 />
                               </div>
-                              {errors.phone && <span className="text-[11px] font-semibold text-red-500 mt-1 block">{errors.phone}</span>}
+                              {errors.phone ? (
+                                <span className="text-[11px] font-semibold text-red-500 mt-1 block">{errors.phone}</span>
+                              ) : (
+                                <span className="text-[10px] text-slate-400 mt-1 block">USA format: +1 (XXX) XXX-XXXX (10 digits)</span>
+                              )}
                             </div>
 
                             <div>
                               <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                                WhatsApp Number (Inquiries)
+                                WhatsApp Number (Inquiries - USA Standard)
                               </label>
                               <div className="relative">
                                 <MessageCircle className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                 <input
-                                  type="text"
+                                  type="tel"
+                                  maxLength={17}
                                   value={formData.whatsapp}
-                                  onChange={(e) => setFormData({ ...formData, whatsapp: e.target.value })}
+                                  onChange={(e) => setFormData({ ...formData, whatsapp: formatUsPhone(e.target.value) })}
                                   placeholder="+1 (555) 123-4567"
-                                  className="w-full pl-10 pr-4 py-3 bg-slate-50/80 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                                  className={`w-full pl-10 pr-4 py-3 bg-slate-50/80 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
+                                    errors.whatsapp ? 'border-red-500 bg-red-50/30' : 'border-slate-200'
+                                  }`}
                                 />
                               </div>
+                              {errors.whatsapp ? (
+                                <span className="text-[11px] font-semibold text-red-500 mt-1 block">{errors.whatsapp}</span>
+                              ) : (
+                                <span className="text-[10px] text-slate-400 mt-1 block">USA format: +1 (XXX) XXX-XXXX (10 digits)</span>
+                              )}
                             </div>
 
                             <div>

@@ -5,8 +5,9 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Navbar from '@/components/navbar'
 import Footer from '@/components/footer'
-import { Mail, Lock, UserPlus, Building2, Phone, ArrowRight, Eye, EyeOff } from 'lucide-react'
+import { Mail, Lock, UserPlus, Building2, Phone, ArrowRight, Eye, EyeOff, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
+import { isValidPersonName, validatePersonName, isValidUsPhone, validateUsPhone, formatUsPhone, filterPersonNameInput, isValidEmail, isValidPassword } from '@/lib/validation'
 
 export default function RegisterPage() {
   const [name, setName] = useState('')
@@ -16,11 +17,77 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [errorMsg, setErrorMsg] = useState('')
+  const [nameError, setNameError] = useState('')
+  const [phoneError, setPhoneError] = useState('')
   const router = useRouter()
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatUsPhone(e.target.value)
+    setPhone(formatted)
+    setPhoneError('')
+  }
+
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Strip numeric digits in real-time so numbers like '232' cannot be entered
+    const filtered = filterPersonNameInput(e.target.value)
+    setName(filtered)
+    setNameError('')
+  }
 
   const handleRegister = (e: React.FormEvent) => {
     e.preventDefault()
+    setErrorMsg('')
+    setNameError('')
+    setPhoneError('')
+
+    const nameValidation = validatePersonName(name)
+    if (!nameValidation.isValid) {
+      const err = nameValidation.error || 'Full Name must contain only alphabetic letters (no numbers like "232" or special symbols).'
+      setNameError(err)
+      setErrorMsg(err)
+      toast.error(err)
+      return
+    }
+
+    if (!isValidEmail(email)) {
+      const err = 'Please enter a valid email address.'
+      setErrorMsg(err)
+      toast.error(err)
+      return
+    }
+
+    const phoneValidation = validateUsPhone(phone)
+    if (!phoneValidation.isValid) {
+      const err = phoneValidation.error || 'Please enter a valid 10-digit US phone number: +1 (XXX) XXX-XXXX.'
+      setPhoneError(err)
+      setErrorMsg(err)
+      toast.error(err)
+      return
+    }
+
+    if (!isValidPassword(password)) {
+      const err = 'Password must be at least 6 characters long.'
+      setErrorMsg(err)
+      toast.error(err)
+      return
+    }
+
     setIsLoading(true)
+
+    // Store user session for seamless flow
+    const userSession = JSON.stringify({
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      phone: phone.trim(),
+      company: company.trim(),
+      role: 'business'
+    })
+    try {
+      sessionStorage.setItem('biznestusa_user_session', userSession)
+      localStorage.setItem('biznestusa_user_session', userSession)
+    } catch {}
+
     setTimeout(() => {
       setIsLoading(false)
       toast.success('BizNestUSA Business Account registered successfully!')
@@ -41,6 +108,13 @@ export default function RegisterPage() {
             <p className="text-xs text-slate-500 mt-1">List your business and connect with customers across the United States</p>
           </div>
 
+          {errorMsg && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
           <form onSubmit={handleRegister} className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">Full Name *</label>
@@ -48,10 +122,17 @@ export default function RegisterPage() {
                 type="text"
                 required
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={handleNameChange}
                 placeholder="Alex Morgan"
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-emerald-600"
+                className={`w-full px-4 py-2.5 bg-slate-50 border rounded-xl text-sm focus:outline-none ${
+                  nameError ? 'border-red-500 bg-red-50/20' : 'border-slate-200 focus:border-emerald-600'
+                }`}
               />
+              {nameError ? (
+                <p className="text-[11px] text-red-600 font-semibold mt-1">{nameError}</p>
+              ) : (
+                <p className="text-[11px] text-slate-400 mt-1">Real person name (alphabetic letters only, no numbers allowed).</p>
+              )}
             </div>
 
             <div>
@@ -70,18 +151,26 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Phone Number *</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Phone Number (USA Standard) *</label>
               <div className="relative">
                 <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
                   type="tel"
                   required
+                  maxLength={17}
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="(555) 234-5678"
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-emerald-600"
+                  onChange={handlePhoneChange}
+                  placeholder="+1 (555) 234-5678"
+                  className={`w-full pl-10 pr-4 py-2.5 bg-slate-50 border rounded-xl text-sm focus:outline-none ${
+                    phoneError ? 'border-red-500 bg-red-50/20' : 'border-slate-200 focus:border-emerald-600'
+                  }`}
                 />
               </div>
+              {phoneError ? (
+                <p className="text-[11px] text-red-600 font-semibold mt-1">{phoneError}</p>
+              ) : (
+                <p className="text-[11px] text-slate-400 mt-1">USA Standard format: +1 (XXX) XXX-XXXX (exactly 10 digits).</p>
+              )}
             </div>
 
             <div>
@@ -107,7 +196,7 @@ export default function RegisterPage() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Create password"
+                  placeholder="Create password (min 6 characters)"
                   className="w-full pl-10 pr-11 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-emerald-600"
                 />
                 <button

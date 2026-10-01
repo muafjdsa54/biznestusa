@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { saveProfessionalInquiry, getProfessionalInquiries } from '@/lib/professional-service'
+import { isValidPersonName, isValidUsPhone, isValidEmail } from '@/lib/validation'
+import { sanitizePersonName, sanitizePhone } from '@/lib/sanitizer'
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,12 +15,33 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    if (!isValidPersonName(senderName)) {
+      return NextResponse.json(
+        { success: false, error: 'Full Name must contain only alphabetic letters (no numbers or special symbols).' },
+        { status: 400 }
+      )
+    }
+
+    if (!isValidEmail(senderEmail)) {
+      return NextResponse.json(
+        { success: false, error: 'Please enter a valid email address.' },
+        { status: 400 }
+      )
+    }
+
+    if (!isValidUsPhone(senderWhatsApp)) {
+      return NextResponse.json(
+        { success: false, error: 'Please enter a valid 10-digit US phone number: +1 (XXX) XXX-XXXX.' },
+        { status: 400 }
+      )
+    }
+
     const result = await saveProfessionalInquiry({
       proUsername: proUsername || 'professional',
       proName: proName || 'Professional Specialist',
-      senderName: senderName.trim(),
+      senderName: sanitizePersonName(senderName),
       senderEmail: senderEmail.trim(),
-      senderWhatsApp: senderWhatsApp.trim(),
+      senderWhatsApp: sanitizePhone(senderWhatsApp),
       message: message.trim()
     })
 

@@ -8,7 +8,10 @@ import { getPublicJobPath } from '@/lib/job-url'
 import { BLOG_POSTS } from '@/lib/blog-data'
 import {
   getPopulatedCategoryCityPairs,
-  normalizeCitySlug
+  normalizeCitySlug,
+  isUsCity,
+  isPakistaniCity,
+  isPakistaniEntity
 } from '@/lib/directory-helpers'
 
 export const revalidate = 3600 // Revalidate sitemap XML every hour
@@ -119,21 +122,30 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     console.error('Error fetching companies for sitemap:', err)
   }
 
-  // 5. Active Cities (Only index cities that have real businesses, jobs, or professionals)
+  // 5. Active Cities (Only index cities that are verified US cities)
   const activeCitySlugs = new Set<string>()
   rawBusinesses.forEach(b => {
-    if (b.city) activeCitySlugs.add(normalizeCitySlug(b.city))
-    if (b.cities) b.cities.forEach(c => activeCitySlugs.add(normalizeCitySlug(c)))
+    if (!isPakistaniEntity(b)) {
+      if (b.city && isUsCity(b.city) && !isPakistaniCity(b.city)) activeCitySlugs.add(normalizeCitySlug(b.city))
+      if (b.cities) b.cities.forEach(c => {
+        if (isUsCity(c) && !isPakistaniCity(c)) activeCitySlugs.add(normalizeCitySlug(c))
+      })
+    }
   })
   rawJobs.forEach(j => {
-    if (j.city) activeCitySlugs.add(normalizeCitySlug(j.city))
+    if (!isPakistaniEntity(j) && j.city && isUsCity(j.city) && !isPakistaniCity(j.city)) {
+      activeCitySlugs.add(normalizeCitySlug(j.city))
+    }
   })
   rawProfessionals.forEach(p => {
-    if (p.city) activeCitySlugs.add(normalizeCitySlug(p.city))
+    if (!isPakistaniEntity(p) && p.city && isUsCity(p.city) && !isPakistaniCity(p.city)) {
+      activeCitySlugs.add(normalizeCitySlug(p.city))
+    }
   })
   activeCitySlugs.delete('usa')
   activeCitySlugs.delete('united-states')
   activeCitySlugs.delete('remote')
+  activeCitySlugs.delete('nationwide')
 
   const cityRoutes = Array.from(activeCitySlugs).map((citySlug) => ({
     url: canonicalUrl(`/city/${citySlug}`),
@@ -144,17 +156,20 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   // 6. Populated Category + City Landing Pages (Only combinations with real listings)
   const populatedCategoryCityPairs = getPopulatedCategoryCityPairs(rawBusinesses)
-  const categoryCityRoutes = populatedCategoryCityPairs.map((pair) => ({
-    url: canonicalUrl(`/category/${pair.categorySlug}/${pair.citySlug}`),
-    lastModified: currentDate,
-    changeFrequency: 'weekly' as const,
-    priority: 0.85,
-  }))
+  const categoryCityRoutes = populatedCategoryCityPairs
+    .filter(pair => isUsCity(pair.citySlug) && !isPakistaniCity(pair.citySlug))
+    .map((pair) => ({
+      url: canonicalUrl(`/category/${pair.categorySlug}/${pair.citySlug}`),
+      lastModified: currentDate,
+      changeFrequency: 'weekly' as const,
+      priority: 0.85,
+    }))
 
-  // 7. Approved Business Pages
+  // 7. Approved Business Pages (Strict USA Only)
   const approvedBusinesses = rawBusinesses.filter(b => 
     (b.status || 'approved') === 'approved' && 
-    Boolean(b.slug && b.slug.trim())
+    Boolean(b.slug && b.slug.trim()) &&
+    !isPakistaniEntity(b)
   )
   const businessRoutes = approvedBusinesses.map((biz) => ({
     url: canonicalUrl(`/business/${biz.slug}`),
@@ -163,10 +178,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.9,
   }))
 
-  // 8. Active Approved Job Openings (Excludes expired vacancies)
+  // 8. Active Approved Job Openings (Strict USA Only)
   const approvedJobs = rawJobs.filter((job) => 
     (job.status || 'approved') === 'approved' && 
-    Boolean(job.slug || job.id)
+    Boolean(job.slug || job.id) &&
+    !isPakistaniEntity(job)
   )
   const jobRoutes = approvedJobs.map((job) => ({
     url: canonicalUrl(getPublicJobPath(job)),
@@ -175,10 +191,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.9,
   }))
 
-  // 9. Approved Companies
+  // 9. Approved Companies (Strict USA Only)
   const approvedCompanies = rawCompanies.filter((comp) => 
     (comp.status || 'approved') === 'approved' && 
-    Boolean(comp.slug && comp.slug.trim())
+    Boolean(comp.slug && comp.slug.trim()) &&
+    !isPakistaniEntity(comp)
   )
   const companyRoutes = approvedCompanies.map((comp) => ({
     url: canonicalUrl(`/companies/${comp.slug}`),
@@ -187,11 +204,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.9,
   }))
 
-  // 10. Approved Professional Profiles
+  // 10. Approved Professional Profiles (Strict USA Only)
   const approvedPros = rawProfessionals.filter((pro) => 
     (pro.status || 'approved') === 'approved' && 
     (pro.profileStatus || 'APPROVED') === 'APPROVED' && 
-    Boolean(pro.username || pro.slug)
+    Boolean(pro.username || pro.slug) &&
+    !isPakistaniEntity(pro)
   )
   const professionalRoutes = approvedPros.map((pro) => ({
     url: canonicalUrl(`/professionals/${pro.username || pro.slug}`),

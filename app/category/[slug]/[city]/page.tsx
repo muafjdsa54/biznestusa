@@ -14,7 +14,9 @@ import {
   getCategoryDisplayName,
   getCityDisplayName,
   toCanonicalUrl,
-  VERIFICATION_DISCLAIMER
+  VERIFICATION_DISCLAIMER,
+  isUsCity,
+  isPakistaniCity
 } from '@/lib/directory-helpers'
 import { CATEGORIES } from '@/lib/data'
 import { BreadcrumbSchema } from '@/components/seo/breadcrumb-schema'
@@ -50,6 +52,13 @@ export async function generateMetadata(props: {
   const params = await props.params
   const catSlug = params.slug.toLowerCase()
   const citySlug = params.city.toLowerCase()
+
+  if (isPakistaniCity(citySlug) || !isUsCity(citySlug)) {
+    return {
+      title: 'Directory Page Not Found | BizNest USA',
+      robots: { index: false, follow: false }
+    }
+  }
 
   const allBiz = await getAllBusinesses(false)
   const matchingBusinesses = filterBusinessesByCategoryAndCity(allBiz, catSlug, citySlug)
@@ -104,7 +113,7 @@ export default async function CategoryCityLandingPage(props: {
   const allBiz = await getAllBusinesses(false)
   const businesses = filterBusinessesByCategoryAndCity(allBiz, catSlug, citySlug)
 
-  if (businesses.length === 0) {
+  if (isPakistaniCity(citySlug) || !isUsCity(citySlug) || businesses.length === 0) {
     notFound()
   }
 

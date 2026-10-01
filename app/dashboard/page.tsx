@@ -21,6 +21,7 @@ import {
   onAuthStateChanged,
   updateProfile 
 } from 'firebase/auth'
+import { isValidPersonName, validatePersonName, filterPersonNameInput, isValidUsPhone, validateUsPhone, formatUsPhone, isValidEmail } from '@/lib/validation'
 import { toast } from 'sonner'
 
 const US_PAYMENT_CHANNELS = [
@@ -90,6 +91,7 @@ function DashboardContent() {
   const [loginError, setLoginError] = useState('')
 
   const [signupName, setSignupName] = useState('')
+  const [signupPhone, setSignupPhone] = useState('')
   const [signupEmail, setSignupEmail] = useState('')
   const [signupPassword, setSignupPassword] = useState('')
   const [isSigningUp, setIsSigningUp] = useState(false)
@@ -278,8 +280,18 @@ function DashboardContent() {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoginError('')
-    if (!signupName.trim() || !signupEmail.trim() || !signupPassword) {
-      setLoginError('Please complete all required fields.')
+    const nameVal = validatePersonName(signupName)
+    if (!nameVal.isValid) {
+      setLoginError(nameVal.error || 'Full Name must contain only alphabetic letters (no numbers like "232" or special symbols).')
+      return
+    }
+    if (!isValidEmail(signupEmail)) {
+      setLoginError('Please enter a valid email address.')
+      return
+    }
+    const phoneVal = validateUsPhone(signupPhone)
+    if (!phoneVal.isValid) {
+      setLoginError(phoneVal.error || 'Please enter a valid 10-digit US phone number: +1 (XXX) XXX-XXXX.')
       return
     }
     if (signupPassword.length < 6) {
@@ -292,6 +304,7 @@ function DashboardContent() {
       let newUser = {
         name: signupName.trim(),
         email: signupEmail.trim().toLowerCase(),
+        phone: signupPhone.trim(),
         uid: ''
       }
 
@@ -589,10 +602,28 @@ function DashboardContent() {
                     type="text"
                     required
                     value={signupName}
-                    onChange={(e) => setSignupName(e.target.value)}
+                    onChange={(e) => setSignupName(filterPersonNameInput(e.target.value))}
                     placeholder="e.g. Alex Johnson"
                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                   />
+                  <p className="text-[10px] text-slate-400 mt-1">Letters only (no numbers like &quot;232&quot;).</p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Phone Number (USA Standard)</label>
+                  <div className="relative">
+                    <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="tel"
+                      required
+                      maxLength={17}
+                      value={signupPhone}
+                      onChange={(e) => setSignupPhone(formatUsPhone(e.target.value))}
+                      placeholder="+1 (555) 234-5678"
+                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">USA format: +1 (XXX) XXX-XXXX (10 digits).</p>
                 </div>
 
                 <div>

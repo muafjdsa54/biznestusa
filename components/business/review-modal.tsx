@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Star, MessageSquare } from 'lucide-react'
 import { toast } from 'sonner'
+import { isValidPersonName, validatePersonName, filterPersonNameInput } from '@/lib/validation'
 
 interface ReviewModalProps {
   businessName: string
@@ -20,16 +21,22 @@ export default function ReviewModal({ businessName, isOpen, onClose, onAddReview
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!userName || !comment) {
+    if (!userName.trim() || !comment.trim()) {
       toast.error('Please complete your name and review comment.')
       return
     }
 
+    const nameVal = validatePersonName(userName)
+    if (!nameVal.isValid) {
+      toast.error(nameVal.error || 'Full Name must contain only alphabetic letters (no numbers like "232" or special symbols).')
+      return
+    }
+
     onAddReview({
-      userName,
+      userName: userName.trim(),
       rating,
       date: 'Just now',
-      comment
+      comment: comment.trim()
     })
 
     toast.success('Thank you! Your review has been added to BizNest USA.')
@@ -76,10 +83,11 @@ export default function ReviewModal({ businessName, isOpen, onClose, onAddReview
                 type="text"
                 required
                 value={userName}
-                onChange={(e) => setUserName(e.target.value)}
+                onChange={(e) => setUserName(filterPersonNameInput(e.target.value))}
                 placeholder="e.g. Michael Roberts"
                 className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
               />
+              <p className="text-[10px] text-slate-400 mt-0.5">Alphabetic letters only (no numbers like &quot;232&quot;).</p>
             </div>
 
             <div>

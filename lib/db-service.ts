@@ -2,7 +2,8 @@ import { cache } from 'react'
 import { MOCK_BUSINESSES, BusinessItem, ContactMessage, BusinessPlan } from './data'
 import { db } from './firebase'
 import { collection, getDocs, query, where, limit, addDoc, doc, updateDoc, deleteDoc, setDoc } from 'firebase/firestore'
-import { sanitizeText, sanitizeUrl, sanitizeImageUrl, sanitizePhone } from './sanitizer'
+import { sanitizeText, sanitizeUrl, sanitizeImageUrl, sanitizePhone, sanitizePersonName } from './sanitizer'
+import { isPakistaniEntity } from './directory-helpers'
 
 // Memory cache store for super fast reads and SSG generation
 let memoryBusinessesCache: BusinessItem[] = [...MOCK_BUSINESSES]
@@ -149,10 +150,9 @@ export function normalizeBusinessDoc(docId: string, data: any): BusinessItem {
     submittedAt: data.submittedAt || data.createdAt || new Date().toISOString(),
     approvedAt: data.approvedAt,
     approvedBy: data.approvedBy,
-    rejectionReason: data.rejectionReason,
-    ownerName: data.ownerName || data.fullName || 'Business Representative',
-    phone: data.phone || '',
-    whatsapp: data.whatsapp || '',
+    ownerName: sanitizePersonName(data.ownerName || data.fullName) || 'Business Representative',
+    phone: sanitizePhone(data.phone || ''),
+    whatsapp: sanitizePhone(data.whatsapp || ''),
     email: data.email || '',
     website: data.website || data.websiteUrl || '',
     address: primaryLoc.address || data.address || '',
@@ -294,12 +294,14 @@ export async function getAllBusinesses(includePending: boolean = false): Promise
     }
   }
 
+  const validBusinesses = memoryBusinessesCache.filter(b => !isPakistaniEntity(b))
+
   if (includePending) {
-    return memoryBusinessesCache
+    return validBusinesses
   }
   
   // Public filter: only return approved items
-  return memoryBusinessesCache.filter(b => b.status === 'approved')
+  return validBusinesses.filter(b => b.status === 'approved')
 }
 
 export async function getPendingBusinesses(): Promise<BusinessItem[]> {
@@ -452,7 +454,7 @@ export const getBusinessBySlug = cache(async function getBusinessBySlug(slug: st
         item,
         ...memoryBusinessesCache.filter(b => b.slug.toLowerCase() !== normalized && b.id !== item.id)
       ]
-      if (item.status === 'approved') {
+      if (item.status === 'approved' && !isPakistaniEntity(item)) {
         return item
       }
       return null
@@ -463,7 +465,7 @@ export const getBusinessBySlug = cache(async function getBusinessBySlug(slug: st
       const direct = await getDocs(query(collection(db, 'businesses'), where('id', '==', raw), limit(1)))
       if (!direct.empty) {
         const item = normalizeBusinessDoc(direct.docs[0].id, direct.docs[0].data())
-        if (item.status === 'approved') {
+        if (item.status === 'approved' && !isPakistaniEntity(item)) {
           return item
         }
       }
@@ -480,7 +482,7 @@ export const getBusinessBySlug = cache(async function getBusinessBySlug(slug: st
     normalizeSlug(b.name) === normalized ||
     (b.city && `${normalizeSlug(b.name)}-${normalizeSlug(b.city)}` === normalized)
   )
-  if (localFound && (localFound.status || 'approved') === 'approved') {
+  if (localFound && (localFound.status || 'approved') === 'approved' && !isPakistaniEntity(localFound)) {
     return localFound
   }
 
@@ -491,7 +493,7 @@ export const getBusinessBySlug = cache(async function getBusinessBySlug(slug: st
     normalizeSlug(b.name) === normalized ||
     (b.city && `${normalizeSlug(b.name)}-${normalizeSlug(b.city)}` === normalized)
   )
-  if (cached && (cached.status || 'approved') === 'approved') {
+  if (cached && (cached.status || 'approved') === 'approved' && !isPakistaniEntity(cached)) {
     return cached
   }
 
@@ -502,7 +504,7 @@ export const getBusinessBySlug = cache(async function getBusinessBySlug(slug: st
     normalizeSlug(b.name) === normalized ||
     (b.city && `${normalizeSlug(b.name)}-${normalizeSlug(b.city)}` === normalized)
   )
-  if (mockFound && (mockFound.status || 'approved') === 'approved') {
+  if (mockFound && (mockFound.status || 'approved') === 'approved' && !isPakistaniEntity(mockFound)) {
     return mockFound
   }
 

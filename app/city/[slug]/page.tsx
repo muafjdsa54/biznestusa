@@ -29,7 +29,9 @@ import {
   getCityDisplayName,
   normalizeCitySlug,
   toCanonicalUrl,
-  VERIFICATION_DISCLAIMER
+  VERIFICATION_DISCLAIMER,
+  isUsCity,
+  isPakistaniCity
 } from '@/lib/directory-helpers'
 
 export const revalidate = 86400 // 24-hour ISR revalidation
@@ -42,14 +44,16 @@ export async function generateStaticParams() {
 
   const activeCitySlugs = new Set<string>()
   allBiz.forEach(b => {
-    if (b.city) activeCitySlugs.add(normalizeCitySlug(b.city))
-    if (b.cities) b.cities.forEach(c => activeCitySlugs.add(normalizeCitySlug(c)))
+    if (b.city && isUsCity(b.city) && !isPakistaniCity(b.city)) activeCitySlugs.add(normalizeCitySlug(b.city))
+    if (b.cities) b.cities.forEach(c => {
+      if (isUsCity(c) && !isPakistaniCity(c)) activeCitySlugs.add(normalizeCitySlug(c))
+    })
   })
   allJobs.forEach(j => {
-    if (j.city) activeCitySlugs.add(normalizeCitySlug(j.city))
+    if (j.city && isUsCity(j.city) && !isPakistaniCity(j.city)) activeCitySlugs.add(normalizeCitySlug(j.city))
   })
   allPros.forEach(p => {
-    if (p.city) activeCitySlugs.add(normalizeCitySlug(p.city))
+    if (p.city && isUsCity(p.city) && !isPakistaniCity(p.city)) activeCitySlugs.add(normalizeCitySlug(p.city))
   })
 
   activeCitySlugs.delete('usa')
@@ -63,6 +67,14 @@ export async function generateStaticParams() {
 export async function generateMetadata(props: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const params = await props.params
   const citySlug = params.slug.toLowerCase()
+
+  if (isPakistaniCity(citySlug) || !isUsCity(citySlug)) {
+    return {
+      title: 'City Not Found | BizNestUSA',
+      robots: { index: false, follow: false }
+    }
+  }
+
   const cityName = getCityDisplayName(citySlug)
 
   const allApproved = await getAllBusinesses(false)
@@ -109,6 +121,11 @@ export async function generateMetadata(props: { params: Promise<{ slug: string }
 export default async function CityDetailPage(props: { params: Promise<{ slug: string }> }) {
   const params = await props.params
   const citySlug = params.slug.toLowerCase()
+
+  if (isPakistaniCity(citySlug) || !isUsCity(citySlug)) {
+    notFound()
+  }
+
   const cityName = getCityDisplayName(citySlug)
 
   const allApproved = await getAllBusinesses(false)

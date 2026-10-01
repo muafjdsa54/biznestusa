@@ -6,6 +6,7 @@ import { collection, getDocs, query, where, limit, addDoc, doc, updateDoc, delet
 import { normalizeSlug } from './db-service'
 import { JOB_SLUG_ALIASES } from './job-url'
 import { sanitizeText, sanitizeUrl } from './sanitizer'
+import { isPakistaniEntity } from './directory-helpers'
 
 let memoryJobsCache: JobItem[] = [...MOCK_JOBS]
 
@@ -78,11 +79,13 @@ export const getAllJobs = cache(async function getAllJobs(includePending: boolea
     console.warn('Firestore getAllJobs fallback error:', err)
   }
 
+  const validJobs = memoryJobsCache.filter(j => !isPakistaniEntity(j))
+
   if (includePending) {
-    return memoryJobsCache
+    return validJobs
   }
 
-  return memoryJobsCache.filter(j => (j.status || 'approved') === 'approved' && !isExpiredJob(j))
+  return validJobs.filter(j => (j.status || 'approved') === 'approved' && !isExpiredJob(j))
 })
 
 export function normalizeJobDoc(docId: string, data: any): JobItem {
@@ -145,7 +148,7 @@ export const getJobBySlug = cache(async function getJobBySlug(idOrSlug: string, 
     if (!snap.empty) {
       const docSnap = snap.docs[0]
       const item = normalizeJobDoc(docSnap.id, docSnap.data())
-      if (item.status === 'approved' && (allowExpired || !isExpiredJob(item))) {
+      if (item.status === 'approved' && !isPakistaniEntity(item) && (allowExpired || !isExpiredJob(item))) {
         memoryJobsCache = [
           item,
           ...memoryJobsCache.filter(j => j.slug?.toLowerCase() !== normalized && j.id !== item.id)
@@ -159,7 +162,7 @@ export const getJobBySlug = cache(async function getJobBySlug(idOrSlug: string, 
       const direct = await getDocs(query(collection(db, 'jobs'), where('id', '==', raw), limit(1)))
       if (!direct.empty) {
         const item = normalizeJobDoc(direct.docs[0].id, direct.docs[0].data())
-        if (item.status === 'approved' && (allowExpired || !isExpiredJob(item))) return item
+        if (item.status === 'approved' && !isPakistaniEntity(item) && (allowExpired || !isExpiredJob(item))) return item
       }
     } catch (_) {}
   } catch (err) {
@@ -167,7 +170,7 @@ export const getJobBySlug = cache(async function getJobBySlug(idOrSlug: string, 
   }
 
   // 2. Memory cache check
-  const cached = memoryJobsCache.find(j => j.id === raw || j.slug?.toLowerCase() === normalized)
+  const cached = memoryJobsCache.find(j => (j.id === raw || j.slug?.toLowerCase() === normalized) && !isPakistaniEntity(j))
   if (cached && (cached.status || 'approved') === 'approved' && (allowExpired || !isExpiredJob(cached))) {
     return cached
   }

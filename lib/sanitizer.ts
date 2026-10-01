@@ -72,9 +72,29 @@ export function sanitizeImageUrl(url?: string | null): string {
   return sanitizeUrl(trimmed)
 }
 
+export function sanitizePersonName(name?: string | null): string {
+  if (!name || typeof name !== 'string') return ''
+  // Strip numbers, HTML, and disallowed characters for a person's name
+  let cleaned = name.replace(/\0/g, '').replace(/<[^>]*>/g, '')
+  // Strip digits
+  cleaned = cleaned.replace(/\d/g, '')
+  // Allow only valid name characters: letters, latin accents, spaces, hyphens, apostrophes, periods
+  cleaned = cleaned.replace(/[^a-zA-Z\u00C0-\u024F\s'. -]/g, '')
+  return cleaned.trim().slice(0, 70)
+}
+
 export function sanitizePhone(phone?: string | null): string {
   if (!phone || typeof phone !== 'string') return ''
-  // Allow only plus, digits, spaces, parentheses, hyphens
-  return phone.replace(/[^0-9+\s\-()]/g, '').trim().slice(0, 30)
+  // Strip letters and unsafe characters
+  const cleaned = phone.replace(/[^0-9+\s\-()]/g, '').trim().slice(0, 30)
+  // Extract digits
+  let digits = cleaned.replace(/\D/g, '')
+  if (digits.length === 11 && digits.startsWith('1')) {
+    digits = digits.slice(1)
+  }
+  if (digits.length === 10) {
+    return `+1 (${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 10)}`
+  }
+  return cleaned
 }
 

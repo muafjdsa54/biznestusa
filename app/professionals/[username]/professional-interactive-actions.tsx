@@ -5,6 +5,7 @@ import { Mail, Star, HelpCircle, MessageCircle, CheckCircle2, Send, Phone } from
 import { toast } from 'sonner'
 import { db } from '@/lib/firebase'
 import { doc, setDoc } from 'firebase/firestore'
+import { isValidPersonName, validatePersonName, filterPersonNameInput, isValidUsPhone, validateUsPhone, formatUsPhone, isValidEmail } from '@/lib/validation'
 
 export interface ReviewItem {
   id: string
@@ -36,6 +37,23 @@ export function ProfessionalHeroActions({ proName, proUsername }: ProfessionalHe
     e.preventDefault()
     if (!senderName.trim() || !senderEmail.trim() || !senderWhatsApp.trim() || !message.trim()) {
       toast.error('Please enter all required fields including your WhatsApp number.')
+      return
+    }
+
+    const nameVal = validatePersonName(senderName)
+    if (!nameVal.isValid) {
+      toast.error(nameVal.error || 'Your Name must contain only alphabetic letters (no numbers like "232" or special symbols).')
+      return
+    }
+
+    if (!isValidEmail(senderEmail)) {
+      toast.error('Please enter a valid email address.')
+      return
+    }
+
+    const phoneVal = validateUsPhone(senderWhatsApp)
+    if (!phoneVal.isValid) {
+      toast.error(phoneVal.error || 'Please enter a valid 10-digit US phone number: +1 (XXX) XXX-XXXX.')
       return
     }
 
@@ -110,10 +128,11 @@ export function ProfessionalHeroActions({ proName, proUsername }: ProfessionalHe
                   type="text"
                   required
                   value={senderName}
-                  onChange={(e) => setSenderName(e.target.value)}
+                  onChange={(e) => setSenderName(filterPersonNameInput(e.target.value))}
                   placeholder="e.g. Robert Smith"
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                 />
+                <p className="text-[10px] text-slate-400 mt-0.5">Alphabetic letters only (no numbers like &quot;232&quot;).</p>
               </div>
 
               <div>
@@ -137,15 +156,16 @@ export function ProfessionalHeroActions({ proName, proUsername }: ProfessionalHe
                   <input
                     type="tel"
                     required
+                    maxLength={17}
                     value={senderWhatsApp}
-                    onChange={(e) => setSenderWhatsApp(e.target.value)}
-                    placeholder="e.g. (555) 234-5678 or +1 212 555 0199"
+                    onChange={(e) => setSenderWhatsApp(formatUsPhone(e.target.value))}
+                    placeholder="+1 (555) 234-5678"
                     className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 font-mono font-semibold"
                   />
                   <MessageCircle className="w-4 h-4 text-[#25D366] absolute left-3 top-3" />
                 </div>
                 <span className="text-[10px] text-slate-500 mt-1 block">
-                  The professional will reply to you on WhatsApp instantly.
+                  USA format: +1 (XXX) XXX-XXXX (10 digits).
                 </span>
               </div>
 
@@ -200,16 +220,23 @@ export function ProfessionalReviewsSection({ proName, initialReviews }: Professi
 
   const handleReviewSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!reviewerName || !reviewerComment) {
+    if (!reviewerName.trim() || !reviewerComment.trim()) {
       toast.error('Please complete all review fields.')
       return
     }
+
+    const nameVal = validatePersonName(reviewerName)
+    if (!nameVal.isValid) {
+      toast.error(nameVal.error || 'Your Name must contain only alphabetic letters (no numbers like "232" or special symbols).')
+      return
+    }
+
     const newRev: ReviewItem = {
       id: 'rev-' + Date.now(),
-      userName: reviewerName,
+      userName: reviewerName.trim(),
       rating: reviewerRating,
       date: 'Just now',
-      comment: reviewerComment,
+      comment: reviewerComment.trim(),
     }
     setReviews([newRev, ...reviews])
     setShowReviewModal(false)
@@ -274,10 +301,11 @@ export function ProfessionalReviewsSection({ proName, initialReviews }: Professi
                   type="text"
                   required
                   value={reviewerName}
-                  onChange={(e) => setReviewerName(e.target.value)}
+                  onChange={(e) => setReviewerName(filterPersonNameInput(e.target.value))}
                   placeholder="e.g. Emily Davis"
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                 />
+                <p className="text-[10px] text-slate-400 mt-0.5">Letters only (no numbers like &quot;232&quot;).</p>
               </div>
 
               <div>

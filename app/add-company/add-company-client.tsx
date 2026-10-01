@@ -12,6 +12,7 @@ import Footer from '@/components/footer'
 import { CITIES } from '@/lib/data'
 import { saveCompanyToDatabase } from '@/lib/company-service'
 import StickyWebsiteBanner from '@/components/business/sticky-website-banner'
+import { isValidPersonName, validatePersonName, filterPersonNameInput, isValidUsPhone, validateUsPhone, formatUsPhone, isValidEmail } from '@/lib/validation'
 import { toast } from 'sonner'
 
 const COMPANY_TYPES = [
@@ -98,8 +99,31 @@ export default function AddCompanyClient() {
       if (!formData.city) errs.city = 'City is required'
     }
     if (step === 3) {
-      if (!formData.hrEmail.trim()) errs.hrEmail = 'HR Contact Email is required'
-      if (!formData.phone.trim()) errs.phone = 'Contact Phone Number is required'
+      if (formData.hrName.trim()) {
+        const nVal = validatePersonName(formData.hrName)
+        if (!nVal.isValid) {
+          errs.hrName = nVal.error || 'HR Name must contain only alphabetic letters (no numbers like "232" or special symbols).'
+        }
+      }
+      if (!formData.hrEmail.trim()) {
+        errs.hrEmail = 'HR Contact Email is required'
+      } else if (!isValidEmail(formData.hrEmail)) {
+        errs.hrEmail = 'Please enter a valid email address'
+      }
+      if (!formData.phone.trim()) {
+        errs.phone = 'Contact Phone Number is required'
+      } else {
+        const pVal = validateUsPhone(formData.phone)
+        if (!pVal.isValid) {
+          errs.phone = pVal.error || 'Please enter a valid 10-digit US phone number: +1 (XXX) XXX-XXXX'
+        }
+      }
+      if (formData.whatsapp.trim()) {
+        const wVal = validateUsPhone(formData.whatsapp)
+        if (!wVal.isValid) {
+          errs.whatsapp = wVal.error || 'Please enter a valid 10-digit US phone number: +1 (XXX) XXX-XXXX'
+        }
+      }
     }
     if (step === 4) {
       if (!formData.description.trim() || formData.description.length < 30) {
@@ -392,10 +416,15 @@ export default function AddCompanyClient() {
                       <input
                         type="text"
                         value={formData.hrName}
-                        onChange={(e) => setFormData(p => ({ ...p, hrName: e.target.value }))}
+                        onChange={(e) => setFormData(p => ({ ...p, hrName: filterPersonNameInput(e.target.value) }))}
                         placeholder="e.g. Sarah Jenkins"
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                       />
+                      {errors.hrName ? (
+                        <p className="text-red-500 text-[11px] mt-1">{errors.hrName}</p>
+                      ) : (
+                        <p className="text-[10px] text-slate-400 mt-0.5">Alphabetic letters only (no numbers like &quot;232&quot;).</p>
+                      )}
                     </div>
 
                     <div>
@@ -425,27 +454,38 @@ export default function AddCompanyClient() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Office Phone *</label>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Office Phone (USA Standard) *</label>
                       <input
                         type="tel"
                         required
+                        maxLength={17}
                         value={formData.phone}
-                        onChange={(e) => setFormData(p => ({ ...p, phone: e.target.value }))}
-                        placeholder="(212) 555-0198 or +1 800 555 0199"
+                        onChange={(e) => setFormData(p => ({ ...p, phone: formatUsPhone(e.target.value) }))}
+                        placeholder="+1 (555) 019-8000"
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                       />
-                      {errors.phone && <p className="text-red-500 text-[11px] mt-1">{errors.phone}</p>}
+                      {errors.phone ? (
+                        <p className="text-red-500 text-[11px] mt-1">{errors.phone}</p>
+                      ) : (
+                        <p className="text-[10px] text-slate-400 mt-0.5">USA format: +1 (XXX) XXX-XXXX (10 digits).</p>
+                      )}
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Direct HR Line</label>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Direct HR Line (USA Standard)</label>
                       <input
                         type="tel"
+                        maxLength={17}
                         value={formData.whatsapp}
-                        onChange={(e) => setFormData(p => ({ ...p, whatsapp: e.target.value }))}
-                        placeholder="(212) 555-0199"
+                        onChange={(e) => setFormData(p => ({ ...p, whatsapp: formatUsPhone(e.target.value) }))}
+                        placeholder="+1 (555) 019-9000"
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                       />
+                      {errors.whatsapp ? (
+                        <p className="text-red-500 text-[11px] mt-1">{errors.whatsapp}</p>
+                      ) : (
+                        <p className="text-[10px] text-slate-400 mt-0.5">USA format: +1 (XXX) XXX-XXXX (10 digits).</p>
+                      )}
                     </div>
                   </div>
                 </div>

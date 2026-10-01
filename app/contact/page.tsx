@@ -3,8 +3,9 @@
 import { useState } from 'react'
 import Navbar from '@/components/navbar'
 import Footer from '@/components/footer'
-import { Mail, Phone, MapPin, MessageSquare, ShieldCheck } from 'lucide-react'
+import { Mail, Phone, MapPin, MessageSquare, ShieldCheck, AlertCircle } from 'lucide-react'
 import { saveContactMessage } from '@/lib/db-service'
+import { isValidPersonName, validatePersonName, filterPersonNameInput, isValidUsPhone, validateUsPhone, formatUsPhone, isValidEmail } from '@/lib/validation'
 import { toast } from 'sonner'
 
 export default function ContactPage() {
@@ -18,11 +19,41 @@ export default function ContactPage() {
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const [formError, setFormError] = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!formData.name || !formData.email || !formData.message) {
-      toast.error('Please complete all required fields.')
+    setFormError('')
+
+    const nameVal = validatePersonName(formData.name)
+    if (!nameVal.isValid) {
+      const err = nameVal.error || 'Full Name must contain only alphabetic letters (no numbers like "232" or special symbols).'
+      setFormError(err)
+      toast.error(err)
+      return
+    }
+
+    if (!isValidEmail(formData.email)) {
+      const err = 'Please enter a valid email address.'
+      setFormError(err)
+      toast.error(err)
+      return
+    }
+
+    if (formData.phone.trim()) {
+      const phoneVal = validateUsPhone(formData.phone)
+      if (!phoneVal.isValid) {
+        const err = phoneVal.error || 'Please enter a valid 10-digit US phone number: +1 (XXX) XXX-XXXX'
+        setFormError(err)
+        toast.error(err)
+        return
+      }
+    }
+
+    if (!formData.message.trim() || formData.message.trim().length < 10) {
+      const err = 'Message must be at least 10 characters.'
+      setFormError(err)
+      toast.error(err)
       return
     }
 
@@ -158,6 +189,12 @@ export default function ContactPage() {
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
+                {formError && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                    <span>{formError}</span>
+                  </div>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Full Name *</label>
@@ -166,9 +203,10 @@ export default function ContactPage() {
                       required
                       placeholder="Jane Doe"
                       value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      onChange={(e) => setFormData({ ...formData, name: filterPersonNameInput(e.target.value) })}
                       className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
                     />
+                    <p className="text-[10px] text-slate-400 mt-1">Alphabetic letters only (no numbers like &quot;232&quot;).</p>
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Email Address *</label>
@@ -185,14 +223,16 @@ export default function ContactPage() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Phone Number (Optional)</label>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Phone Number (USA Standard)</label>
                     <input
                       type="tel"
-                      placeholder="(555) 000-0000"
+                      maxLength={17}
+                      placeholder="+1 (555) 000-0000"
                       value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      onChange={(e) => setFormData({ ...formData, phone: formatUsPhone(e.target.value) })}
                       className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
                     />
+                    <p className="text-[10px] text-slate-400 mt-1">USA format: +1 (XXX) XXX-XXXX (10 digits).</p>
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">City / State</label>

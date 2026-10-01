@@ -3,7 +3,8 @@ import { MOCK_PROFESSIONALS, MOCK_VERIFICATION_REQUESTS, ProfessionalItem, Profe
 import { db } from './firebase'
 import { collection, getDocs, query, where, limit, addDoc, doc, updateDoc, deleteDoc, setDoc, orderBy } from 'firebase/firestore'
 import { normalizeSlug } from './db-service'
-import { sanitizeText, sanitizeUrl, sanitizePhone } from './sanitizer'
+import { sanitizeText, sanitizeUrl, sanitizePhone, sanitizePersonName } from './sanitizer'
+import { isPakistaniEntity } from './directory-helpers'
 
 /**
  * Generate clean SEO friendly slug for professionals.
@@ -205,11 +206,13 @@ export const getAllProfessionals = cache(async function getAllProfessionals(incl
     console.warn('Firestore getAllProfessionals fallback to memory cache:', err)
   }
 
+  const validPros = memoryProfessionalsCache.filter(p => !isPakistaniEntity(p))
+
   if (includePending) {
-    return memoryProfessionalsCache
+    return validPros
   }
 
-  return memoryProfessionalsCache.filter(p => (p.status || 'approved') === 'approved' && (p.profileStatus || 'APPROVED') === 'APPROVED')
+  return validPros.filter(p => (p.status || 'approved') === 'approved' && (p.profileStatus || 'APPROVED') === 'APPROVED')
 })
 
 export async function getPendingProfessionals(): Promise<ProfessionalItem[]> {
@@ -235,7 +238,7 @@ export const getProfessionalByUsername = cache(async function getProfessionalByU
         item,
         ...memoryProfessionalsCache.filter(p => p.username.toLowerCase() !== normalized && p.slug?.toLowerCase() !== normalized && p.id !== item.id)
       ]
-      if (item.status === 'approved' || item.profileStatus === 'APPROVED') {
+      if ((item.status === 'approved' || item.profileStatus === 'APPROVED') && !isPakistaniEntity(item)) {
         return item
       }
       return null
@@ -251,7 +254,7 @@ export const getProfessionalByUsername = cache(async function getProfessionalByU
         item,
         ...memoryProfessionalsCache.filter(p => p.username.toLowerCase() !== normalized && p.slug?.toLowerCase() !== normalized && p.id !== item.id)
       ]
-      if (item.status === 'approved' || item.profileStatus === 'APPROVED') {
+      if ((item.status === 'approved' || item.profileStatus === 'APPROVED') && !isPakistaniEntity(item)) {
         return item
       }
       return null
@@ -262,7 +265,7 @@ export const getProfessionalByUsername = cache(async function getProfessionalByU
       const directDoc = await getDocs(query(collection(db, 'professionals'), where('id', '==', rawInput), limit(1)))
       if (!directDoc.empty) {
         const item = normalizeProfessionalDoc(directDoc.docs[0].id, directDoc.docs[0].data())
-        if (item.status === 'approved' || item.profileStatus === 'APPROVED') {
+        if ((item.status === 'approved' || item.profileStatus === 'APPROVED') && !isPakistaniEntity(item)) {
           return item
         }
       }
@@ -273,6 +276,7 @@ export const getProfessionalByUsername = cache(async function getProfessionalByU
 
   // 2. Memory cache fallback
   const cached = memoryProfessionalsCache.find(p => {
+    if (isPakistaniEntity(p)) return false
     const pUser = (p.username || '').toLowerCase()
     const pSlug = (p.slug || '').toLowerCase()
     const pId = (p.id || '').toLowerCase()
@@ -348,8 +352,8 @@ export async function saveProfessionalToDatabase(proData: Partial<ProfessionalIt
     userId: proData.userId || '',
     username,
     slug: username,
-    name: sanitizeText(name, 100),
-    fullName: sanitizeText(name, 100),
+    name: sanitizePersonName(name) || 'New Professional',
+    fullName: sanitizePersonName(name) || 'New Professional',
     title: sanitizeText(title || 'Professional Specialist', 120),
     profession: sanitizeText(profession || 'Specialist', 80),
     category: sanitizeText(proData.category || 'Professional / Job Seeker', 80),

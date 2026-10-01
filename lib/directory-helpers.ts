@@ -41,8 +41,72 @@ export function normalizeBusinessCategoryId(biz: Pick<BusinessItem, 'categoryId'
   return 'local-services'
 }
 
+export const PAKISTANI_CITIES = new Set([
+  'karachi', 'lahore', 'islamabad', 'rawalpindi', 'faisalabad', 'multan',
+  'peshawar', 'quetta', 'sialkot', 'gujranwala', 'sargodha', 'hyderabad',
+  'bahawalpur', 'sukkur', 'larkana', 'sheikhupura', 'jhang', 'rahim-yar-khan',
+  'gujrat', 'kasur', 'mardan', 'mingora', 'dera-ghazi-khan', 'nawabshah',
+  'sahiwal', 'mirpur-khas', 'okara', 'mandi-bahauddin', 'jacobabad', 'saddar',
+  'lakki-marwat', 'abbottabad', 'muzaffarabad', 'mirpur', 'gilgit', 'skardu'
+])
+
+export const PAKISTANI_KEYWORDS = [
+  'pakistan', 'pakistani', 'pkr', '.pk', 'cnic', 'nadra', 'prize bond',
+  'sngpl', 'lesco', 'k-electric', 'kelectric', 'orange line metro', 'bahria',
+  'dha lahore', 'dha karachi', 'dha islamabad', 'g-9 markaz', 'blue area',
+  'saddar', 'clifton karachi', 'gulberg lahore', 'f-6 markaz', 'f-7 markaz', 'f-8 markaz',
+  'f-10 markaz', 'f-11 markaz', 'punjab, pakistan', 'sindh, pakistan', 'kpk'
+]
+
 export function normalizeCitySlug(city: string): string {
   return (city || '').trim().toLowerCase().replace(/\s+/g, '-')
+}
+
+export function isPakistaniCity(cityOrSlug?: string | null): boolean {
+  if (!cityOrSlug) return false
+  const norm = normalizeCitySlug(cityOrSlug)
+  if (PAKISTANI_CITIES.has(norm)) return true
+  for (const pc of PAKISTANI_CITIES) {
+    if (norm === pc || norm.startsWith(`${pc}-`) || norm.endsWith(`-${pc}`) || norm.includes(`-${pc}-`)) {
+      return true
+    }
+  }
+  return false
+}
+
+export function isUsCity(cityOrSlug?: string | null): boolean {
+  if (!cityOrSlug) return false
+  if (isPakistaniCity(cityOrSlug)) return false
+  const norm = normalizeCitySlug(cityOrSlug)
+  if (norm === 'usa' || norm === 'united-states' || norm === 'nationwide' || norm === 'remote') return true
+  return CITIES.some(c => normalizeCitySlug(c) === norm)
+}
+
+export function isPakistaniEntity(item: any): boolean {
+  if (!item) return false
+  
+  // 1. Direct city check
+  if (item.city && isPakistaniCity(item.city)) return true
+  if (Array.isArray(item.cities) && item.cities.some((c: string) => isPakistaniCity(c))) return true
+  if (Array.isArray(item.locations) && item.locations.some((l: any) => isPakistaniCity(l.city))) return true
+
+  // 2. Slug or ID check
+  const slug = `${item.slug || ''} ${item.username || ''} ${item.id || ''}`.toLowerCase()
+  for (const pc of PAKISTANI_CITIES) {
+    if (slug.includes(pc)) return true
+  }
+
+  // 3. Country / Province check
+  const country = (item.country || '').toLowerCase()
+  if (country.includes('pakistan') || country === 'pk') return true
+  const state = (item.state || item.province || '').toLowerCase()
+  if (['punjab', 'sindh', 'kpk', 'khyber pakhtunkhwa', 'balochistan', 'gilgit', 'azad kashmir'].includes(state)) return true
+
+  // 4. Keyword search across data text
+  const serialized = JSON.stringify(item).toLowerCase()
+  if (PAKISTANI_KEYWORDS.some(kw => serialized.includes(kw))) return true
+
+  return false
 }
 
 export function getCityDisplayName(citySlug: string): string {
@@ -112,6 +176,7 @@ export function getPopulatedCategoryCityPairs(businesses: BusinessItem[]): Popul
   const map = new Map<string, { categorySlug: string; citySlug: string; count: number }>()
 
   for (const b of businesses) {
+    if (isPakistaniEntity(b)) continue
     const catSlug = normalizeBusinessCategoryId(b)
     const cityList = new Set<string>()
     if (b.city) cityList.add(b.city)
@@ -121,6 +186,7 @@ export function getPopulatedCategoryCityPairs(businesses: BusinessItem[]): Popul
     for (const rawCity of cityList) {
       const citySlug = normalizeCitySlug(rawCity)
       if (!citySlug || citySlug === 'usa' || citySlug === 'united-states' || citySlug === 'nationwide' || citySlug === 'all-usa') continue
+      if (isPakistaniCity(citySlug) || !isUsCity(citySlug)) continue
       const key = `${catSlug}:::${citySlug}`
       const existing = map.get(key)
       if (existing) {

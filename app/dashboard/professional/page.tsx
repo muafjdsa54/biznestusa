@@ -16,6 +16,7 @@ import {
   ArrowRight, X, Inbox, Send, LogIn, AlertCircle, LogOut, EyeOff
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { isValidPersonName, validatePersonName, filterPersonNameInput, isValidUsPhone, validateUsPhone, formatUsPhone } from '@/lib/validation'
 
 export default function ProfessionalDashboardPage() {
   const [profile, setProfile] = useState<ProfessionalItem | null>(null)
@@ -218,6 +219,30 @@ export default function ProfessionalDashboardPage() {
     if (!isVerified) {
       toast.error('Profile editing is available only to verified professionals. Please complete verification to unlock profile editing.')
       return
+    }
+
+    if (profile.name) {
+      const nameVal = validatePersonName(profile.name)
+      if (!nameVal.isValid) {
+        toast.error(nameVal.error || 'Full Name must contain only alphabetic letters (no numbers like "232" or special symbols).')
+        return
+      }
+    }
+
+    if (profile.phone?.trim()) {
+      const phoneVal = validateUsPhone(profile.phone)
+      if (!phoneVal.isValid) {
+        toast.error(phoneVal.error || 'Please enter a valid 10-digit US phone number: +1 (XXX) XXX-XXXX.')
+        return
+      }
+    }
+
+    if (profile.whatsapp?.trim()) {
+      const wVal = validateUsPhone(profile.whatsapp)
+      if (!wVal.isValid) {
+        toast.error(wVal.error || 'Please enter a valid 10-digit US phone number: +1 (XXX) XXX-XXXX for WhatsApp.')
+        return
+      }
     }
 
     setIsSaving(true)
@@ -816,7 +841,10 @@ export default function ProfessionalDashboardPage() {
                   type="text"
                   disabled={!isVerified}
                   value={pro.name}
-                  onChange={(e) => setProfile(p => p ? ({ ...p, name: e.target.value, fullName: e.target.value }) : null)}
+                  onChange={(e) => {
+                    const filtered = filterPersonNameInput(e.target.value)
+                    setProfile(p => p ? ({ ...p, name: filtered, fullName: filtered }) : null)
+                  }}
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl disabled:bg-slate-100 disabled:text-slate-600 disabled:cursor-not-allowed"
                 />
               </div>
@@ -880,23 +908,27 @@ export default function ProfessionalDashboardPage() {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Phone Number</label>
+                <label className="block font-bold text-slate-700 mb-1">Phone Number (USA Standard)</label>
                 <input
                   type="tel"
+                  maxLength={17}
                   disabled={!isVerified}
                   value={pro.phone || ''}
-                  onChange={(e) => setProfile(p => p ? ({ ...p, phone: e.target.value }) : null)}
+                  onChange={(e) => setProfile(p => p ? ({ ...p, phone: formatUsPhone(e.target.value) }) : null)}
+                  placeholder="+1 (555) 234-5678"
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl disabled:bg-slate-100 disabled:text-slate-600 disabled:cursor-not-allowed"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">WhatsApp</label>
+                <label className="block font-bold text-slate-700 mb-1">WhatsApp (USA Standard)</label>
                 <input
                   type="tel"
+                  maxLength={17}
                   disabled={!isVerified}
                   value={pro.whatsapp || ''}
-                  onChange={(e) => setProfile(p => p ? ({ ...p, whatsapp: e.target.value }) : null)}
+                  onChange={(e) => setProfile(p => p ? ({ ...p, whatsapp: formatUsPhone(e.target.value) }) : null)}
+                  placeholder="+1 (555) 234-5678"
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl disabled:bg-slate-100 disabled:text-slate-600 disabled:cursor-not-allowed"
                 />
               </div>

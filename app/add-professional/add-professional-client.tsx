@@ -16,7 +16,8 @@ import { CITIES, CATEGORIES, STATE_CITIES, US_STATES } from '@/lib/data'
 import { saveProfessionalToDatabase, generateProfessionalSlug } from '@/lib/professional-service'
 import { toast } from 'sonner'
 import { auth } from '@/lib/firebase'
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from 'firebase/auth'
+import { createUserWithEmailAndPassword, updateProfile, signInWithEmailAndPassword } from 'firebase/auth'
+import { isValidPersonName, validatePersonName, filterPersonNameInput, isValidUsPhone, validateUsPhone, formatUsPhone, isValidEmail } from '@/lib/validation'
 
 // Professions list
 const POPULAR_PROFESSIONS = [
@@ -300,7 +301,14 @@ export default function AddProfessionalClient() {
   const validateStep = (step: number) => {
     const errs: Record<string, string> = {}
     if (step === 1) {
-      if (!formData.fullName.trim()) errs.fullName = 'Full Name is required'
+      if (!formData.fullName.trim()) {
+        errs.fullName = 'Full Name is required'
+      } else {
+        const nVal = validatePersonName(formData.fullName)
+        if (!nVal.isValid) {
+          errs.fullName = nVal.error || 'Full Name must contain only alphabetic letters (no numbers like "232" or special symbols).'
+        }
+      }
       if (!formData.title.trim()) errs.title = 'Professional Title is required'
       if (!formData.gender) errs.gender = 'Please select your gender (Male / Female)'
       if (!formData.avatar || !formData.avatar.trim()) {
@@ -340,8 +348,25 @@ export default function AddProfessionalClient() {
     }
     if (step === 4) {
       if (!formData.city) errs.city = 'City is required'
-      if (!formData.email.trim()) errs.email = 'Email address is required'
-      if (!formData.phone.trim()) errs.phone = 'Phone number is required'
+      if (!formData.email.trim()) {
+        errs.email = 'Email address is required'
+      } else if (!isValidEmail(formData.email)) {
+        errs.email = 'Please enter a valid email address'
+      }
+      if (!formData.phone.trim()) {
+        errs.phone = 'Phone number is required'
+      } else {
+        const pVal = validateUsPhone(formData.phone)
+        if (!pVal.isValid) {
+          errs.phone = pVal.error || 'Please enter a valid 10-digit US phone number: +1 (XXX) XXX-XXXX'
+        }
+      }
+      if (formData.whatsapp?.trim()) {
+        const wVal = validateUsPhone(formData.whatsapp)
+        if (!wVal.isValid) {
+          errs.whatsapp = wVal.error || 'Please enter a valid 10-digit US phone number: +1 (XXX) XXX-XXXX for WhatsApp'
+        }
+      }
       if (!isUserLoggedIn && (!accountPassword || accountPassword.length < 6)) {
         errs.password = 'Password (at least 6 characters) is required to create your dashboard account'
       }
@@ -634,11 +659,15 @@ export default function AddProfessionalClient() {
                         type="text"
                         required
                         value={formData.fullName}
-                        onChange={(e) => setFormData(p => ({ ...p, fullName: e.target.value }))}
+                        onChange={(e) => setFormData(p => ({ ...p, fullName: filterPersonNameInput(e.target.value) }))}
                         placeholder="e.g. Jordan Lee"
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                       />
-                      {errors.fullName && <p className="text-red-500 text-[11px] mt-1">{errors.fullName}</p>}
+                      {errors.fullName ? (
+                        <p className="text-red-500 text-[11px] mt-1">{errors.fullName}</p>
+                      ) : (
+                        <p className="text-[10px] text-slate-400 mt-0.5">Real person name (letters only, no numbers like &quot;232&quot;).</p>
+                      )}
                     </div>
 
                     <div>
@@ -1432,27 +1461,38 @@ export default function AddProfessionalClient() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Phone Number *</label>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Phone Number (USA Standard) *</label>
                       <input
                         type="tel"
                         required
+                        maxLength={17}
                         value={formData.phone}
-                        onChange={(e) => setFormData(p => ({ ...p, phone: e.target.value }))}
-                        placeholder="(555) 123-4567"
+                        onChange={(e) => setFormData(p => ({ ...p, phone: formatUsPhone(e.target.value) }))}
+                        placeholder="+1 (555) 123-4567"
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                       />
-                      {errors.phone && <p className="text-red-500 text-[11px] mt-1">{errors.phone}</p>}
+                      {errors.phone ? (
+                        <p className="text-red-500 text-[11px] mt-1">{errors.phone}</p>
+                      ) : (
+                        <p className="text-[10px] text-slate-400 mt-0.5">USA format: +1 (XXX) XXX-XXXX (10 digits).</p>
+                      )}
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">WhatsApp Number</label>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">WhatsApp Number (USA Standard)</label>
                       <input
                         type="tel"
+                        maxLength={17}
                         value={formData.whatsapp}
-                        onChange={(e) => setFormData(p => ({ ...p, whatsapp: e.target.value }))}
-                        placeholder="5551234567"
+                        onChange={(e) => setFormData(p => ({ ...p, whatsapp: formatUsPhone(e.target.value) }))}
+                        placeholder="+1 (555) 123-4567"
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                       />
+                      {errors.whatsapp ? (
+                        <p className="text-red-500 text-[11px] mt-1">{errors.whatsapp}</p>
+                      ) : (
+                        <p className="text-[10px] text-slate-400 mt-0.5">USA format: +1 (XXX) XXX-XXXX (10 digits).</p>
+                      )}
                     </div>
                   </div>
 

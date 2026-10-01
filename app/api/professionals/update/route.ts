@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { updateProfessionalProfileSecure, getProfessionalForDashboard } from '@/lib/professional-service'
+import { isValidPersonName, isValidUsPhone } from '@/lib/validation'
+import { sanitizePersonName, sanitizePhone } from '@/lib/sanitizer'
 
 export async function POST(req: NextRequest) {
   try {
@@ -25,6 +27,31 @@ export async function POST(req: NextRequest) {
         error: 'Profile editing is available only to verified professionals. Please complete verification to unlock profile editing.'
       }, { status: 403 })
     }
+
+    if (updates.name && !isValidPersonName(updates.name)) {
+      return NextResponse.json({
+        success: false,
+        error: 'Full Name must contain only alphabetic letters (no numbers or special symbols).'
+      }, { status: 400 })
+    }
+
+    if (updates.phone && !isValidUsPhone(updates.phone)) {
+      return NextResponse.json({
+        success: false,
+        error: 'Please enter a valid 10-digit US phone number: +1 (XXX) XXX-XXXX.'
+      }, { status: 400 })
+    }
+
+    if (updates.whatsapp && !isValidUsPhone(updates.whatsapp)) {
+      return NextResponse.json({
+        success: false,
+        error: 'Please enter a valid 10-digit US phone number: +1 (XXX) XXX-XXXX for WhatsApp.'
+      }, { status: 400 })
+    }
+
+    if (updates.name) updates.name = sanitizePersonName(updates.name)
+    if (updates.phone) updates.phone = sanitizePhone(updates.phone)
+    if (updates.whatsapp) updates.whatsapp = sanitizePhone(updates.whatsapp)
 
     const result = await updateProfessionalProfileSecure(idOrUsername, updates, Boolean(isAdmin))
     if (!result.success) {

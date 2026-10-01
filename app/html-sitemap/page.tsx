@@ -4,6 +4,7 @@ import Navbar from '@/components/navbar'
 import Footer from '@/components/footer'
 import { CATEGORIES, TOP_CITIES } from '@/lib/data'
 import { getAllBusinesses } from '@/lib/db-service'
+import { normalizeCitySlug } from '@/lib/directory-helpers'
 import { MapPin, Sparkles, FileText, Briefcase, Building2, Store } from 'lucide-react'
 
 export const revalidate = 3600
@@ -97,7 +98,7 @@ export default async function HTMLSitemapPage() {
             </h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 text-xs text-slate-600">
               {TOP_CITIES.map(city => (
-                <Link key={city} href={`/city/${city.toLowerCase()}`} className="hover:text-emerald-600 hover:underline">
+                <Link key={city} href={`/city/${normalizeCitySlug(city)}`} className="hover:text-emerald-600 hover:underline">
                   • {city} Business Directory
                 </Link>
               ))}

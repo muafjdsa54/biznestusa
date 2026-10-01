@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { ShieldCheck, Upload, FileText, CheckCircle2 } from 'lucide-react'
+import { ShieldCheck, Upload, FileText, CheckCircle2, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
+import { isValidPersonName, validatePersonName, filterPersonNameInput, isValidUsPhone, validateUsPhone, formatUsPhone } from '@/lib/validation'
 
 interface ClaimBusinessModalProps {
   businessName: string
@@ -17,15 +18,37 @@ export default function ClaimBusinessModal({ businessName, isOpen, onClose }: Cl
   const [phone, setPhone] = useState('')
   const [proofFile, setProofFile] = useState<File | null>(null)
   const [proofPreview, setProofPreview] = useState<string | null>(null)
+  const [formError, setFormError] = useState('')
 
   if (!isOpen) return null
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!ownerName || !taxIdOrLicense || !phone) {
-      toast.error('Please complete all verification details.')
+    setFormError('')
+
+    const nameVal = validatePersonName(ownerName)
+    if (!nameVal.isValid) {
+      const err = nameVal.error || 'Owner / Manager Name must contain only alphabetic letters (no numbers like "232" or special symbols).'
+      setFormError(err)
+      toast.error(err)
       return
     }
+
+    if (!taxIdOrLicense.trim()) {
+      const err = 'Please provide State Filing / EIN / License number.'
+      setFormError(err)
+      toast.error(err)
+      return
+    }
+
+    const phoneVal = validateUsPhone(phone)
+    if (!phoneVal.isValid) {
+      const err = phoneVal.error || 'Please enter a valid 10-digit US phone number: +1 (XXX) XXX-XXXX'
+      setFormError(err)
+      toast.error(err)
+      return
+    }
+
     setSubmitted(true)
     toast.success('Ownership claim submitted! Our compliance team will review within 24 hours.')
   }
@@ -59,6 +82,12 @@ export default function ClaimBusinessModal({ businessName, isOpen, onClose }: Cl
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
+            {formError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                <span>{formError}</span>
+              </div>
+            )}
             <p className="text-xs text-slate-600 leading-relaxed">
               Verify ownership for <strong className="text-slate-900">{businessName}</strong> to gain full control over profile edits, customer review replies, and leads dashboard.
             </p>
@@ -70,10 +99,11 @@ export default function ClaimBusinessModal({ businessName, isOpen, onClose }: Cl
                   type="text"
                   required
                   value={ownerName}
-                  onChange={(e) => setOwnerName(e.target.value)}
+                  onChange={(e) => setOwnerName(filterPersonNameInput(e.target.value))}
                   placeholder="e.g. Michael R. Reynolds"
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500"
                 />
+                <p className="text-[10px] text-slate-400 mt-0.5">Alphabetic letters only (no numbers like &quot;232&quot;).</p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -90,15 +120,17 @@ export default function ClaimBusinessModal({ businessName, isOpen, onClose }: Cl
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Official Mobile / Direct Phone *</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Official Mobile / Direct Phone (USA) *</label>
                   <input
                     type="tel"
                     required
+                    maxLength={17}
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="(555) 234-5678 or +1 212 555 0199"
+                    onChange={(e) => setPhone(formatUsPhone(e.target.value))}
+                    placeholder="+1 (555) 234-5678"
                     className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500"
                   />
+                  <p className="text-[10px] text-slate-400 mt-0.5">USA format: +1 (XXX) XXX-XXXX (10 digits).</p>
                 </div>
               </div>
 
