@@ -5,7 +5,8 @@ import Footer from '@/components/footer'
 import { CATEGORIES, TOP_CITIES } from '@/lib/data'
 import { getAllBusinesses } from '@/lib/db-service'
 import { normalizeCitySlug } from '@/lib/directory-helpers'
-import { MapPin, Sparkles, FileText, Briefcase, Building2, Store } from 'lucide-react'
+import { MapPin, Sparkles, FileText, Briefcase, Building2, Store, Wrench } from 'lucide-react'
+import { POPULAR_SERVICES } from '@/lib/services-data'
 
 export const revalidate = 3600
 
@@ -85,6 +86,27 @@ export default async function HTMLSitemapPage() {
               {CATEGORIES.map(cat => (
                 <Link key={cat.id} href={`/category/${cat.id}`} className="hover:text-blue-600 hover:underline">
                   • {cat.name}
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          {/* Specialized Sub-Services & Contractors */}
+          <div>
+            <h2 className="text-xl font-bold text-slate-900 border-b border-slate-200 pb-2 mb-4 flex items-center justify-between gap-2">
+              <span className="flex items-center gap-2">
+                <Wrench className="w-5 h-5 text-sky-600" />
+                <span>Specialized Trade &amp; Professional Sub-Services ({POPULAR_SERVICES.length})</span>
+              </span>
+              <Link href="/services" className="text-xs font-semibold text-blue-600 hover:underline">
+                View All Services Hub →
+              </Link>
+            </h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 text-xs text-slate-600">
+              {POPULAR_SERVICES.map(srv => (
+                <Link key={srv.slug} href={`/services/${srv.slug}`} className="hover:text-blue-600 hover:underline flex items-center gap-1">
+                  • <span className="font-semibold">{srv.title}</span>
+                  <span className="text-[10px] text-slate-400">({srv.parentCategoryName})</span>
                 </Link>
               ))}
             </div>

@@ -20,6 +20,8 @@ import {
   VERIFICATION_DISCLAIMER
 } from '@/lib/directory-helpers'
 import { getCmsCategoryBySlug } from '@/lib/admin-cms-service'
+import { getServicesByCategory } from '@/lib/services-data'
+import { Wrench } from 'lucide-react'
 
 export const revalidate = 86400 // 24-hour ISR revalidation
 export const dynamicParams = false
@@ -80,6 +82,7 @@ export default async function CategoryDetailPage(props: { params: Promise<{ slug
   const relatedCategories = CATEGORIES.filter(c => c.id !== cat.id).slice(0, 8)
   const seoCopy = getCategorySeoCopy(cat.id)
   const cmsCat = await getCmsCategoryBySlug(cat.id)
+  const subServices = getServicesByCategory(cat.id)
 
   const currentPath = `category/${cat.id}`
   const canonicalUrl = toCanonicalUrl(currentPath)
@@ -214,6 +217,56 @@ export default async function CategoryDetailPage(props: { params: Promise<{ slug
                 <strong>Directory Standards:</strong> {VERIFICATION_DISCLAIMER}
               </p>
             </div>
+
+            {/* Specialized Sub-Services Landing Pages (Plumbers, Roofers, etc.) */}
+            {subServices.length > 0 && (
+              <section className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-8 space-y-5 shadow-xs">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Wrench className="w-5 h-5 text-blue-600" />
+                      <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
+                        Browse {cat.name} by Specialty
+                      </h2>
+                    </div>
+                    <p className="text-xs sm:text-sm text-slate-500">
+                      Explore dedicated landing pages, hourly pricing guides, and verified US contractors:
+                    </p>
+                  </div>
+                  <Link
+                    href="/services"
+                    className="text-xs font-bold text-blue-700 hover:text-blue-900 transition-colors"
+                  >
+                    View All Services →
+                  </Link>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 pt-2">
+                  {subServices.map((srv) => (
+                    <Link
+                      key={srv.slug}
+                      href={`/services/${srv.slug}`}
+                      className="group p-4 rounded-2xl border border-slate-200/90 hover:border-blue-400 bg-slate-50/50 hover:bg-blue-50/40 transition-all flex flex-col justify-between space-y-2 hover:shadow-xs"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
+                            {srv.title}
+                          </span>
+                          <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-transform" />
+                        </div>
+                        <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
+                          {srv.badge}
+                        </p>
+                      </div>
+                      <div className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md inline-block w-fit border border-emerald-100">
+                        {srv.typicalCost.split('(')[0].trim()}
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            )}
 
             {/* Directory Overview & Coverage (Requirement 15) */}
             <section className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-8 space-y-5 shadow-xs">

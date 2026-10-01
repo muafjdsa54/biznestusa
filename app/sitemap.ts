@@ -13,6 +13,7 @@ import {
   isPakistaniCity,
   isPakistaniEntity
 } from '@/lib/directory-helpers'
+import { POPULAR_SERVICES } from '@/lib/services-data'
 
 export const revalidate = 3600 // Revalidate sitemap XML every hour
 
@@ -234,12 +235,29 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.8,
   }))
 
+  // 12. Specialized Sub-Services Landing Pages (Plumbers, Roofers, Electricians, etc.)
+  const serviceRoutes = [
+    {
+      url: canonicalUrl('/services'),
+      lastModified: currentDate,
+      changeFrequency: 'daily' as const,
+      priority: 0.9,
+    },
+    ...POPULAR_SERVICES.map((srv) => ({
+      url: canonicalUrl(`/services/${srv.slug}`),
+      lastModified: currentDate,
+      changeFrequency: 'weekly' as const,
+      priority: 0.9,
+    }))
+  ]
+
   // Combine all routes
   const allRoutes = [
     homepageRoute,
     ...corePages,
     ...policyPages,
     ...categoryRoutes,
+    ...serviceRoutes,
     ...cityRoutes,
     ...categoryCityRoutes,
     ...businessRoutes,
