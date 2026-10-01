@@ -36,7 +36,7 @@ import {
 } from 'lucide-react'
 
 export const revalidate = 86400 // 24-hour ISR revalidation
-export const dynamicParams = false
+export const dynamicParams = true
 
 export async function generateStaticParams() {
   return POPULAR_SERVICES.map((srv) => ({

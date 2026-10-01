@@ -235,7 +235,54 @@ export const BUSINESS_CATEGORIES: CategoryDefinition[] = [
     color: '#64748b',
     subcategories: [
       'Photography', 'Event Planner', 'Wedding Services', 'Printing', 'Storage',
-      'Security Services', 'Travel Agency', 'Pet Services', 'Funeral Services'
+      'Security Services', 'Travel Agency', 'Funeral Services'
+    ]
+  },
+  {
+    id: 'pets-animals',
+    name: 'Pet Services & Animals',
+    icon: 'paw',
+    desc: 'Licensed veterinarians, emergency animal hospitals, dog groomers, boarding kennels, and pet trainers',
+    color: '#10b981',
+    subcategories: [
+      'Veterinarian', 'Animal Hospital', 'Dog Groomer', 'Pet Boarding & Daycare',
+      'Dog Trainer', 'Mobile Pet Grooming', 'Pet Sitter & Dog Walker', 'Cat Groomer',
+      'Exotic Pet Care', 'Pet Supplies Store'
+    ]
+  },
+  {
+    id: 'legal-services',
+    name: 'Legal & Attorney Services',
+    icon: 'legal',
+    desc: 'Top-rated personal injury attorneys, criminal defense, family law, immigration, and business lawyers',
+    color: '#6366f1',
+    subcategories: [
+      'Personal Injury Attorney', 'Criminal Defense Lawyer', 'Family & Divorce Lawyer',
+      'Immigration Attorney', 'Business Lawyer', 'Estate Planning Attorney',
+      'Real Estate Attorney', 'Bankruptcy Lawyer', 'Civil Litigation'
+    ]
+  },
+  {
+    id: 'cleaning-maintenance',
+    name: 'Cleaning & Janitorial',
+    icon: 'cleaning',
+    desc: 'Residential house cleaning, maid services, commercial janitorial, carpet cleaning, and pressure washing',
+    color: '#06b6d4',
+    subcategories: [
+      'House Cleaning', 'Maid Service', 'Commercial Janitorial', 'Carpet Cleaning',
+      'Pressure Washing', 'Window Cleaning', 'Move-Out Cleaning', 'Post-Construction Cleaning',
+      'Junk Removal'
+    ]
+  },
+  {
+    id: 'events-weddings',
+    name: 'Events & Weddings',
+    icon: 'events',
+    desc: 'Premier wedding venues, event planners, party rentals, DJs, caterers, and florists',
+    color: '#ec4899',
+    subcategories: [
+      'Wedding Venue', 'Event Planner', 'Wedding Photographer', 'Party Rentals',
+      'DJ & Entertainment', 'Florist', 'Bridal Shop', 'Banquet Hall', 'Photo Booth Rental'
     ]
   }
 ]

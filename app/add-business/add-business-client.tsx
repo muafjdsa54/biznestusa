@@ -23,7 +23,7 @@ import {
   onAuthStateChanged, 
   updateProfile 
 } from 'firebase/auth'
-import { isValidPersonName, validatePersonName, filterPersonNameInput, isValidUsPhone, validateUsPhone, formatUsPhone, isValidEmail } from '@/lib/validation'
+import { isValidPersonName, validatePersonName, filterPersonNameInput, isValidUsPhone, validateUsPhone, formatUsPhone, isValidEmail, validateEmail } from '@/lib/validation'
 import { toast } from 'sonner'
 
 const US_PAYMENT_CHANNELS = [
@@ -292,9 +292,10 @@ export default function AddBusinessClient() {
   }, [])
 
   const prefillUserForm = (user: UserSessionData) => {
+    const cleanName = filterPersonNameInput(user.name || '')
     setFormData(prev => ({
       ...prev,
-      ownerName: prev.ownerName || user.name || '',
+      ownerName: prev.ownerName || (isValidPersonName(cleanName) ? cleanName : ''),
       email: prev.email || user.email || '',
       phone: prev.phone || user.phone || '',
       whatsapp: prev.whatsapp || user.phone || ''
@@ -652,10 +653,60 @@ export default function AddBusinessClient() {
     return Math.min(100, Math.round((filled / 6) * 100))
   }
 
-  const validateStep = (step: number) => {
+  const focusFirstError = (errs: Record<string, string>) => {
+    const errorKeys = Object.keys(errs)
+    if (errorKeys.length === 0) return
+
+    for (const key of errorKeys) {
+      let targetEl: HTMLElement | null = null
+
+      if (key.startsWith('location_')) {
+        const parts = key.split('_')
+        const idx = parts[1]
+        const field = parts[2]
+        if (field === 'state') {
+          targetEl = document.getElementById(`field-location-${idx}-state`)
+        } else if (field === 'city') {
+          targetEl = document.getElementById(`field-location-${idx}-customCity`) ||
+                     document.getElementById(`field-location-${idx}-city`)
+        } else if (field === 'address') {
+          targetEl = document.getElementById(`field-location-${idx}-address`)
+        }
+      } else if (key === 'faqs') {
+        const firstEmptyQ = document.querySelector('input[id^="field-faq-"][id$="-question"]') as HTMLElement | null
+        const firstEmptyA = document.querySelector('textarea[id^="field-faq-"][id$="-answer"]') as HTMLElement | null
+        targetEl = firstEmptyQ || firstEmptyA || document.getElementById('field-faqs')
+      } else if (key === 'category') {
+        targetEl = isCustomCategory 
+          ? (document.getElementById('field-customCategory') || document.getElementById('field-category'))
+          : document.getElementById('field-category')
+      } else {
+        targetEl = document.getElementById(`field-${key}`)
+      }
+
+      if (targetEl) {
+        targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        setTimeout(() => {
+          targetEl?.focus()
+          if (targetEl instanceof HTMLInputElement || targetEl instanceof HTMLTextAreaElement) {
+            targetEl.select()
+          }
+          targetEl?.classList.add('ring-4', 'ring-red-500/50', 'transition-all', 'duration-300')
+          setTimeout(() => {
+            targetEl?.classList.remove('ring-4', 'ring-red-500/50')
+          }, 2000)
+        }, 150)
+        break
+      }
+    }
+  }
+
+  const validateStep = (step: number): boolean => {
     const errs: Record<string, string> = {}
     if (step === 1) {
-      if (!formData.businessName.trim()) errs.businessName = 'Business name is required'
+      if (!formData.businessName.trim()) {
+        errs.businessName = 'Business name is required'
+      }
       if (!formData.category.trim()) {
         errs.category = isCustomCategory ? 'Please specify your custom industry category' : 'Select an industry category'
       }
@@ -664,28 +715,34 @@ export default function AddBusinessClient() {
         errs.locations = 'At least one location is required'
       } else {
         formData.locations.forEach((loc, idx) => {
+          if (!loc.state?.trim()) {
+            errs[`location_${idx}_state`] = `Location ${idx + 1}: State selection is required`
+          }
           const effectiveCity = (loc.isCustomCity ? loc.customCityName || '' : loc.city).trim()
           if (!effectiveCity) {
-            errs[`location_${idx}_city`] = loc.isCustomCity ? 'Please specify your city name' : 'City selection is required'
+            errs[`location_${idx}_city`] = loc.isCustomCity 
+              ? `Location ${idx + 1}: Please specify your city name` 
+              : `Location ${idx + 1}: City selection is required`
           }
-          if (!loc.address.trim()) {
-            errs[`location_${idx}_address`] = 'Physical address is required'
+          if (!loc.address?.trim()) {
+            errs[`location_${idx}_address`] = `Location ${idx + 1}: Physical address is required`
           }
 
           // Duplicate location detection
-          const currentKey = `${effectiveCity.toLowerCase()}|${loc.address.trim().toLowerCase()}`
+          const currentKey = `${effectiveCity.toLowerCase()}|${(loc.address || '').trim().toLowerCase()}`
           const isDuplicate = formData.locations.some((otherLoc, otherIdx) => {
             if (otherIdx === idx) return false
             const otherCity = (otherLoc.isCustomCity ? otherLoc.customCityName || '' : otherLoc.city).trim()
-            const otherKey = `${otherCity.toLowerCase()}|${otherLoc.address.trim().toLowerCase()}`
+            const otherKey = `${otherCity.toLowerCase()}|${(otherLoc.address || '').trim().toLowerCase()}`
             return currentKey === otherKey && effectiveCity && loc.address.trim()
           })
           if (isDuplicate) {
-            errs[`location_${idx}_address`] = 'This location (city & address) has already been added.'
+            errs[`location_${idx}_address`] = `Location ${idx + 1}: This location (city & address) has already been added.`
           }
         })
       }
-      if (!formData.phone.trim()) {
+
+      if (!formData.phone?.trim()) {
         errs.phone = 'Phone number is required'
       } else {
         const pVal = validateUsPhone(formData.phone)
@@ -693,21 +750,26 @@ export default function AddBusinessClient() {
           errs.phone = pVal.error || 'Please provide a valid 10-digit US phone number: +1 (XXX) XXX-XXXX'
         }
       }
+
       if (formData.whatsapp?.trim()) {
         const wVal = validateUsPhone(formData.whatsapp)
         if (!wVal.isValid) {
           errs.whatsapp = wVal.error || 'Please provide a valid 10-digit US phone number: +1 (XXX) XXX-XXXX for WhatsApp'
         }
       }
+
       if (formData.ownerName?.trim()) {
         const oVal = validatePersonName(formData.ownerName)
         if (!oVal.isValid) {
-          errs.ownerName = oVal.error || 'Owner name must contain only alphabetic letters (no numbers like "232").'
+          errs.ownerName = oVal.error || 'Contact person name must contain only alphabetic letters.'
         }
       }
+
       if (!currentUser) {
-        if (!formData.email.trim() || !formData.email.includes('@')) {
+        if (!formData.email?.trim()) {
           errs.email = 'Valid business email is required for account creation'
+        } else if (!validateEmail(formData.email).isValid) {
+          errs.email = 'Please provide a valid business email address (e.g. name@company.com)'
         }
         if (!accountPassword || accountPassword.length < 6) {
           errs.accountPassword = 'Password must be at least 6 characters for your dashboard account'
@@ -726,16 +788,25 @@ export default function AddBusinessClient() {
         errs.faqs = `Please provide at least 3 FAQ question & answer pairs (${validFaqs.length}/3 completed). FAQs capture customer attention and build immediate credibility.`
       }
     }
+
     setErrors(errs)
-    return Object.keys(errs).length === 0
+    const errKeys = Object.keys(errs)
+    if (errKeys.length > 0) {
+      const firstErrorMessage = errs[errKeys[0]]
+      toast.error(firstErrorMessage, {
+        description: 'Please complete the highlighted field to continue.',
+        duration: 4000
+      })
+      focusFirstError(errs)
+      return false
+    }
+    return true
   }
 
   const handleNextStep = () => {
     if (validateStep(currentStep)) {
       setCurrentStep(prev => Math.min(4, prev + 1))
       window.scrollTo({ top: 400, behavior: 'smooth' })
-    } else {
-      toast.error('Please complete all mandatory fields in this section.')
     }
   }
 
@@ -747,8 +818,19 @@ export default function AddBusinessClient() {
   // Handle Form Submission: Saves Business Draft and Opens free US listing Payment Screen
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!validateStep(1)) {
+      setCurrentStep(1)
+      setTimeout(() => validateStep(1), 100)
+      return
+    }
+    if (!validateStep(2)) {
+      setCurrentStep(2)
+      setTimeout(() => validateStep(2), 100)
+      return
+    }
     if (!validateStep(3)) {
       setCurrentStep(3)
+      setTimeout(() => validateStep(3), 100)
       return
     }
 
@@ -1955,12 +2037,22 @@ export default function AddBusinessClient() {
                                 Business Name *
                               </label>
                               <input
+                                id="field-businessName"
                                 type="text"
                                 value={formData.businessName}
-                                onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
+                                onChange={(e) => {
+                                  setFormData({ ...formData, businessName: e.target.value })
+                                  if (errors.businessName) {
+                                    setErrors(prev => {
+                                      const next = { ...prev }
+                                      delete next.businessName
+                                      return next
+                                    })
+                                  }
+                                }}
                                 placeholder="e.g. Apex Global Solutions / Austin Creative Tech"
                                 className={`w-full px-4 py-3 bg-slate-50/80 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
-                                  errors.businessName ? 'border-red-500 bg-red-50/30' : 'border-slate-200'
+                                  errors.businessName ? 'border-red-500 bg-red-50/30 ring-2 ring-red-400/20' : 'border-slate-200'
                                 }`}
                               />
                               {errors.businessName && <span className="text-[11px] font-semibold text-red-500 mt-1 block">{errors.businessName}</span>}
@@ -1977,10 +2069,11 @@ export default function AddBusinessClient() {
                                   )}
                                 </div>
                                 <select
+                                  id="field-category"
                                   value={isCustomCategory ? 'Other' : (BUSINESS_CATEGORIES.some(c => c.name === formData.category) ? formData.category : (formData.category ? 'Other' : ''))}
                                   onChange={(e) => handleCategorySelectChange(e.target.value)}
                                   className={`w-full px-4 py-3 bg-slate-50/80 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer ${
-                                    errors.category ? 'border-red-500 bg-red-50/30' : 'border-slate-200'
+                                    errors.category ? 'border-red-500 bg-red-50/30 ring-2 ring-red-400/20' : 'border-slate-200'
                                   }`}
                                 >
                                   <option value="">-- Select Business Category --</option>
@@ -1997,6 +2090,7 @@ export default function AddBusinessClient() {
                                       Specify Your Custom Category / Industry *
                                     </label>
                                     <input
+                                      id="field-customCategory"
                                       type="text"
                                       value={customCategoryText}
                                       onChange={(e) => handleCustomCategoryTextChange(e.target.value)}
@@ -2211,22 +2305,39 @@ const availableCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
                                     <div>
                                       <label className="block text-xs font-bold text-slate-700 mb-1.5">State *</label>
                                       <select
+                                        id={`field-location-${index}-state`}
                                         value={loc.state}
-                                        onChange={(e) => setFormData(prev => ({
-                                          ...prev,
-                                          locations: prev.locations.map((item, i) => i === index ? {
-                                            ...item,
-                                            state: e.target.value,
-                                            city: '',
-                                            citySearchQuery: '',
-                                            isCityDropdownOpen: false
-                                          } : item)
-                                        }))}
-                                        className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                                        onChange={(e) => {
+                                          setFormData(prev => ({
+                                            ...prev,
+                                            locations: prev.locations.map((item, i) => i === index ? {
+                                              ...item,
+                                              state: e.target.value,
+                                              city: '',
+                                              citySearchQuery: '',
+                                              isCityDropdownOpen: false
+                                            } : item)
+                                          }))
+                                          if (errors[`location_${index}_state`]) {
+                                            setErrors(prev => {
+                                              const next = { ...prev }
+                                              delete next[`location_${index}_state`]
+                                              return next
+                                            })
+                                          }
+                                        }}
+                                        className={`w-full px-4 py-3 bg-white border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
+                                          errors[`location_${index}_state`] ? 'border-red-500 bg-red-50/30 ring-2 ring-red-400/20' : 'border-slate-200'
+                                        }`}
                                       >
                                         <option value="">Search or select a state</option>
                                         {US_STATES.map((state) => <option key={state} value={state}>{state}</option>)}
                                       </select>
+                                      {errors[`location_${index}_state`] && (
+                                        <span className="text-[11px] font-semibold text-red-500 mt-1 block">
+                                          {errors[`location_${index}_state`]}
+                                        </span>
+                                      )}
                                     </div>
                                     {/* City Selector for Location Block */}
                                     <div className="relative">
@@ -2236,12 +2347,12 @@ const availableCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
                                       <div className="relative">
                                         <button
                                           type="button"
-                                          id={`city-dropdown-btn-${index}`}
+                                          id={`field-location-${index}-city`}
                                           onClick={() => toggleLocationCityDropdown(index)}
                                           disabled={!loc.state}
                                           aria-disabled={!loc.state}
                                           className={`w-full px-4 py-3 bg-white border rounded-2xl text-sm flex items-center justify-between text-left focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition disabled:cursor-not-allowed disabled:bg-slate-50 ${
-                                            errors[`location_${index}_city`] ? 'border-red-500 bg-red-50/30' : 'border-slate-200 hover:border-slate-300'
+                                            errors[`location_${index}_city`] ? 'border-red-500 bg-red-50/30 ring-2 ring-red-400/20' : 'border-slate-200 hover:border-slate-300'
                                           }`}
                                         >
                                           <span className={loc.city ? 'font-semibold text-slate-900' : 'text-slate-400'}>
@@ -2343,10 +2454,13 @@ const availableCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
                                           </div>
                                           <input
                                             type="text"
+                                            id={`field-location-${index}-customCity`}
                                             value={loc.customCityName || ''}
                                             onChange={(e) => handleCustomCityNameChange(index, e.target.value)}
                                             placeholder="Enter your city name (e.g. Arlington, Plano, Scottsdale)..."
-                                            className="w-full px-3.5 py-2.5 bg-white border border-blue-300 rounded-xl text-xs sm:text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                                            className={`w-full px-3.5 py-2.5 bg-white border rounded-xl text-xs sm:text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
+                                              errors[`location_${index}_city`] ? 'border-red-500 bg-red-50/30 ring-2 ring-red-400/20' : 'border-blue-300'
+                                            }`}
                                             autoFocus
                                           />
                                         </div>
@@ -2365,12 +2479,13 @@ const availableCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
                                       </label>
                                       <input
                                         type="text"
+                                        id={`field-location-${index}-address`}
                                         value={loc.address}
                                         onChange={(e) => handleLocationAddressChange(index, e.target.value)}
                                         onKeyDown={(e) => handleAddressKeyDown(e, index)}
                                         placeholder="e.g. Suite 400, 1200 Broadway"
                                         className={`w-full px-4 py-3 bg-white border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
-                                          errors[`location_${index}_address`] ? 'border-red-500 bg-red-50/30' : 'border-slate-200'
+                                          errors[`location_${index}_address`] ? 'border-red-500 bg-red-50/30 ring-2 ring-red-400/20' : 'border-slate-200'
                                         }`}
                                       />
                                       {errors[`location_${index}_address`] && (
@@ -2403,13 +2518,23 @@ const availableCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
                               <div className="relative">
                                 <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                 <input
+                                  id="field-phone"
                                   type="tel"
                                   maxLength={17}
                                   value={formData.phone}
-                                  onChange={(e) => setFormData({ ...formData, phone: formatUsPhone(e.target.value) })}
+                                  onChange={(e) => {
+                                    setFormData({ ...formData, phone: formatUsPhone(e.target.value) })
+                                    if (errors.phone) {
+                                      setErrors(prev => {
+                                        const next = { ...prev }
+                                        delete next.phone
+                                        return next
+                                      })
+                                    }
+                                  }}
                                   placeholder="+1 (555) 123-4567"
                                   className={`w-full pl-10 pr-4 py-3 bg-slate-50/80 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
-                                    errors.phone ? 'border-red-500 bg-red-50/30' : 'border-slate-200'
+                                    errors.phone ? 'border-red-500 bg-red-50/30 ring-2 ring-red-400/20' : 'border-slate-200'
                                   }`}
                                 />
                               </div>
@@ -2427,13 +2552,23 @@ const availableCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
                               <div className="relative">
                                 <MessageCircle className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                 <input
+                                  id="field-whatsapp"
                                   type="tel"
                                   maxLength={17}
                                   value={formData.whatsapp}
-                                  onChange={(e) => setFormData({ ...formData, whatsapp: formatUsPhone(e.target.value) })}
+                                  onChange={(e) => {
+                                    setFormData({ ...formData, whatsapp: formatUsPhone(e.target.value) })
+                                    if (errors.whatsapp) {
+                                      setErrors(prev => {
+                                        const next = { ...prev }
+                                        delete next.whatsapp
+                                        return next
+                                      })
+                                    }
+                                  }}
                                   placeholder="+1 (555) 123-4567"
                                   className={`w-full pl-10 pr-4 py-3 bg-slate-50/80 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
-                                    errors.whatsapp ? 'border-red-500 bg-red-50/30' : 'border-slate-200'
+                                    errors.whatsapp ? 'border-red-500 bg-red-50/30 ring-2 ring-red-400/20' : 'border-slate-200'
                                   }`}
                                 />
                               </div>
@@ -2446,27 +2581,81 @@ const availableCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
 
                             <div>
                               <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                                Business Email
+                                Business Email {!currentUser && <span className="text-red-500">*</span>}
                               </label>
                               <div className="relative">
                                 <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                 <input
+                                  id="field-email"
                                   type="email"
                                   value={formData.email}
-                                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                  onChange={(e) => {
+                                    setFormData({ ...formData, email: e.target.value })
+                                    if (errors.email) {
+                                      setErrors(prev => {
+                                        const next = { ...prev }
+                                        delete next.email
+                                        return next
+                                      })
+                                    }
+                                  }}
                                   placeholder="info@yourcompany.com"
-                                  className="w-full pl-10 pr-4 py-3 bg-slate-50/80 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                                  className={`w-full pl-10 pr-4 py-3 bg-slate-50/80 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
+                                    errors.email ? 'border-red-500 bg-red-50/30 ring-2 ring-red-400/20' : 'border-slate-200'
+                                  }`}
                                 />
                               </div>
+                              {errors.email ? (
+                                <span className="text-[11px] font-semibold text-red-500 mt-1 block">{errors.email}</span>
+                              ) : (
+                                !currentUser && (
+                                  <span className="text-[10px] text-slate-400 mt-1 block">Required to create your dashboard login & receive verification confirmation.</span>
+                                )
+                              )}
                             </div>
 
                             <div>
+                              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                                Contact Person / Representative Name
+                              </label>
+                              <div className="relative">
+                                <Users className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                <input
+                                  id="field-ownerName"
+                                  type="text"
+                                  value={formData.ownerName}
+                                  onChange={(e) => {
+                                    const cleaned = filterPersonNameInput(e.target.value)
+                                    setFormData({ ...formData, ownerName: cleaned })
+                                    if (errors.ownerName) {
+                                      setErrors(prev => {
+                                        const next = { ...prev }
+                                        delete next.ownerName
+                                        return next
+                                      })
+                                    }
+                                  }}
+                                  placeholder="e.g. John Miller (Letters only)"
+                                  className={`w-full pl-10 pr-4 py-3 bg-slate-50/80 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
+                                    errors.ownerName ? 'border-red-500 bg-red-50/30 ring-2 ring-red-400/20' : 'border-slate-200'
+                                  }`}
+                                />
+                              </div>
+                              {errors.ownerName ? (
+                                <span className="text-[11px] font-semibold text-red-500 mt-1 block">{errors.ownerName}</span>
+                              ) : (
+                                <span className="text-[10px] text-slate-400 mt-1 block">Authorized representative or owner name (letters only).</span>
+                              )}
+                            </div>
+
+                            <div className="sm:col-span-2">
                               <label className="block text-xs font-bold text-slate-700 mb-1.5">
                                 Website (Optional)
                               </label>
                               <div className="relative">
                                 <Globe className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                 <input
+                                  id="field-website"
                                   type="url"
                                   value={formData.website}
                                   onChange={(e) => setFormData({ ...formData, website: e.target.value })}
@@ -2474,16 +2663,17 @@ const availableCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
                                   className="w-full pl-10 pr-4 py-3 bg-slate-50/80 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                                 />
                               </div>
-
                             </div>
                           </div>
 
                           {/* Account Password Setup for Guests */}
                           {!currentUser && (
-                            <div className="p-5 bg-gradient-to-r from-blue-50/90 to-indigo-50/70 rounded-2xl border border-blue-200 space-y-3">
+                            <div className={`p-5 bg-gradient-to-r from-blue-50/90 to-indigo-50/70 rounded-2xl border transition-all space-y-3 ${
+                              errors.accountPassword ? 'border-red-400 bg-red-50/40 ring-2 ring-red-400/20' : 'border-blue-200'
+                            }`}>
                               <div className="flex items-center gap-2 text-blue-900">
                                 <Lock className="w-4 h-4 text-blue-600" />
-                                <h4 className="font-extrabold text-xs">Create Dashboard Password (Required)</h4>
+                                <h4 className="font-extrabold text-xs">Create Dashboard Password (Required) *</h4>
                               </div>
                               <p className="text-[11px] text-slate-600">
                                 Set a secure password for your email (<strong>{formData.email || 'your email'}</strong>) so you can log into your Business Dashboard anytime to check approval status, upload receipts, and manage listings.
@@ -2493,12 +2683,22 @@ const availableCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
                                 <div className="relative">
                                   <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                   <input
+                                    id="field-accountPassword"
                                     type={showAccountPassword ? 'text' : 'password'}
                                     value={accountPassword}
-                                    onChange={(e) => setAccountPassword(e.target.value)}
+                                    onChange={(e) => {
+                                      setAccountPassword(e.target.value)
+                                      if (errors.accountPassword) {
+                                        setErrors(prev => {
+                                          const next = { ...prev }
+                                          delete next.accountPassword
+                                          return next
+                                        })
+                                      }
+                                    }}
                                     placeholder="At least 6 characters"
                                     className={`w-full pl-10 pr-10 py-2.5 bg-white border rounded-xl text-xs focus:ring-2 focus:ring-blue-500 ${
-                                      errors.accountPassword ? 'border-red-500' : 'border-slate-200'
+                                      errors.accountPassword ? 'border-red-500 bg-red-50/30 ring-2 ring-red-400/20' : 'border-slate-200'
                                     }`}
                                   />
                                   <button
@@ -2545,12 +2745,22 @@ const availableCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
                                 </span>
                               </div>
                               <textarea
+                                id="field-description"
                                 rows={6}
                                 value={formData.description}
-                                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                onChange={(e) => {
+                                  setFormData({ ...formData, description: e.target.value })
+                                  if (errors.description) {
+                                    setErrors(prev => {
+                                      const next = { ...prev }
+                                      delete next.description
+                                      return next
+                                    })
+                                  }
+                                }}
                                 placeholder="Describe your business background, offerings, why customers in the United States should choose you, years of experience, unique features, and customer guarantees..."
                                 className={`w-full p-4 bg-slate-50/80 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 leading-relaxed ${
-                                  errors.description ? 'border-red-500 bg-red-50/30' : 'border-slate-200'
+                                  errors.description ? 'border-red-500 bg-red-50/30 ring-2 ring-red-400/20' : 'border-slate-200'
                                 }`}
                               ></textarea>
                               {errors.description && (
@@ -2572,7 +2782,7 @@ const availableCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
                             </div>
 
                             {/* Frequently Asked Questions (Minimum 3 FAQs Required) */}
-                            <div className="pt-6 border-t border-slate-200/80 space-y-4">
+                            <div id="field-faqs" className="pt-6 border-t border-slate-200/80 space-y-4">
                               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                 <div>
                                   <div className="flex items-center gap-2">
@@ -2631,6 +2841,7 @@ const availableCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
                                         Question *
                                       </label>
                                       <input
+                                        id={`field-faq-${faqIdx}-question`}
                                         type="text"
                                         value={faq.question}
                                         onChange={(e) => handleFaqChange(faqIdx, 'question', e.target.value)}
@@ -2644,6 +2855,7 @@ const availableCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
                                         Answer *
                                       </label>
                                       <textarea
+                                        id={`field-faq-${faqIdx}-answer`}
                                         rows={3}
                                         value={faq.answer}
                                         onChange={(e) => handleFaqChange(faqIdx, 'answer', e.target.value)}

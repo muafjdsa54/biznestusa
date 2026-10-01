@@ -2,11 +2,11 @@ import { Metadata } from 'next'
 import Link from 'next/link'
 import Navbar from '@/components/navbar'
 import Footer from '@/components/footer'
-import { CATEGORIES, TOP_CITIES } from '@/lib/data'
+import { BUSINESS_CATEGORIES, CATEGORIES, TOP_CITIES } from '@/lib/data'
 import { getAllBusinesses } from '@/lib/db-service'
 import { normalizeCitySlug } from '@/lib/directory-helpers'
 import { MapPin, Sparkles, FileText, Briefcase, Building2, Store, Wrench } from 'lucide-react'
-import { POPULAR_SERVICES } from '@/lib/services-data'
+import { POPULAR_SERVICES, getSubcategoryHref } from '@/lib/services-data'
 
 export const revalidate = 3600
 
@@ -76,38 +76,46 @@ export default async function HTMLSitemapPage() {
             </div>
           </div>
 
-          {/* Categories */}
+          {/* Industry Categories & Sub-Services Hierarchy */}
           <div>
-            <h2 className="text-xl font-bold text-slate-900 border-b border-slate-200 pb-2 mb-4 flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-emerald-600" />
-              <span>Industry Categories ({CATEGORIES.length})</span>
-            </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 text-xs text-slate-600">
-              {CATEGORIES.map(cat => (
-                <Link key={cat.id} href={`/category/${cat.id}`} className="hover:text-blue-600 hover:underline">
-                  • {cat.name}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200 pb-2 mb-6 gap-2">
+              <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-emerald-600" />
+                <span>Industry Categories &amp; Sub-Services ({BUSINESS_CATEGORIES.length} Categories, 160 Sub-Services)</span>
+              </h2>
+              <div className="flex items-center gap-3 text-xs font-semibold">
+                <Link href="/categories" className="text-blue-600 hover:underline">
+                  All Categories Hub →
                 </Link>
-              ))}
+                <Link href="/services" className="text-blue-600 hover:underline">
+                  All Services Hub →
+                </Link>
+              </div>
             </div>
-          </div>
 
-          {/* Specialized Sub-Services & Contractors */}
-          <div>
-            <h2 className="text-xl font-bold text-slate-900 border-b border-slate-200 pb-2 mb-4 flex items-center justify-between gap-2">
-              <span className="flex items-center gap-2">
-                <Wrench className="w-5 h-5 text-sky-600" />
-                <span>Specialized Trade &amp; Professional Sub-Services ({POPULAR_SERVICES.length})</span>
-              </span>
-              <Link href="/services" className="text-xs font-semibold text-blue-600 hover:underline">
-                View All Services Hub →
-              </Link>
-            </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 text-xs text-slate-600">
-              {POPULAR_SERVICES.map(srv => (
-                <Link key={srv.slug} href={`/services/${srv.slug}`} className="hover:text-blue-600 hover:underline flex items-center gap-1">
-                  • <span className="font-semibold">{srv.title}</span>
-                  <span className="text-[10px] text-slate-400">({srv.parentCategoryName})</span>
-                </Link>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {BUSINESS_CATEGORIES.map(cat => (
+                <div key={cat.id} className="p-4 bg-slate-50/70 rounded-2xl border border-slate-200/80 space-y-2.5">
+                  <div className="flex items-center justify-between pb-1 border-b border-slate-200">
+                    <Link href={`/category/${cat.id}`} className="font-bold text-slate-900 hover:text-blue-600 text-sm">
+                      {cat.name}
+                    </Link>
+                    <span className="text-[11px] font-semibold text-slate-400">
+                      {cat.subcategories.length} services
+                    </span>
+                  </div>
+
+                  <ul className="space-y-1 text-xs text-slate-600">
+                    {cat.subcategories.map(sub => (
+                      <li key={sub}>
+                        <Link href={getSubcategoryHref(sub, cat.id)} className="hover:text-blue-600 hover:underline flex items-center gap-1.5">
+                          <span className="text-blue-400">•</span>
+                          <span>{sub}</span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               ))}
             </div>
           </div>

@@ -276,6 +276,142 @@ const CATEGORY_COPY: Record<string, DirectorySeoCopy> = {
       { label: 'Browse Beauty & Wellness', href: '/category/beauty-personal-care' },
       { label: 'List Your Salon or Studio', href: '/add-business' }
     ]
+  },
+  'pets-animals': {
+    title: 'Pet Services, Veterinarians & Animal Care Directory',
+    intro: 'Find licensed veterinarians, 24/7 emergency pet hospitals, certified dog groomers, boarding kennels, and trainers across the USA.',
+    whatIs: 'This directory connects American pet parents with verified veterinary practices, boarding facilities, certified groomers, and pet care providers.',
+    includedServices: [
+      'Comprehensive Veterinary Exams & Vaccinations',
+      '24/7 Emergency Animal Hospital & Surgical Care',
+      'Professional Dog & Cat Grooming & Styling',
+      'Overnight Pet Boarding, Daycare & Kennels',
+      'Positive-Reinforcement Dog Obedience Training',
+      'In-Home Pet Sitting & Daily Dog Walking'
+    ],
+    whatToCompare: [
+      'State Veterinary Board licensing and AAHA clinic accreditation',
+      'Cleanliness and security standards of boarding and grooming facilities',
+      '24/7 emergency availability and diagnostic equipment on-site',
+      'Verified customer ratings and clear fee structures'
+    ],
+    brandBenefit: 'BizNest USA connects pet care facilities and veterinarians with local pet owners actively searching for trusted animal care services.',
+    ctaHeading: 'Own a Veterinary Clinic, Grooming Salon, or Pet Boarding Facility?',
+    ctaText: 'List your pet business on BizNest USA to reach thousands of local pet owners looking for trusted veterinary care and pet services.',
+    faqs: [
+      {
+        question: 'What is AAHA accreditation for veterinary clinics?',
+        answer: 'The American Animal Hospital Association (AAHA) accredits veterinary practices that meet nearly 900 rigorous standards covering patient care, diagnostic imaging, surgery, and facility cleanliness.'
+      },
+      {
+        question: 'How do I choose the best boarding kennel for my pet?',
+        answer: 'Tour the facility in advance to check ventilation, cleanliness, outdoor play yards, vaccination requirements for all animals, and whether staff are present 24/7.'
+      }
+    ],
+    guidance: 'Verify active veterinary credentials, facility health certifications, and read authentic customer feedback.',
+    links: [
+      { label: 'Veterinarians', href: '/services/veterinarians/' },
+      { label: 'Dog Groomers', href: '/services/dog-groomers/' },
+      { label: 'List Your Pet Business', href: '/add-business' }
+    ]
+  },
+  'legal-services': {
+    title: 'Legal Services & Licensed Attorneys Directory',
+    intro: 'Connect with top-rated personal injury attorneys, criminal defense lawyers, divorce counsel, immigration specialists, and corporate law firms across the United States.',
+    whatIs: 'A verified directory connecting individuals and business owners with licensed attorneys, law firms, and legal consultants.',
+    includedServices: [
+      'Personal Injury & Auto Accident Representation',
+      'Criminal Defense & DUI Defense Counsel',
+      'Family Law, Child Custody & Divorce Mediation',
+      'Business Formation, Contracts & Corporate Law',
+      'Immigration Visas, Green Cards & Citizenship',
+      'Estate Planning, Living Trusts & Wills'
+    ],
+    whatToCompare: [
+      'State Bar Association active licensing and disciplinary records',
+      'Specialized experience in your specific legal practice area',
+      'Contingency vs hourly fee arrangements and retainers',
+      'Trial and courtroom track record'
+    ],
+    brandBenefit: 'BizNest USA provides law firms and independent attorneys with an authoritative profile to showcase verified credentials, practice areas, and direct consultation lines.',
+    ctaHeading: 'Are You an Attorney or Law Firm Partner?',
+    ctaText: 'List your law practice on BizNest USA to connect with clients seeking verified legal counsel in your jurisdiction.',
+    faqs: [
+      {
+        question: 'How do I verify an attorney’s license and good standing?',
+        answer: 'Every US state has a State Bar Association website where you can search an attorney by name or bar number to confirm active license status and check for public disciplinary actions.'
+      }
+    ],
+    guidance: 'Always confirm state bar licensure and request a written retainer agreement outlining all fee structures before representation.',
+    links: [
+      { label: 'Attorneys & Lawyers', href: '/services/lawyers/' },
+      { label: 'List Your Law Firm', href: '/add-business' }
+    ]
+  },
+  'cleaning-maintenance': {
+    title: 'Cleaning & Commercial Janitorial Services Directory',
+    intro: 'Find vetted house cleaning services, commercial office janitorial companies, carpet cleaners, and pressure washing contractors in the USA.',
+    whatIs: 'A dedicated directory connecting homeowners and commercial facilities managers with bonded, insured cleaning and sanitization professionals.',
+    includedServices: [
+      'Recurring Residential Maid & House Cleaning',
+      'Commercial Office Janitorial & Day Porter Services',
+      'Move-In / Move-Out Deep Turnovers',
+      'Carpet Steam Cleaning & Tile/Grout Scrubbing',
+      'Exterior Pressure Washing & Window Cleaning'
+    ],
+    whatToCompare: [
+      'Proof of bonding and general liability insurance',
+      'Background-checked and trained cleaning personnel',
+      'Green, eco-friendly and non-toxic cleaning product options',
+      'Transparent flat-rate or per-square-foot pricing estimates'
+    ],
+    brandBenefit: 'BizNest USA helps established cleaning businesses showcase their reliability, insurance certificates, and service territories to local property owners.',
+    ctaHeading: 'Own a Residential or Commercial Cleaning Company?',
+    ctaText: 'Register your cleaning business on BizNest USA to generate qualified local cleaning inquiries.',
+    faqs: [
+      {
+        question: 'Why is bonding and insurance critical for cleaning services?',
+        answer: 'Bonding protects property owners against theft or employee misconduct, while liability insurance covers accidental damage to expensive furnishings or property.'
+      }
+    ],
+    guidance: 'Confirm active insurance certificates and clarify what supplies and equipment the cleaning crew provides.',
+    links: [
+      { label: 'Cleaning Services', href: '/services/cleaning-services/' },
+      { label: 'List Your Cleaning Business', href: '/add-business' }
+    ]
+  },
+  'events-weddings': {
+    title: 'Events, Weddings & Entertainment Directory',
+    intro: 'Discover stunning wedding venues, certified event planners, party rental companies, caterers, florists, and DJs across the United States.',
+    whatIs: 'A premier directory connecting event organizers, couples, and corporate meeting planners with verified event professionals and venues.',
+    includedServices: [
+      'Wedding Ceremony & Reception Venues',
+      'Full-Service Event Planning & Day-Of Coordination',
+      'Party Tent, Table, Chair & Decor Rentals',
+      'Professional Event DJs, Bands & Lighting Design',
+      'Custom Floral Arrangements & Bridal Bouquets'
+    ],
+    whatToCompare: [
+      'Venue capacity limits, curfew rules, and outside vendor policies',
+      'Portfolio photos of past real weddings and corporate galas',
+      'Contract cancellation terms and liability insurance policies',
+      'Package inclusions and transparent service fees'
+    ],
+    brandBenefit: 'BizNest USA highlights event professionals and venues with high-resolution image galleries and direct inquiry tools.',
+    ctaHeading: 'Manage a Venue or Event Service Business?',
+    ctaText: 'List your event business on BizNest USA to get discovered by couples and corporate planners planning celebrations in your area.',
+    faqs: [
+      {
+        question: 'How far in advance should I book wedding venues and vendors?',
+        answer: 'Popular wedding venues, photographers, and caterers often book out 9 to 18 months in advance for peak weekend dates.'
+      }
+    ],
+    guidance: 'Review full portfolios, request detailed contracts, and schedule an on-site walkthrough before signing agreements.',
+    links: [
+      { label: 'Photographers', href: '/services/photographers/' },
+      { label: 'Catering Services', href: '/services/catering-services/' },
+      { label: 'List Your Event Business', href: '/add-business' }
+    ]
   }
 }
 

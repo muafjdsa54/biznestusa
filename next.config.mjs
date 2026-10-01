@@ -95,7 +95,38 @@ const nextConfig = {
   },
 
   async redirects() {
-    return []
+    return [
+      {
+        source: '/category/electricians/',
+        destination: '/services/electricians/',
+        permanent: true,
+      },
+      {
+        source: '/category/electricians',
+        destination: '/services/electricians/',
+        permanent: true,
+      },
+      {
+        source: '/category/plumbers/',
+        destination: '/services/plumbers/',
+        permanent: true,
+      },
+      {
+        source: '/category/plumbers',
+        destination: '/services/plumbers/',
+        permanent: true,
+      },
+      {
+        source: '/category/roofers/',
+        destination: '/services/roofers/',
+        permanent: true,
+      },
+      {
+        source: '/category/roofers',
+        destination: '/services/roofers/',
+        permanent: true,
+      },
+    ]
   },
 
   async rewrites() {

@@ -6,7 +6,8 @@ import Image from 'next/image'
 import { 
   Search, MapPin, Building2, Briefcase, Users, ShieldCheck, ArrowRight, 
   Sparkles, CheckCircle2, ChevronRight, UserPlus, Plus, ExternalLink,
-  Laptop, HeartPulse, UtensilsCrossed, Car, GraduationCap, Wrench, Scissors, Grid
+  Laptop, HeartPulse, UtensilsCrossed, Car, GraduationCap, Wrench, Scissors, Grid,
+  PawPrint, Scale, Sparkle, PartyPopper, Home, HardHat, ShoppingBag, DollarSign
 } from 'lucide-react'
 import { 
   BUSINESS_CATEGORIES, 
@@ -21,6 +22,7 @@ import { getAllBusinesses } from '@/lib/db-service'
 import { getAllJobs } from '@/lib/job-service'
 import { getAllProfessionals } from '@/lib/professional-service'
 import { getPublicJobPath } from '@/lib/job-url'
+import { getSubcategoryHref } from '@/lib/services-data'
 
 export const revalidate = 3600
 
@@ -74,6 +76,28 @@ const POPULAR_SEARCH_TERMS = [
   { label: 'Electricians in Ohio', query: 'Electrician', state: 'Ohio' },
   { label: 'Remote Software Jobs', query: 'Software Development', workplace: 'Remote' },
 ]
+
+function getBusinessCategoryIcon(catId: string) {
+  switch (catId) {
+    case 'home-services': return <Wrench className="w-4 h-4 text-sky-600" />
+    case 'professional-services': return <Briefcase className="w-4 h-4 text-indigo-600" />
+    case 'health-wellness': return <HeartPulse className="w-4 h-4 text-rose-600" />
+    case 'restaurants-food': return <UtensilsCrossed className="w-4 h-4 text-amber-600" />
+    case 'automotive': return <Car className="w-4 h-4 text-teal-600" />
+    case 'beauty-personal-care': return <Scissors className="w-4 h-4 text-fuchsia-600" />
+    case 'education': return <GraduationCap className="w-4 h-4 text-violet-600" />
+    case 'technology': return <Laptop className="w-4 h-4 text-blue-600" />
+    case 'real-estate': return <Home className="w-4 h-4 text-emerald-600" />
+    case 'construction': return <HardHat className="w-4 h-4 text-orange-600" />
+    case 'retail': return <ShoppingBag className="w-4 h-4 text-pink-600" />
+    case 'finance': return <DollarSign className="w-4 h-4 text-blue-700" />
+    case 'pets-animals': return <PawPrint className="w-4 h-4 text-emerald-600" />
+    case 'legal-services': return <Scale className="w-4 h-4 text-indigo-700" />
+    case 'cleaning-maintenance': return <Sparkle className="w-4 h-4 text-cyan-600" />
+    case 'events-weddings': return <PartyPopper className="w-4 h-4 text-pink-600" />
+    default: return <Building2 className="w-4 h-4 text-blue-600" />
+  }
+}
 
 export default async function HomePage() {
   const [allBusinesses, allJobs, allProfessionals] = await Promise.all([
@@ -333,8 +357,8 @@ export default async function HomePage() {
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-                      <Building2 className="w-4 h-4" />
+                    <div className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-200/80 flex items-center justify-center shrink-0">
+                      {getBusinessCategoryIcon(cat.id)}
                     </div>
                     <Link href={`/category/${cat.id}`} className="font-bold text-slate-900 text-sm hover:text-blue-600">
                       {cat.name}
@@ -351,7 +375,7 @@ export default async function HomePage() {
                   {cat.subcategories.slice(0, 4).map((sub) => (
                     <Link
                       key={sub}
-                      href={`/search?q=${encodeURIComponent(sub)}&category=${encodeURIComponent(cat.name)}`}
+                      href={getSubcategoryHref(sub, cat.id)}
                       className="text-[11px] px-2 py-0.5 rounded-md bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200/80 transition-colors"
                     >
                       {sub}

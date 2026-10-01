@@ -1,5 +1,5 @@
 import { MetadataRoute } from 'next'
-import { CATEGORIES, CITIES, BusinessItem, ProfessionalItem, CompanyItem, JobItem } from '@/lib/data'
+import { BUSINESS_CATEGORIES, CATEGORIES, CITIES, BusinessItem, ProfessionalItem, CompanyItem, JobItem } from '@/lib/data'
 import { getAllBusinesses } from '@/lib/db-service'
 import { getAllProfessionals } from '@/lib/professional-service'
 import { getAllCompanies } from '@/lib/company-service'
@@ -13,7 +13,7 @@ import {
   isPakistaniCity,
   isPakistaniEntity
 } from '@/lib/directory-helpers'
-import { POPULAR_SERVICES } from '@/lib/services-data'
+import { POPULAR_SERVICES, getSubcategoryHref } from '@/lib/services-data'
 
 export const revalidate = 3600 // Revalidate sitemap XML every hour
 
@@ -235,7 +235,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.8,
   }))
 
-  // 12. Specialized Sub-Services Landing Pages (Plumbers, Roofers, Electricians, etc.)
+  // 12. Specialized Sub-Services Landing Pages (Plumbers, Roofers, Electricians, Dog Groomers, etc.)
+  const allServiceSlugs = new Set<string>()
+  POPULAR_SERVICES.forEach((srv) => allServiceSlugs.add(srv.slug))
+  BUSINESS_CATEGORIES.forEach((cat) => {
+    cat.subcategories.forEach((sub) => {
+      const href = getSubcategoryHref(sub, cat.id)
+      const slug = href.replace(/^\/services\//, '').replace(/\/$/, '')
+      if (slug) allServiceSlugs.add(slug)
+    })
+  })
+
   const serviceRoutes = [
     {
       url: canonicalUrl('/services'),
@@ -243,8 +253,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: 'daily' as const,
       priority: 0.9,
     },
-    ...POPULAR_SERVICES.map((srv) => ({
-      url: canonicalUrl(`/services/${srv.slug}`),
+    ...Array.from(allServiceSlugs).map((slug) => ({
+      url: canonicalUrl(`/services/${slug}`),
       lastModified: currentDate,
       changeFrequency: 'weekly' as const,
       priority: 0.9,
