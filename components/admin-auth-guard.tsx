@@ -27,15 +27,19 @@ export default function AdminAuthGuard({ children }: { children: React.ReactNode
     setIsLoading(true)
     setError('')
     try {
-      const credential = await signInWithEmailAndPassword(auth, email.trim(), password)
+      const emailTrimmed = (email || '').trim().toLowerCase()
+      const passTrimmed = (password || '').trim()
+      const credential = await signInWithEmailAndPassword(auth, emailTrimmed, passTrimmed)
       const isMasterAdmin = credential.user.uid === 'Mg7clnjHqqTUWk4uBw2zd0yLAcX2' || credential.user.email?.toLowerCase() === 'admin@biznestusa.com'
       if (!isMasterAdmin) {
         await signOut(auth)
-        throw new Error('Unauthorized administrator')
+        throw new Error('Unauthorized administrator account')
       }
       setIsAuthenticated(true)
-    } catch {
-      setError('Invalid BizNestUSA administrator credentials')
+    } catch (err: any) {
+      const errCode = err?.code || ''
+      const errMsg = err?.message || 'Invalid BizNestUSA administrator credentials'
+      setError(`Authentication failed${errCode ? ` [${errCode}]` : ''}: ${errMsg}`)
     } finally {
       setIsLoading(false)
     }

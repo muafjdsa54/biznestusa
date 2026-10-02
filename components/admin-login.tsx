@@ -12,7 +12,7 @@ interface FailedAttempt {
 }
 
 export default function AdminLogin({ onLoginSuccess }: { onLoginSuccess: () => void }) {
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState('admin@biznestusa.com')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -99,21 +99,25 @@ export default function AdminLogin({ onLoginSuccess }: { onLoginSuccess: () => v
     setError('')
 
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password)
+      const emailTrimmed = (email || '').trim().toLowerCase()
+      const passTrimmed = (password || '').trim()
+      const userCredential = await signInWithEmailAndPassword(auth, emailTrimmed, passTrimmed)
       const authed = userCredential.user
       const isMasterAdmin = authed.uid === 'Mg7clnjHqqTUWk4uBw2zd0yLAcX2' || authed.email?.toLowerCase() === 'admin@biznestusa.com'
 
       if (!isMasterAdmin) {
         await signOut(auth)
-        setError('Access Denied: Only the authorized administrator account is allowed')
+        setError(`Access Denied: Account (${authed.email || authed.uid}) is not authorized as administrator`)
         return
       }
 
-      clearFailedAttempts(email)
+      clearFailedAttempts(emailTrimmed)
       onLoginSuccess()
     } catch (error: any) {
       console.error('Login error:', error)
-      setError('Login failed. Please try again')
+      const errCode = error?.code || ''
+      const errMsg = error?.message || 'Login failed. Please check your credentials'
+      setError(`Login failed${errCode ? ` [${errCode}]` : ''}: ${errMsg}`)
     } finally {
       setLoading(false)
     }

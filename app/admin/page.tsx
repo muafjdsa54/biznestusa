@@ -30,7 +30,7 @@ import { toast } from 'sonner'
 
 export default function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [adminEmail, setAdminEmail] = useState('')
+  const [adminEmail, setAdminEmail] = useState('admin@biznestusa.com')
   const [adminPass, setAdminPass] = useState('')
   const [showAdminPass, setShowAdminPass] = useState(false)
   const [loginError, setLoginError] = useState('')
@@ -325,7 +325,7 @@ export default function AdminPage() {
     e.preventDefault()
     setLoginError('')
 
-    const emailTrimmed = (adminEmail || '').trim()
+    const emailTrimmed = (adminEmail || '').trim().toLowerCase()
     const passTrimmed = (adminPass || '').trim()
 
     if (!emailTrimmed || !passTrimmed) {
@@ -341,7 +341,7 @@ export default function AdminPage() {
       if (!isMasterAdmin) {
         await signOut(auth)
         sessionStorage.removeItem('biznestusa_admin_auth')
-        setLoginError('Access Denied: Only the authorized administrator account is permitted to access the Admin Portal.')
+        setLoginError(`Access Denied: Account ${authedUser.email || authedUser.uid} is not authorized for the Admin Portal.`)
         toast.error('Access Denied: Only the authorized administrator is allowed.')
         return
       }
@@ -353,8 +353,10 @@ export default function AdminPage() {
       fetchAdminData()
     } catch (err: any) {
       console.error('Admin authentication error:', err)
-      setLoginError('Authentication failed: invalid administrator credentials or password.')
-      toast.error('Authentication failed: please check your email and password.')
+      const errCode = err?.code || ''
+      const errMsg = err?.message || 'Invalid administrator credentials or password.'
+      setLoginError(`Authentication failed${errCode ? ` [${errCode}]` : ''}: ${errMsg}`)
+      toast.error(`Authentication failed: ${errCode || 'Check credentials'}`)
     }
   }
 
