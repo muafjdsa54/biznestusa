@@ -11,6 +11,7 @@ service cloud.firestore {
     function isAdmin() {
       return signedIn()
         && (
+          request.auth.uid == 'Mg7clnjHqqTUWk4uBw2zd0yLAcX2' ||
           request.auth.token.email == 'admin@biznestusa.com' ||
           request.auth.token.email == 'contact@biznestusa.com' ||
           request.auth.token.admin == true

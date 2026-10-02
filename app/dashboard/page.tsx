@@ -12,7 +12,7 @@ import {
   FileText, Edit3, Plus, Check, MessageSquare, Info, AlertTriangle
 } from 'lucide-react'
 import { BusinessItem, UserBlogPost, BUSINESS_PLANS, BusinessPlan } from '@/lib/data'
-import { getUserBusinesses, updateBusinessPaymentProof } from '@/lib/db-service'
+import { getUserBusinesses, updateBusinessPaymentProof, submitBusinessEditRequest } from '@/lib/db-service'
 import { auth } from '@/lib/firebase'
 import { 
   signInWithEmailAndPassword, 
@@ -117,6 +117,113 @@ function DashboardContent() {
 
   // Details Modal
   const [selectedBizModal, setSelectedBizModal] = useState<BusinessItem | null>(null)
+
+  // Edit Business & Profile Modal State ($5 Standard & $10 Authoritative Plans)
+  const [editingBiz, setEditingBiz] = useState<BusinessItem | null>(null)
+  const [editFormData, setEditFormData] = useState({
+    name: '',
+    phone: '',
+    whatsapp: '',
+    address: '',
+    website: '',
+    description: '',
+    services: '',
+    ownerName: '',
+    googleBusinessProfile: '',
+    facebookUrl: '',
+    instagramUrl: '',
+    linkedinUrl: ''
+  })
+  const [isSubmittingEdit, setIsSubmittingEdit] = useState(false)
+
+  const handleOpenEdit = (biz: BusinessItem) => {
+    if (biz.plan === 'review_1') {
+      toast.error('Profile editing is not available on the $1 Basic plan. Upgrade to the $5 Standard or $10 Authoritative plan to enable editing.', {
+        duration: 5000
+      })
+      return
+    }
+    setEditingBiz(biz)
+    setEditFormData({
+      name: biz.name || '',
+      phone: biz.phone || '',
+      whatsapp: biz.whatsapp || '',
+      address: biz.address || (biz.locations && biz.locations[0]?.address) || '',
+      website: biz.website || '',
+      description: biz.description || '',
+      services: Array.isArray(biz.services) ? biz.services.join(', ') : (biz.services || ''),
+      ownerName: biz.ownerName || '',
+      googleBusinessProfile: biz.googleBusinessProfile || '',
+      facebookUrl: biz.facebookUrl || '',
+      instagramUrl: biz.instagramUrl || '',
+      linkedinUrl: biz.linkedinUrl || ''
+    })
+  }
+
+  const handleSubmitEdit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingBiz) return
+    setIsSubmittingEdit(true)
+    try {
+      const res = await submitBusinessEditRequest(editingBiz.id || editingBiz.slug, {
+        name: editFormData.name.trim(),
+        phone: editFormData.phone.trim(),
+        whatsapp: editFormData.whatsapp.trim(),
+        address: editFormData.address.trim(),
+        website: editFormData.website.trim(),
+        description: editFormData.description.trim(),
+        services: editFormData.services.split(',').map(s => s.trim()).filter(Boolean),
+        ownerName: editFormData.ownerName.trim(),
+        googleBusinessProfile: editFormData.googleBusinessProfile.trim(),
+        facebookUrl: editFormData.facebookUrl.trim(),
+        instagramUrl: editFormData.instagramUrl.trim(),
+        linkedinUrl: editFormData.linkedinUrl.trim()
+      })
+
+      if (res.success) {
+        toast.success('Your profile changes have been submitted! They will be reviewed by admin and applied within 24 hours.')
+        setEditingBiz(null)
+        if (currentUser?.email || currentUser?.uid) {
+          fetchBusinesses(currentUser.email, currentUser.uid)
+        }
+      } else {
+        toast.error(res.message || 'Failed to submit profile edits.')
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Error submitting edit request.')
+    } finally {
+      setIsSubmittingEdit(false)
+    }
+  }
+
+  // Rolling 60-day quota helper for $10 Authoritative plan (and 5 posts for $5 Standard plan)
+  const getPostQuotaInfo = (biz: BusinessItem) => {
+    if (biz.plan === 'review_1') {
+      return { allowed: 0, used: 0, remaining: 0, label: 'Not included in $1 Basic Plan' }
+    }
+    if (biz.plan === 'priority_5') {
+      const used = userPosts.filter(p => p.businessId === biz.id).length || biz.blog_posts_used || 0
+      const remaining = Math.max(0, 5 - used)
+      return { allowed: 5, used, remaining, label: `${used}/5 posts used (${remaining} remaining)` }
+    }
+    // Authoritative 10: 10 posts in last 60 days rolling window
+    const now = Date.now()
+    const sixtyDaysMs = 60 * 24 * 60 * 60 * 1000
+    const sixtyDaysAgo = now - sixtyDaysMs
+    const recentPosts = userPosts.filter(p => {
+      if (p.businessId !== biz.id) return false
+      const postTime = new Date(p.createdAt).getTime()
+      return !isNaN(postTime) && postTime >= sixtyDaysAgo
+    })
+    const used = recentPosts.length
+    const remaining = Math.max(0, 10 - used)
+    return {
+      allowed: 10,
+      used,
+      remaining,
+      label: `${remaining} posts left (${used} of 10 used in last 60 days • fresh 10 after 60-day cycle)`
+    }
+  }
 
   useEffect(() => {
     // 1. Immediately read session from storage so Ctrl+R refresh is instant
@@ -945,7 +1052,11 @@ function DashboardContent() {
                         <div className="flex justify-between items-center pb-1.5 border-b border-slate-200/60">
                           <span className="font-semibold text-slate-500">Plan:</span>
                           <span className="font-extrabold text-slate-900">
-                            {biz.plan === 'priority_5' ? '$5 Business Priority' : '$1 Business Review'}
+                            {biz.plan === 'authoritative_10'
+                              ? '$10 Authoritative Plan'
+                              : biz.plan === 'priority_5'
+                              ? '$5 Standard Plan'
+                              : '$1 Basic Plan'}
                           </span>
                         </div>
 
@@ -971,68 +1082,99 @@ function DashboardContent() {
                               ? 'bg-red-100 text-red-800 border border-red-300'
                               : 'bg-amber-100 text-amber-900 border border-amber-300'
                           }`}>
-                            {isApproved ? 'Approved' : isRejected ? 'Revision Needed' : 'Pending Review'}
+                            {isApproved ? 'Approved & Live' : isRejected ? 'Revision Needed' : 'Pending Review'}
                           </span>
                         </div>
 
                         <div className="flex justify-between items-center">
                           <span className="font-semibold text-slate-500">Blog Feature:</span>
-                          {biz.plan === 'priority_5' ? (
-                            biz.blog_post_feature_enabled || biz.paymentStatus === 'VERIFIED' ? (
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
-                                Enabled ({biz.blog_posts_used || 0}/5 used)
-                              </span>
-                            ) : (
+                          {(() => {
+                            const quota = getPostQuotaInfo(biz)
+                            if (biz.plan === 'review_1') {
+                              return (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-200 text-slate-600">
+                                  Not Included in $1 Basic Plan
+                                </span>
+                              )
+                            }
+                            if (biz.blog_post_feature_enabled || biz.paymentStatus === 'VERIFIED' || isApproved) {
+                              return (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                                  {quota.label}
+                                </span>
+                              )
+                            }
+                            return (
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
                                 Waiting for Admin Approval
                               </span>
                             )
-                          ) : (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-200 text-slate-600">
-                              Not Included in $1 Plan
-                            </span>
-                          )}
+                          })()}
                         </div>
                       </div>
 
-                      {/* BLOG FEATURE ACTIONS / UPGRADE PROMPT */}
-                      {biz.plan === 'priority_5' && (biz.blog_post_feature_enabled || biz.paymentStatus === 'VERIFIED') ? (
-                        <div className="pt-1">
-                          {(biz.blog_posts_used || 0) < 5 ? (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setWritingPostBiz(biz)
-                                setPostError('')
-                              }}
-                              className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
-                            >
-                              <Edit3 className="w-3.5 h-3.5" />
-                              <span>Write Your Post ({5 - (biz.blog_posts_used || 0)} Remaining)</span>
-                            </button>
-                          ) : (
-                            <div className="p-2.5 bg-slate-100 rounded-xl text-center text-xs font-semibold text-slate-500">
-                              5 of 5 posts used (Entitlement Limit Reached)
-                            </div>
-                          )}
-                        </div>
-                      ) : biz.plan !== 'priority_5' ? (
-                        <div className="p-3 bg-blue-50/70 rounded-xl border border-blue-100 flex items-center justify-between gap-2 text-xs">
-                          <span className="text-[11px] text-blue-900 font-medium">
-                            Business content posting is available with the Priority plan.
+                      {/* PENDING EDIT NOTICE */}
+                      {(biz as any).pendingEditRequest && (
+                        <div className="p-3 bg-blue-50/80 border border-blue-200 rounded-2xl text-xs text-blue-900 flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-blue-600 shrink-0" />
+                          <span className="text-[11px] font-medium">
+                            Profile edit request is undergoing 24h moderation review.
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setActivePaymentBiz(biz)
-                              setSelectedPlan('priority_5')
-                            }}
-                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold rounded-lg shrink-0 cursor-pointer shadow-xs"
-                          >
-                            Upgrade to $5
-                          </button>
                         </div>
-                      ) : null}
+                      )}
+
+                      {/* BLOG FEATURE ACTIONS / UPGRADE PROMPT */}
+                      {(() => {
+                        const quota = getPostQuotaInfo(biz)
+                        const canPost = (biz.plan === 'priority_5' || biz.plan === 'authoritative_10') && (biz.blog_post_feature_enabled || biz.paymentStatus === 'VERIFIED' || isApproved)
+                        if (canPost) {
+                          return (
+                            <div className="pt-1">
+                              {quota.remaining > 0 ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setWritingPostBiz(biz)
+                                    setPostError('')
+                                  }}
+                                  className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                  <span>
+                                    Write Post ({quota.remaining} Left{biz.plan === 'authoritative_10' ? ' in 60-day cycle' : ''})
+                                  </span>
+                                </button>
+                              ) : (
+                                <div className="p-2.5 bg-slate-100 rounded-xl text-center text-xs font-semibold text-slate-500">
+                                  {biz.plan === 'authoritative_10'
+                                    ? 'All 10 posts used in this 60-day cycle. Quota refreshes after the 60-day period.'
+                                    : '5 of 5 posts used (Standard Plan limit reached).'}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        }
+                        if (biz.plan === 'review_1') {
+                          return (
+                            <div className="p-3 bg-blue-50/70 rounded-xl border border-blue-100 flex items-center justify-between gap-2 text-xs">
+                              <span className="text-[11px] text-blue-900 font-medium">
+                                Article posting &amp; editing available with Standard ($5) &amp; Authoritative ($10).
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActivePaymentBiz(biz)
+                                  setSelectedPlan('priority_5')
+                                }}
+                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold rounded-lg shrink-0 cursor-pointer shadow-xs"
+                              >
+                                Upgrade to $5
+                              </button>
+                            </div>
+                          )
+                        }
+                        return null
+                      })()}
                     </div>
 
                     {/* ACTION BUTTONS */}
@@ -1040,21 +1182,48 @@ function DashboardContent() {
                       <button
                         type="button"
                         onClick={() => setSelectedBizModal(biz)}
-                        className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer"
+                        className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer"
                       >
-                        View Details
+                        Details
+                      </button>
+
+                      {/* EDIT OPTION (Enabled for $5 Standard & $10 Authoritative) */}
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEdit(biz)}
+                        className={`px-3 py-2 text-xs font-bold rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
+                          biz.plan === 'review_1'
+                            ? 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                            : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200'
+                        }`}
+                        title={biz.plan === 'review_1' ? 'Upgrade to $5 or $10 to enable editing' : 'Edit profile & business details (applied after 24h review)'}
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        <span>{biz.plan === 'review_1' ? 'Edit (Upgrade)' : 'Edit Profile'}</span>
                       </button>
 
                       {isApproved ? (
-                        <Link
-                          href={`/business/${biz.slug}`}
-                          target="_blank"
-                          className="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold rounded-xl shadow-xs text-center flex items-center justify-center gap-1.5 transition"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          <span>View Live Listing</span>
-                          <ExternalLink className="w-3 h-3 ml-0.5 opacity-80" />
-                        </Link>
+                        biz.plan === 'review_1' || biz.hasSinglePage === false ? (
+                          <Link
+                            href={`/category/${biz.category ? biz.category.toLowerCase().replace(/[^a-z0-9]+/g, '-') : 'general'}`}
+                            target="_blank"
+                            className="flex-1 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold rounded-xl shadow-xs text-center flex items-center justify-center gap-1.5 transition"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Live in Directory</span>
+                            <ExternalLink className="w-3 h-3 ml-0.5 opacity-80" />
+                          </Link>
+                        ) : (
+                          <Link
+                            href={`/business/${biz.slug}`}
+                            target="_blank"
+                            className="flex-1 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold rounded-xl shadow-xs text-center flex items-center justify-center gap-1.5 transition"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>View Live Page</span>
+                            <ExternalLink className="w-3 h-3 ml-0.5 opacity-80" />
+                          </Link>
+                        )
                       ) : (
                         <button
                           type="button"
@@ -1062,7 +1231,7 @@ function DashboardContent() {
                             setActivePaymentBiz(biz)
                             setSelectedPlan(biz.plan || 'priority_5')
                           }}
-                          className="flex-1 px-4 py-2 text-xs font-bold rounded-xl border text-center flex items-center justify-center gap-1.5 transition cursor-pointer bg-blue-50 hover:bg-blue-100 text-blue-800 border-blue-200"
+                          className="flex-1 px-3.5 py-2 text-xs font-bold rounded-xl border text-center flex items-center justify-center gap-1.5 transition cursor-pointer bg-blue-50 hover:bg-blue-100 text-blue-800 border-blue-200"
                         >
                           <Clock className="w-3.5 h-3.5 text-blue-600" />
                           <span>{hasPaymentProof ? 'Update Review Payment' : 'Submit Review Payment'}</span>
@@ -1326,32 +1495,45 @@ function DashboardContent() {
               </button>
             </div>
 
-            {/* PLAN SELECTION */}
-            <div className="grid grid-cols-2 gap-3">
+            {/* PLAN SELECTION (3 PLANS) */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               <div
                 onClick={() => setSelectedPlan('review_1')}
-                className={`p-3.5 rounded-xl border-2 transition-all cursor-pointer ${
+                className={`p-3 rounded-xl border-2 transition-all cursor-pointer ${
                   selectedPlan === 'review_1'
                     ? 'border-blue-600 bg-blue-50/40 font-bold'
                     : 'border-slate-200 hover:border-slate-300'
                 }`}
               >
-                <p className="text-xs font-extrabold">$1 Business Review</p>
-                <p className="text-lg font-black text-slate-900 mt-0.5">$1.00</p>
-                <p className="text-[10px] text-slate-500 mt-1">Standard review queue, no blog posting</p>
+                <p className="text-[11px] font-extrabold text-slate-800">$1 Basic Plan</p>
+                <p className="text-base font-black text-slate-900 mt-0.5">$1.00</p>
+                <p className="text-[10px] text-slate-500 mt-1">Category List/Grid view only. No single page.</p>
               </div>
 
               <div
                 onClick={() => setSelectedPlan('priority_5')}
-                className={`p-3.5 rounded-xl border-2 transition-all cursor-pointer ${
+                className={`p-3 rounded-xl border-2 transition-all cursor-pointer ${
                   selectedPlan === 'priority_5'
                     ? 'border-blue-600 bg-blue-50/40 font-bold'
                     : 'border-slate-200 hover:border-slate-300'
                 }`}
               >
-                <p className="text-xs font-extrabold text-blue-700">$5 Business Priority</p>
-                <p className="text-lg font-black text-blue-600 mt-0.5">$5.00</p>
-                <p className="text-[10px] text-slate-500 mt-1">Priority queue + 5 business posts</p>
+                <p className="text-[11px] font-extrabold text-blue-700">$5 Standard Plan</p>
+                <p className="text-base font-black text-blue-600 mt-0.5">$5.00</p>
+                <p className="text-[10px] text-slate-500 mt-1">Single page created + dashboard profile editing + 5 posts</p>
+              </div>
+
+              <div
+                onClick={() => setSelectedPlan('authoritative_10')}
+                className={`p-3 rounded-xl border-2 transition-all cursor-pointer ${
+                  selectedPlan === 'authoritative_10'
+                    ? 'border-indigo-600 bg-indigo-50/40 font-bold'
+                    : 'border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                <p className="text-[11px] font-extrabold text-indigo-700">$10 Authoritative</p>
+                <p className="text-base font-black text-indigo-600 mt-0.5">$10.00</p>
+                <p className="text-[10px] text-slate-500 mt-1">Single page + 24h approval + 10 posts / 60 days</p>
               </div>
             </div>
 
@@ -1427,6 +1609,198 @@ function DashboardContent() {
                 >
                   <CheckCircle2 className="w-4 h-4" />
                   <span>{isUploadingPayment ? 'Submitting...' : 'Submit Payment Proof'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 4: EDIT BUSINESS & PROFILE MODAL ($5 & $10 PLANS, 24H REVIEW APPLIED) */}
+      {editingBiz && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in-50">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-xl w-full border border-slate-200 shadow-2xl space-y-4 my-8 animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-start border-b border-slate-100 pb-3">
+              <div>
+                <span className="text-xs font-extrabold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">
+                  Edit Profile &amp; Business
+                </span>
+                <h3 className="text-xl font-extrabold text-slate-900 mt-1.5">
+                  {editingBiz.name}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingBiz(null)}
+                className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* 24-HOUR REVIEW NOTICE REQUIRED BY USER */}
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-900 space-y-1">
+              <div className="flex items-center gap-1.5 font-bold">
+                <Clock className="w-4 h-4 text-amber-700 shrink-0" />
+                <span>24-Hour Review &amp; Moderation Notice</span>
+              </div>
+              <p className="text-[11px] text-amber-800 leading-relaxed">
+                You can edit your personal representative info and business profile details below. In accordance with platform compliance, all submitted modifications will be reviewed by site admin and <strong>applied after 24 hours</strong>.
+              </p>
+            </div>
+
+            <form onSubmit={handleSubmitEdit} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Business Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editFormData.name}
+                  onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Phone Number (Calls) *</label>
+                  <input
+                    type="tel"
+                    required
+                    value={editFormData.phone}
+                    onChange={(e) => setEditFormData({ ...editFormData, phone: formatUsPhone(e.target.value) })}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">WhatsApp Number</label>
+                  <input
+                    type="tel"
+                    value={editFormData.whatsapp}
+                    onChange={(e) => setEditFormData({ ...editFormData, whatsapp: formatUsPhone(e.target.value) })}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Physical Address *</label>
+                <input
+                  type="text"
+                  required
+                  value={editFormData.address}
+                  onChange={(e) => setEditFormData({ ...editFormData, address: e.target.value })}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Website URL</label>
+                  <input
+                    type="url"
+                    value={editFormData.website}
+                    onChange={(e) => setEditFormData({ ...editFormData, website: e.target.value })}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Owner / Representative Name</label>
+                  <input
+                    type="text"
+                    value={editFormData.ownerName}
+                    onChange={(e) => setEditFormData({ ...editFormData, ownerName: filterPersonNameInput(e.target.value) })}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Key Services (Comma Separated)</label>
+                <input
+                  type="text"
+                  value={editFormData.services}
+                  onChange={(e) => setEditFormData({ ...editFormData, services: e.target.value })}
+                  placeholder="e.g. Plumbing Repairs, Drain Cleaning, Water Heaters"
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Business Description</label>
+                <textarea
+                  rows={4}
+                  value={editFormData.description}
+                  onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 leading-relaxed"
+                />
+              </div>
+
+              {/* BRAND AUTHORITY PROFILES */}
+              <div className="p-3.5 bg-indigo-50/60 border border-indigo-200/80 rounded-2xl space-y-3">
+                <span className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Brand Authority &amp; Google Ranking Profiles</span>
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">Google Business Profile (Maps URL)</label>
+                    <input
+                      type="url"
+                      placeholder="https://maps.google.com/?cid=..."
+                      value={editFormData.googleBusinessProfile}
+                      onChange={(e) => setEditFormData({ ...editFormData, googleBusinessProfile: e.target.value })}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">Facebook Page URL</label>
+                    <input
+                      type="url"
+                      placeholder="https://facebook.com/..."
+                      value={editFormData.facebookUrl}
+                      onChange={(e) => setEditFormData({ ...editFormData, facebookUrl: e.target.value })}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">Instagram Profile URL</label>
+                    <input
+                      type="url"
+                      placeholder="https://instagram.com/..."
+                      value={editFormData.instagramUrl}
+                      onChange={(e) => setEditFormData({ ...editFormData, instagramUrl: e.target.value })}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">LinkedIn Profile / Company</label>
+                    <input
+                      type="url"
+                      placeholder="https://linkedin.com/company/..."
+                      value={editFormData.linkedinUrl}
+                      onChange={(e) => setEditFormData({ ...editFormData, linkedinUrl: e.target.value })}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setEditingBiz(null)}
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingEdit}
+                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-xl shadow-md transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{isSubmittingEdit ? 'Submitting...' : 'Submit Changes for 24h Review'}</span>
                 </button>
               </div>
             </form>

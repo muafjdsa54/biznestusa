@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { auth } from '@/lib/firebase'
-import { signInWithEmailAndPassword } from 'firebase/auth'
+import { signInWithEmailAndPassword, signOut } from 'firebase/auth'
 import { Shield, Mail, Lock, AlertCircle, Loader2 } from 'lucide-react'
 
 interface FailedAttempt {
@@ -99,11 +99,16 @@ export default function AdminLogin({ onLoginSuccess }: { onLoginSuccess: () => v
     setError('')
 
     try {
-      if (email.trim().toLowerCase() !== 'admin@biznestusa.com') {
-        setError('Only the BizNestUSA administrator can sign in')
+      const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password)
+      const authed = userCredential.user
+      const isMasterAdmin = authed.uid === 'Mg7clnjHqqTUWk4uBw2zd0yLAcX2' || authed.email?.toLowerCase() === 'admin@biznestusa.com'
+
+      if (!isMasterAdmin) {
+        await signOut(auth)
+        setError('Access Denied: Only the authorized administrator account is allowed')
         return
       }
-      await signInWithEmailAndPassword(auth, email.trim(), password)
+
       clearFailedAttempts(email)
       onLoginSuccess()
     } catch (error: any) {

@@ -155,6 +155,10 @@ export function normalizeBusinessDoc(docId: string, data: any): BusinessItem {
     whatsapp: sanitizePhone(data.whatsapp || ''),
     email: data.email || '',
     website: data.website || data.websiteUrl || '',
+    googleBusinessProfile: sanitizeUrl(data.googleBusinessProfile || ''),
+    facebookUrl: sanitizeUrl(data.facebookUrl || ''),
+    instagramUrl: sanitizeUrl(data.instagramUrl || ''),
+    linkedinUrl: sanitizeUrl(data.linkedinUrl || ''),
     address: primaryLoc.address || data.address || '',
     locations: docLocations,
     coverImage: data.coverImage || 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1200&q=80',
@@ -169,12 +173,16 @@ export function normalizeBusinessDoc(docId: string, data: any): BusinessItem {
     services: data.services || ['General Services', 'Customer Support'],
     detailedServices: data.detailedServices,
     sections: data.sections,
-    operatingHours: data.operatingHours || { 'Monday - Sunday': '10:00 AM - 09:00 PM' },
+    operatingHours: data.operatingHours || { 'Monday - Saturday': '09:00 AM - 06:00 PM', 'Sunday': 'Closed' },
     features: data.features || ['Verified Profile'],
     // Plan, Payment & Entitlements
-    plan: data.plan || (data.amount === 5 || data.planPrice === 5 ? 'priority_5' : (data.amount === 1 || data.planPrice === 1 ? 'review_1' : undefined)),
-    planName: data.planName || (data.plan === 'priority_5' ? '$5 Business Priority' : (data.plan === 'review_1' ? '$1 Business Review' : undefined)),
-    planPrice: data.planPrice || (data.plan === 'priority_5' ? 5 : (data.plan === 'review_1' ? 1 : undefined)),
+    plan: data.plan || (data.amount === 10 || data.planPrice === 10 ? 'authoritative_10' : (data.amount === 5 || data.planPrice === 5 ? 'priority_5' : 'review_1')),
+    planName: data.planName || (data.plan === 'authoritative_10' ? '$10 Authoritative Plan' : (data.plan === 'priority_5' ? '$5 Standard Plan' : '$1 Basic Plan')),
+    planPrice: data.planPrice || (data.plan === 'authoritative_10' ? 10 : (data.plan === 'priority_5' ? 5 : 1)),
+    hasSinglePage: data.hasSinglePage !== undefined ? Boolean(data.hasSinglePage) : (data.plan !== 'review_1'),
+    canEditProfile: data.canEditProfile !== undefined ? Boolean(data.canEditProfile) : (data.plan === 'priority_5' || data.plan === 'authoritative_10'),
+    editRequests: Array.isArray(data.editRequests) ? data.editRequests : [],
+    lastEditedAt: data.lastEditedAt,
     paymentDetails,
     paymentScreenshot: screenshot,
     transactionRef: refNumber,
@@ -183,8 +191,10 @@ export function normalizeBusinessDoc(docId: string, data: any): BusinessItem {
     paymentVerifiedAt: data.paymentVerifiedAt,
     paymentVerifiedBy: data.paymentVerifiedBy,
     adminNotes: data.adminNotes || '',
-    blog_post_entitled: Boolean(data.blog_post_entitled || (data.plan === 'priority_5' && (data.paymentStatus === 'VERIFIED' || data.blog_post_feature_enabled))),
-    blog_posts_allowed: data.blog_posts_allowed !== undefined ? data.blog_posts_allowed : (data.plan === 'priority_5' ? 5 : 0),
+    blog_post_entitled: Boolean(data.blog_post_entitled || ((data.plan === 'priority_5' || data.plan === 'authoritative_10') && (data.paymentStatus === 'VERIFIED' || data.blog_post_feature_enabled))),
+    blog_posts_allowed: data.blog_posts_allowed !== undefined 
+      ? data.blog_posts_allowed 
+      : (data.plan === 'authoritative_10' ? 10 : (data.plan === 'priority_5' ? 5 : 0)),
     blog_posts_used: data.blog_posts_used || 0,
     blog_post_feature_enabled: Boolean(data.blog_post_feature_enabled),
     blog_post_feature_enabled_at: data.blog_post_feature_enabled_at,
@@ -454,7 +464,8 @@ export const getBusinessBySlug = cache(async function getBusinessBySlug(slug: st
         item,
         ...memoryBusinessesCache.filter(b => b.slug.toLowerCase() !== normalized && b.id !== item.id)
       ]
-      if (item.status === 'approved' && !isPakistaniEntity(item)) {
+      // $1 Basic Plan does not have a single page
+      if (item.status === 'approved' && !isPakistaniEntity(item) && item.hasSinglePage !== false && item.plan !== 'review_1') {
         return item
       }
       return null
@@ -465,7 +476,8 @@ export const getBusinessBySlug = cache(async function getBusinessBySlug(slug: st
       const direct = await getDocs(query(collection(db, 'businesses'), where('id', '==', raw), limit(1)))
       if (!direct.empty) {
         const item = normalizeBusinessDoc(direct.docs[0].id, direct.docs[0].data())
-        if (item.status === 'approved' && !isPakistaniEntity(item)) {
+        // $1 Basic Plan does not have a single page
+        if (item.status === 'approved' && !isPakistaniEntity(item) && item.hasSinglePage !== false && item.plan !== 'review_1') {
           return item
         }
       }
@@ -482,7 +494,7 @@ export const getBusinessBySlug = cache(async function getBusinessBySlug(slug: st
     normalizeSlug(b.name) === normalized ||
     (b.city && `${normalizeSlug(b.name)}-${normalizeSlug(b.city)}` === normalized)
   )
-  if (localFound && (localFound.status || 'approved') === 'approved' && !isPakistaniEntity(localFound)) {
+  if (localFound && (localFound.status || 'approved') === 'approved' && !isPakistaniEntity(localFound) && localFound.hasSinglePage !== false && localFound.plan !== 'review_1') {
     return localFound
   }
 
@@ -493,7 +505,7 @@ export const getBusinessBySlug = cache(async function getBusinessBySlug(slug: st
     normalizeSlug(b.name) === normalized ||
     (b.city && `${normalizeSlug(b.name)}-${normalizeSlug(b.city)}` === normalized)
   )
-  if (cached && (cached.status || 'approved') === 'approved' && !isPakistaniEntity(cached)) {
+  if (cached && (cached.status || 'approved') === 'approved' && !isPakistaniEntity(cached) && cached.hasSinglePage !== false && cached.plan !== 'review_1') {
     return cached
   }
 
@@ -504,7 +516,7 @@ export const getBusinessBySlug = cache(async function getBusinessBySlug(slug: st
     normalizeSlug(b.name) === normalized ||
     (b.city && `${normalizeSlug(b.name)}-${normalizeSlug(b.city)}` === normalized)
   )
-  if (mockFound && (mockFound.status || 'approved') === 'approved' && !isPakistaniEntity(mockFound)) {
+  if (mockFound && (mockFound.status || 'approved') === 'approved' && !isPakistaniEntity(mockFound) && mockFound.hasSinglePage !== false && mockFound.plan !== 'review_1') {
     return mockFound
   }
 
@@ -532,6 +544,17 @@ export async function saveBusinessToDatabase(businessData: Partial<BusinessItem>
   const slug = businessData.slug || generateBusinessSlug(cleanName, allCities)
   const bizId = businessData.id || ('biz-' + Date.now())
 
+  const chosenPlan = businessData.plan || 'review_1'
+  const isAuthoritative = chosenPlan === 'authoritative_10'
+  const isStandard = chosenPlan === 'priority_5'
+  const isBasic = chosenPlan === 'review_1'
+
+  const resolvedPrice = businessData.planPrice ?? (isAuthoritative ? 10 : (isStandard ? 5 : 1))
+  const resolvedPlanName = businessData.planName || (isAuthoritative ? '$10 Authoritative Plan' : (isStandard ? '$5 Standard Plan' : '$1 Basic Plan'))
+  const resolvedHasSinglePage = businessData.hasSinglePage !== undefined ? businessData.hasSinglePage : !isBasic
+  const resolvedCanEditProfile = businessData.canEditProfile !== undefined ? businessData.canEditProfile : (isStandard || isAuthoritative)
+  const resolvedPostsAllowed = businessData.blog_posts_allowed ?? (isAuthoritative ? 10 : (isStandard ? 5 : 0))
+
   const newBiz: BusinessItem = {
     id: bizId,
     userId: businessData.userId || '',
@@ -554,28 +577,36 @@ export async function saveBusinessToDatabase(businessData: Partial<BusinessItem>
     isClaimed: false,
     isFeatured: false,
     status: 'pending', // MANDATORY PENDING WORKFLOW
-    plan: businessData.plan || 'review_1',
-    planPrice: businessData.planPrice ?? (businessData.plan === 'priority_5' ? 5 : 1),
+    plan: chosenPlan,
+    planName: resolvedPlanName,
+    planPrice: resolvedPrice,
+    hasSinglePage: resolvedHasSinglePage,
+    canEditProfile: resolvedCanEditProfile,
     paymentStatus: businessData.paymentStatus || (businessData.paymentScreenshot ? 'SUBMITTED' : 'PENDING'),
     paymentScreenshot: sanitizeImageUrl(businessData.paymentScreenshot || ''),
     transactionRef: businessData.transactionRef || businessData.paymentDetails?.referenceNumber || '',
     adminNotes: businessData.adminNotes || '',
-    blog_post_entitled: businessData.blog_post_entitled || (businessData.plan === 'priority_5'),
-    blog_posts_allowed: businessData.blog_posts_allowed ?? (businessData.plan === 'priority_5' ? 5 : 0),
+    blog_post_entitled: businessData.blog_post_entitled || (isStandard || isAuthoritative),
+    blog_posts_allowed: resolvedPostsAllowed,
     blog_posts_used: businessData.blog_posts_used ?? 0,
     blog_post_feature_enabled: businessData.blog_post_feature_enabled ?? false,
     paymentDetails: businessData.paymentDetails,
     submittedAt: new Date().toISOString(),
     ownerName: sanitizeText(businessData.ownerName || 'Business Representative', 80),
     phone: sanitizePhone(businessData.phone || '(555) 000-0000'),
+    whatsapp: businessData.whatsapp ? sanitizePhone(businessData.whatsapp) : '',
     email: sanitizeText(businessData.email || 'contact@business.com', 120),
     website: sanitizeUrl(businessData.website || 'https://biznestusa.com'),
+    googleBusinessProfile: sanitizeUrl(businessData.googleBusinessProfile || ''),
+    facebookUrl: sanitizeUrl(businessData.facebookUrl || ''),
+    instagramUrl: sanitizeUrl(businessData.instagramUrl || ''),
+    linkedinUrl: sanitizeUrl(businessData.linkedinUrl || ''),
     address: summaryAddress,
     coverImage: sanitizeImageUrl(businessData.coverImage || 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1200&q=80'),
     logo: sanitizeImageUrl(businessData.logo || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=200&q=80'),
     description: sanitizeText(businessData.description || 'Verified local business listing on BizNestUSA.', 5000),
     services: Array.isArray(businessData.services) ? businessData.services.map(s => sanitizeText(s, 60)) : ['Professional Services'],
-    operatingHours: businessData.operatingHours || { 'Monday - Saturday': '09:00 AM - 07:00 PM' },
+    operatingHours: businessData.operatingHours || { 'Monday - Saturday': '09:00 AM - 06:00 PM', 'Sunday': 'Closed' },
     features: [],
     reviews: [],
     faqs: Array.isArray(businessData.faqs) && businessData.faqs.length > 0
@@ -666,6 +697,75 @@ export async function updateBusinessPaymentProof(
   await updateBusinessInFirestore(idOrSlug, patch as any)
 
   return true
+}
+
+export async function submitBusinessEditRequest(
+  idOrSlug: string,
+  edits: Partial<BusinessItem>,
+  userNote?: string
+): Promise<{ success: boolean; message: string; appliedAfter24h: boolean }> {
+  const norm = (idOrSlug || '').trim().toLowerCase()
+  if (!norm) return { success: false, message: 'Invalid business identifier', appliedAfter24h: false }
+
+  const nowIso = new Date().toISOString()
+  const editId = 'edit-' + Date.now()
+
+  const cleanEdits: Record<string, any> = {}
+  if (edits.name) cleanEdits.name = sanitizeText(edits.name, 120)
+  if (edits.category) cleanEdits.category = sanitizeText(edits.category, 80)
+  if (edits.subCategory) cleanEdits.subCategory = sanitizeText(edits.subCategory, 80)
+  if (edits.phone) cleanEdits.phone = sanitizePhone(edits.phone)
+  if (edits.whatsapp) cleanEdits.whatsapp = sanitizePhone(edits.whatsapp)
+  if (edits.email) cleanEdits.email = sanitizeText(edits.email, 120)
+  if (edits.website) cleanEdits.website = sanitizeUrl(edits.website)
+  if (edits.googleBusinessProfile) cleanEdits.googleBusinessProfile = sanitizeUrl(edits.googleBusinessProfile)
+  if (edits.facebookUrl) cleanEdits.facebookUrl = sanitizeUrl(edits.facebookUrl)
+  if (edits.instagramUrl) cleanEdits.instagramUrl = sanitizeUrl(edits.instagramUrl)
+  if (edits.linkedinUrl) cleanEdits.linkedinUrl = sanitizeUrl(edits.linkedinUrl)
+  if (edits.address) cleanEdits.address = sanitizeText(edits.address, 250)
+  if (edits.description) cleanEdits.description = sanitizeText(edits.description, 5000)
+  if (edits.services) cleanEdits.services = edits.services
+  if (edits.operatingHours) cleanEdits.operatingHours = edits.operatingHours
+  if (edits.locations) cleanEdits.locations = edits.locations
+
+  const newRequest = {
+    id: editId,
+    requestedAt: nowIso,
+    status: 'pending' as const,
+    notes: userNote || 'User profile and business details update',
+    changes: cleanEdits
+  }
+
+  // Update in memory cache
+  const idx = memoryBusinessesCache.findIndex(b => b.id === idOrSlug || b.slug.toLowerCase() === norm)
+  if (idx !== -1) {
+    const existing = memoryBusinessesCache[idx]
+    const updatedRequests = [...(existing.editRequests || []), newRequest]
+    memoryBusinessesCache[idx].editRequests = updatedRequests
+    memoryBusinessesCache[idx].lastEditedAt = nowIso
+  }
+
+  // Update in localStorage
+  updateStoredCustomBusiness(idOrSlug, {
+    lastEditedAt: nowIso,
+    editRequests: [newRequest]
+  } as any)
+
+  // Update in Firestore
+  try {
+    await updateBusinessInFirestore(idOrSlug, {
+      lastEditedAt: nowIso,
+      latestEditRequest: newRequest
+    })
+  } catch (err) {
+    console.warn('Firestore submitBusinessEditRequest fallback:', err)
+  }
+
+  return {
+    success: true,
+    message: 'Profile update submitted! Changes will be reviewed by admin and applied within 24 hours.',
+    appliedAfter24h: true
+  }
 }
 
 export async function getUserBusinesses(emailOrUid: string): Promise<BusinessItem[]> {
@@ -788,3 +888,4 @@ export async function deleteContactMessage(id: string): Promise<boolean> {
   }
   return true
 }
+

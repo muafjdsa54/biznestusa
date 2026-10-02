@@ -22,6 +22,7 @@ import {
 import { getCmsCategoryBySlug } from '@/lib/admin-cms-service'
 import { getServicesByCategory } from '@/lib/services-data'
 import { Wrench } from 'lucide-react'
+import CategoryListingsView from '@/components/business/category-listings-view'
 
 export const revalidate = 86400 // 24-hour ISR revalidation
 export const dynamicParams = false
@@ -354,124 +355,8 @@ export default async function CategoryDetailPage(props: { params: Promise<{ slug
               </section>
             )}
 
-            {/* BUSINESS LISTINGS HEADER */}
-            <div className="flex justify-between items-center pt-2">
-              <div>
-                <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
-                  <Building2 className="w-5 h-5 text-blue-600" />
-                  <span>Verified {cat.name} Listings ({businesses.length})</span>
-                </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Real verified businesses listed on BizNest USA.
-                </p>
-              </div>
-              <Link 
-                href={`/search?category=${encodeURIComponent(cat.name)}`} 
-                className="text-xs font-bold text-blue-600 hover:underline shrink-0"
-              >
-                Advanced Search &rarr;
-              </Link>
-            </div>
-
-            {/* LISTINGS OR CLEAN EMPTY STATE (Requirement 21) */}
-            {businesses.length === 0 ? (
-              <div className="bg-white rounded-3xl p-10 sm:p-14 text-center border border-slate-200/90 shadow-xs space-y-4">
-                <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
-                  <Building2 className="w-8 h-8" />
-                </div>
-                <div className="space-y-1.5 max-w-md mx-auto">
-                  <h3 className="text-lg font-extrabold text-slate-900">No businesses listed yet.</h3>
-                  <p className="text-xs text-slate-500 leading-relaxed">
-                    Be one of the first businesses in this category. Gain early local visibility and give customers in your area a direct way to discover your services.
-                  </p>
-                </div>
-                <div className="pt-2">
-                  <Link
-                    href="/add-business"
-                    className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md transition-all cursor-pointer"
-                  >
-                    <span>List Your Business</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </Link>
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-                {businesses.map((biz) => (
-                  <div 
-                    key={biz.id} 
-                    className="bg-white rounded-3xl border border-slate-200/90 p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4"
-                  >
-                    <div className="space-y-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                          {biz.logo ? (
-                            <Image 
-                              src={biz.logo} 
-                              alt={biz.name} 
-                              width={48} 
-                              height={48} 
-                              loading="lazy" 
-                              sizes="48px" 
-                              className="w-12 h-12 rounded-xl object-cover border border-slate-100" 
-                            />
-                          ) : (
-                            <div className="w-12 h-12 rounded-xl bg-slate-900 text-white font-extrabold text-base flex items-center justify-center shrink-0">
-                              {biz.name ? biz.name.charAt(0).toUpperCase() : 'B'}
-                            </div>
-                          )}
-                          <div className="min-w-0">
-                            <Link 
-                              href={`/business/${biz.slug}`} 
-                              className="font-bold text-slate-900 text-base hover:text-blue-600 flex items-center gap-1.5 truncate"
-                            >
-                              <span className="truncate">{biz.name}</span>
-                              {biz.verified && (
-                                <span title="Verified Business" className="shrink-0">
-                                  <ShieldCheck className="w-4 h-4 text-emerald-500" />
-                                </span>
-                              )}
-                            </Link>
-                            <p className="text-xs text-slate-500">
-                              {biz.city}, {biz.state || biz.province || 'USA'}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Real Rating Badge or Active Badge */}
-                        <div className="flex items-center gap-1 text-slate-700 text-xs font-bold bg-slate-100 px-2 py-1 rounded-lg shrink-0">
-                          {biz.reviewCount > 0 && biz.rating > 0 ? (
-                            <>
-                              <Star className="w-3.5 h-3.5 fill-current text-amber-500" />
-                              <span>{biz.rating} ({biz.reviewCount})</span>
-                            </>
-                          ) : (
-                            <span className="text-[11px] text-slate-600">Active</span>
-                          )}
-                        </div>
-                      </div>
-
-                      <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
-                        {biz.description}
-                      </p>
-                    </div>
-
-                    <div className="pt-3 border-t border-slate-100 flex justify-between items-center text-xs">
-                      <span className="text-slate-500 font-medium">
-                        {biz.phone || 'Direct contact on profile'}
-                      </span>
-                      <Link 
-                        href={`/business/${biz.slug}`} 
-                        className="font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 group"
-                      >
-                        <span>View Profile</span>
-                        <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
-                      </Link>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            {/* BUSINESS LISTINGS (LIST VIEW & GRID VIEW SUPPORTING $1, $5, $10 PLANS) */}
+            <CategoryListingsView businesses={businesses} categoryName={cat.name} />
 
             {/* FREQUENTLY ASKED QUESTIONS SECTION */}
             {seoCopy?.faqs && seoCopy.faqs.length > 0 && (

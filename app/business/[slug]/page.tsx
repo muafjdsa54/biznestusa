@@ -106,7 +106,6 @@ export default async function BusinessPage(props: { params: Promise<{ slug: stri
     name: biz.name,
     description: biz.metaDescription || biz.description,
     url: canonicalUrl,
-    sameAs: biz.website && !biz.website.includes('biznestusa.com') ? [biz.website] : undefined,
     telephone: intlPhone,
     email: biz.email,
     image: biz.coverImage || biz.logo,
@@ -119,6 +118,13 @@ export default async function BusinessPage(props: { params: Promise<{ slug: stri
       addressCountry: 'US',
     },
     priceRange: '$$',
+    sameAs: [
+      biz.googleBusinessProfile,
+      biz.facebookUrl,
+      biz.instagramUrl,
+      biz.linkedinUrl,
+      (biz.website && !biz.website.includes('biznestusa.com') ? biz.website : null)
+    ].filter(Boolean),
     ...(biz.city ? {
       areaServed: {
         '@type': 'City',
@@ -635,6 +641,62 @@ export default async function BusinessPage(props: { params: Promise<{ slug: stri
                     <Mail className="w-4 h-4" />
                     <span>Send Email</span>
                   </a>
+                )}
+
+                {/* Brand Authority & Social Profiles (Google Business Profile, Facebook, Instagram, LinkedIn) */}
+                {(biz.googleBusinessProfile || biz.facebookUrl || biz.instagramUrl || biz.linkedinUrl) && (
+                  <div className="pt-3 border-t border-slate-100 space-y-2">
+                    <span className="text-[11px] font-extrabold text-slate-600 uppercase tracking-wider block flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Brand Authority Profiles</span>
+                    </span>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      {biz.googleBusinessProfile && (
+                        <a
+                          href={biz.googleBusinessProfile}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-xl border border-blue-200 flex items-center justify-between transition-colors"
+                        >
+                          <span className="truncate">Google Profile</span>
+                          <ExternalLink className="w-3 h-3 shrink-0" />
+                        </a>
+                      )}
+                      {biz.facebookUrl && (
+                        <a
+                          href={biz.facebookUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold rounded-xl border border-slate-200 flex items-center justify-between transition-colors"
+                        >
+                          <span className="truncate">Facebook</span>
+                          <ExternalLink className="w-3 h-3 shrink-0" />
+                        </a>
+                      )}
+                      {biz.instagramUrl && (
+                        <a
+                          href={biz.instagramUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2.5 bg-pink-50 hover:bg-pink-100 text-pink-700 font-bold rounded-xl border border-pink-200 flex items-center justify-between transition-colors"
+                        >
+                          <span className="truncate">Instagram</span>
+                          <ExternalLink className="w-3 h-3 shrink-0" />
+                        </a>
+                      )}
+                      {biz.linkedinUrl && (
+                        <a
+                          href={biz.linkedinUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl border border-indigo-200 flex items-center justify-between transition-colors"
+                        >
+                          <span className="truncate">LinkedIn</span>
+                          <ExternalLink className="w-3 h-3 shrink-0" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
             </div>

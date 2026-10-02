@@ -8,7 +8,7 @@ import {
   Sparkles, ArrowRight, ArrowLeft, Star, ChevronDown, ChevronUp, Lock, Eye, EyeOff,
   Award, TrendingUp, Zap, HelpCircle, FileText, Check, AlertCircle, PhoneCall, MessageCircle, 
   Users, Briefcase, LogIn, UserPlus, LogOut, Clock, RefreshCw, ExternalLink, Info, X, Copy,
-  CreditCard, Image as ImageIcon, AlertTriangle, Plus
+  CreditCard, Image as ImageIcon, AlertTriangle, Plus, Calendar
 } from 'lucide-react'
 import Navbar from '@/components/navbar'
 import Footer from '@/components/footer'
@@ -132,13 +132,83 @@ export default function AddBusinessClient() {
   const [isWhyFeeModalOpen, setIsWhyFeeModalOpen] = useState(false)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
 
-  // Wizard Step State
+  // Wizard Step State (5 Steps: Identity, Locations, Operating Hours, Details, Verify & Pay)
   const [currentStep, setCurrentStep] = useState(1)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submittedSlug, setSubmittedSlug] = useState<string | null>(null)
   const [submittedBizName, setSubmittedBizName] = useState<string>('')
   const [openFaq, setOpenFaq] = useState<number | null>(null)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
+
+  // Operating Hours State
+  const [operatingHoursState, setOperatingHoursState] = useState<Record<string, { isOpen: boolean; openTime: string; closeTime: string; is24Hours: boolean }>>({
+    Monday: { isOpen: true, openTime: '09:00 AM', closeTime: '06:00 PM', is24Hours: false },
+    Tuesday: { isOpen: true, openTime: '09:00 AM', closeTime: '06:00 PM', is24Hours: false },
+    Wednesday: { isOpen: true, openTime: '09:00 AM', closeTime: '06:00 PM', is24Hours: false },
+    Thursday: { isOpen: true, openTime: '09:00 AM', closeTime: '06:00 PM', is24Hours: false },
+    Friday: { isOpen: true, openTime: '09:00 AM', closeTime: '06:00 PM', is24Hours: false },
+    Saturday: { isOpen: true, openTime: '10:00 AM', closeTime: '04:00 PM', is24Hours: false },
+    Sunday: { isOpen: false, openTime: '09:00 AM', closeTime: '06:00 PM', is24Hours: false }
+  })
+
+  const applyHoursPreset = (preset: 'standard' | 'retail' | '24_7' | 'mon_sat') => {
+    if (preset === 'standard') {
+      setOperatingHoursState({
+        Monday: { isOpen: true, openTime: '09:00 AM', closeTime: '05:00 PM', is24Hours: false },
+        Tuesday: { isOpen: true, openTime: '09:00 AM', closeTime: '05:00 PM', is24Hours: false },
+        Wednesday: { isOpen: true, openTime: '09:00 AM', closeTime: '05:00 PM', is24Hours: false },
+        Thursday: { isOpen: true, openTime: '09:00 AM', closeTime: '05:00 PM', is24Hours: false },
+        Friday: { isOpen: true, openTime: '09:00 AM', closeTime: '05:00 PM', is24Hours: false },
+        Saturday: { isOpen: false, openTime: '09:00 AM', closeTime: '05:00 PM', is24Hours: false },
+        Sunday: { isOpen: false, openTime: '09:00 AM', closeTime: '05:00 PM', is24Hours: false }
+      })
+      toast.success('Applied Standard Office Hours (Mon-Fri 9AM-5PM)')
+    } else if (preset === 'retail') {
+      setOperatingHoursState({
+        Monday: { isOpen: true, openTime: '08:00 AM', closeTime: '08:00 PM', is24Hours: false },
+        Tuesday: { isOpen: true, openTime: '08:00 AM', closeTime: '08:00 PM', is24Hours: false },
+        Wednesday: { isOpen: true, openTime: '08:00 AM', closeTime: '08:00 PM', is24Hours: false },
+        Thursday: { isOpen: true, openTime: '08:00 AM', closeTime: '08:00 PM', is24Hours: false },
+        Friday: { isOpen: true, openTime: '08:00 AM', closeTime: '08:00 PM', is24Hours: false },
+        Saturday: { isOpen: true, openTime: '09:00 AM', closeTime: '07:00 PM', is24Hours: false },
+        Sunday: { isOpen: true, openTime: '10:00 AM', closeTime: '05:00 PM', is24Hours: false }
+      })
+      toast.success('Applied Retail & Customer Hours (7 Days)')
+    } else if (preset === '24_7') {
+      const all24: Record<string, { isOpen: boolean; openTime: string; closeTime: string; is24Hours: boolean }> = {}
+      ;['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].forEach(day => {
+        all24[day] = { isOpen: true, openTime: '12:00 AM', closeTime: '11:59 PM', is24Hours: true }
+      })
+      setOperatingHoursState(all24)
+      toast.success('Applied 24/7 Round-the-Clock Service')
+    } else if (preset === 'mon_sat') {
+      setOperatingHoursState({
+        Monday: { isOpen: true, openTime: '09:00 AM', closeTime: '06:00 PM', is24Hours: false },
+        Tuesday: { isOpen: true, openTime: '09:00 AM', closeTime: '06:00 PM', is24Hours: false },
+        Wednesday: { isOpen: true, openTime: '09:00 AM', closeTime: '06:00 PM', is24Hours: false },
+        Thursday: { isOpen: true, openTime: '09:00 AM', closeTime: '06:00 PM', is24Hours: false },
+        Friday: { isOpen: true, openTime: '09:00 AM', closeTime: '06:00 PM', is24Hours: false },
+        Saturday: { isOpen: true, openTime: '09:00 AM', closeTime: '06:00 PM', is24Hours: false },
+        Sunday: { isOpen: false, openTime: '09:00 AM', closeTime: '06:00 PM', is24Hours: false }
+      })
+      toast.success('Applied Mon-Sat 9AM-6PM (Sun Closed)')
+    }
+  }
+
+  const serializeOperatingHours = (): Record<string, string> => {
+    const result: Record<string, string> = {}
+    ;['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].forEach(day => {
+      const sched = operatingHoursState[day]
+      if (!sched || !sched.isOpen) {
+        result[day] = 'Closed'
+      } else if (sched.is24Hours) {
+        result[day] = 'Open 24 Hours'
+      } else {
+        result[day] = `${sched.openTime} - ${sched.closeTime}`
+      }
+    })
+    return result
+  }
 
   // Form State
   const [formData, setFormData] = useState({
@@ -150,9 +220,9 @@ export default function AddBusinessClient() {
       { city: '', state: '', address: '', isPrimary: true, citySearchQuery: '', isCityDropdownOpen: false, isCustomCity: false, customCityName: '' }
     ] as FormLocation[],
     faqs: [
-      { question: 'What specific products or services do you offer?', answer: '' },
-      { question: 'What areas and cities do you serve in the United States?', answer: '' },
-      { question: 'How can clients request an estimate or schedule a consultation?', answer: '' }
+      { question: 'What specific products or services do you offer?', answer: 'We provide licensed and certified services tailored to residential and commercial clients across the United States.' },
+      { question: 'What areas and cities do you serve in the United States?', answer: 'We serve all local communities within our designated metro area, with responsive scheduling and customer support.' },
+      { question: 'How can clients request an estimate or schedule a consultation?', answer: 'Clients can reach us directly via our verified phone line, email, or through our directory listing to arrange an appointment.' }
     ] as Array<{ question: string; answer: string }>,
     ownerName: '',
     phone: '',
@@ -161,7 +231,11 @@ export default function AddBusinessClient() {
     website: '',
     description: '',
     services: '',
-    proofDoc: ''
+    proofDoc: '',
+    googleBusinessProfile: '',
+    facebookUrl: '',
+    instagramUrl: '',
+    linkedinUrl: ''
   })
 
   // Account Password for guest users
@@ -776,16 +850,23 @@ export default function AddBusinessClient() {
         }
       }
     } else if (step === 3) {
+      // Step 3: Business Operating Hours validation
+      const anyOpen = Object.values(operatingHoursState).some(s => s.isOpen || s.is24Hours)
+      if (!anyOpen) {
+        errs.hours = 'Please enable at least one operational day or 24/7 service so customers know when your business is open.'
+      }
+    } else if (step === 4) {
+      // Step 4: Comprehensive Profile & SEO Narrative
       const wordCount = formData.description.trim() ? formData.description.trim().split(/\s+/).filter(Boolean).length : 0
-      if (wordCount < 250) {
-        const remaining = 250 - wordCount
-        errs.description = `Description must be at least 250 words for SEO indexing. Current: ${wordCount} words (${remaining} more words required).`
+      if (wordCount < 30) {
+        const remaining = 30 - wordCount
+        errs.description = `Please provide a business description of at least 30 words. Current: ${wordCount} words (${remaining} more words required).`
       }
 
-      // Validate at least 3 FAQs
-      const validFaqs = (formData.faqs || []).filter(f => f.question.trim() && f.answer.trim())
-      if (validFaqs.length < 3) {
-        errs.faqs = `Please provide at least 3 FAQ question & answer pairs (${validFaqs.length}/3 completed). FAQs capture customer attention and build immediate credibility.`
+      // Check if FAQs have questions without answers
+      const incompleteFaqs = (formData.faqs || []).filter(f => (f.question.trim() && !f.answer.trim()) || (!f.question.trim() && f.answer.trim()))
+      if (incompleteFaqs.length > 0) {
+        errs.faqs = 'Please complete both the question and answer for your FAQs, or remove incomplete entries.'
       }
     }
 
@@ -805,7 +886,7 @@ export default function AddBusinessClient() {
 
   const handleNextStep = () => {
     if (validateStep(currentStep)) {
-      setCurrentStep(prev => Math.min(4, prev + 1))
+      setCurrentStep(prev => Math.min(5, prev + 1))
       window.scrollTo({ top: 400, behavior: 'smooth' })
     }
   }
@@ -831,6 +912,23 @@ export default function AddBusinessClient() {
     if (!validateStep(3)) {
       setCurrentStep(3)
       setTimeout(() => validateStep(3), 100)
+      return
+    }
+    if (!validateStep(4)) {
+      setCurrentStep(4)
+      setTimeout(() => validateStep(4), 100)
+      return
+    }
+
+    // MANDATORY PAYMENT SCREENSHOT VALIDATION REQUIRED BY USER
+    if (!paymentScreenshotBase64) {
+      toast.error('Payment receipt screenshot is required to complete submission. Please upload your payment screenshot.', {
+        duration: 5000
+      })
+      const screenshotBox = document.getElementById('field-payment-screenshot')
+      if (screenshotBox) {
+        screenshotBox.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
       return
     }
 
@@ -890,6 +988,10 @@ export default function AddBusinessClient() {
         ? catDef.id
         : (formData.category ? formData.category.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : 'local-services')
 
+      const isAuthoritative = selectedPlan === 'authoritative_10'
+      const isStandard = selectedPlan === 'priority_5'
+      const isBasic = selectedPlan === 'review_1'
+
       const saved = await saveBusinessToDatabase({
         name: formData.businessName,
         category: formData.category,
@@ -910,14 +1012,22 @@ export default function AddBusinessClient() {
         website: formData.website,
         description: formData.description,
         services: formData.services ? formData.services.split(',').map(s => s.trim()) : ['General Services'],
+        googleBusinessProfile: formData.googleBusinessProfile.trim(),
+        facebookUrl: formData.facebookUrl.trim(),
+        instagramUrl: formData.instagramUrl.trim(),
+        linkedinUrl: formData.linkedinUrl.trim(),
+        operatingHours: serializeOperatingHours(),
         status: 'pending',
         plan: selectedPlan,
+        planName: planConfig.name,
         planPrice: planConfig.price,
-        paymentStatus: paymentScreenshotBase64 ? 'SUBMITTED' : 'PENDING',
-        paymentScreenshot: paymentScreenshotBase64 || '',
+        hasSinglePage: !isBasic,
+        canEditProfile: isStandard || isAuthoritative,
+        paymentStatus: 'SUBMITTED',
+        paymentScreenshot: paymentScreenshotBase64,
         transactionRef: paymentRefNumber.trim() || '',
-        blog_post_entitled: selectedPlan === 'priority_5',
-        blog_posts_allowed: selectedPlan === 'priority_5' ? 5 : 0,
+        blog_post_entitled: isStandard || isAuthoritative,
+        blog_posts_allowed: isAuthoritative ? 10 : (isStandard ? 5 : 0),
         blog_posts_used: 0,
         blog_post_feature_enabled: false,
         paymentDetails: {
@@ -1156,7 +1266,11 @@ export default function AddBusinessClient() {
       website: '',
       description: '',
       services: '',
-      proofDoc: ''
+      proofDoc: '',
+      googleBusinessProfile: '',
+      facebookUrl: '',
+      instagramUrl: '',
+      linkedinUrl: ''
     })
     setActiveView('form')
   }
@@ -1963,21 +2077,22 @@ export default function AddBusinessClient() {
                       {/* STEP PROGRESS BAR */}
                       <div className="space-y-3 pb-6 border-b border-slate-100">
                         <div className="flex justify-between items-center text-xs font-bold text-slate-700">
-                          <span className="text-blue-600">Step {currentStep} of 4</span>
-                          <span>{progress}% Profile Complete</span>
+                          <span className="text-blue-600">Step {currentStep} of 5</span>
+                          <span>{Math.round((currentStep / 5) * 100)}% Profile Complete</span>
                         </div>
                         <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
                           <div 
-                            className="h-full bg-gradient-to-r from-blue-600 to-emerald-500 transition-all duration-300 rounded-full"
-                            style={{ width: `${Math.max(currentStep * 25, progress)}%` }}
+                            className="h-full bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 transition-all duration-300 rounded-full"
+                            style={{ width: `${Math.max(currentStep * 20, (currentStep / 5) * 100)}%` }}
                           ></div>
                         </div>
 
-                        <div className="grid grid-cols-4 gap-1 text-[11px] font-semibold text-center text-slate-400 pt-1">
+                        <div className="grid grid-cols-5 gap-1 text-[11px] font-semibold text-center text-slate-400 pt-1">
                           <span className={currentStep >= 1 ? 'text-blue-600 font-bold' : ''}>1. Identity</span>
                           <span className={currentStep >= 2 ? 'text-blue-600 font-bold' : ''}>2. Locations</span>
-                          <span className={currentStep >= 3 ? 'text-blue-600 font-bold' : ''}>3. Details</span>
-                          <span className={currentStep >= 4 ? 'text-blue-600 font-bold' : ''}>4. Verify & Pay</span>
+                          <span className={currentStep >= 3 ? 'text-blue-600 font-bold' : ''}>3. Hours</span>
+                          <span className={currentStep >= 4 ? 'text-blue-600 font-bold' : ''}>4. Details</span>
+                          <span className={currentStep >= 5 ? 'text-blue-600 font-bold' : ''}>5. Verify &amp; Pay</span>
                         </div>
                       </div>
 
@@ -2720,13 +2835,245 @@ const availableCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
                         </div>
                       )}
 
-                      {/* STEP 3: DETAILS & 250-WORD SEO DESCRIPTION */}
+                      {/* STEP 3: OPERATING HOURS & AVAILABILITY */}
                       {currentStep === 3 && (
                         <div className="space-y-6 animate-in fade-in-50">
                           <div>
-                            <h2 className="text-xl font-extrabold text-slate-900">Step 3: Comprehensive Profile & SEO Narrative</h2>
+                            <span className="text-xs font-extrabold uppercase tracking-wider text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-200">
+                              Step 3: Operating Hours
+                            </span>
+                            <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 mt-2">
+                              Operating Hours &amp; Customer Availability
+                            </h2>
                             <p className="text-xs text-slate-500 mt-1">
-                              Detailed business listings with 250+ words index 3x faster on Google search engines.
+                              Accurate business hours build customer confidence and help local buyers call or visit at the right time.
+                            </p>
+                          </div>
+
+                          {/* QUICK PRESETS */}
+                          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                            <label className="block text-xs font-bold text-slate-700">Quick Hours Presets:</label>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                              <button
+                                type="button"
+                                onClick={() => applyHoursPreset('standard')}
+                                className="px-3 py-2 bg-white hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 border border-slate-200 rounded-xl text-[11px] font-bold text-slate-700 transition cursor-pointer text-center"
+                              >
+                                Standard (Mon-Fri 9-5)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => applyHoursPreset('retail')}
+                                className="px-3 py-2 bg-white hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 border border-slate-200 rounded-xl text-[11px] font-bold text-slate-700 transition cursor-pointer text-center"
+                              >
+                                Retail (7 Days 8-8)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => applyHoursPreset('mon_sat')}
+                                className="px-3 py-2 bg-white hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 border border-slate-200 rounded-xl text-[11px] font-bold text-slate-700 transition cursor-pointer text-center"
+                              >
+                                Mon-Sat (9-6)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => applyHoursPreset('24_7')}
+                                className="px-3 py-2 bg-white hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 border border-slate-200 rounded-xl text-[11px] font-bold text-slate-700 transition cursor-pointer text-center"
+                              >
+                                Open 24/7 Service
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* 7 DAYS SCHEDULE TABLE */}
+                          <div className="border border-slate-200 rounded-2xl overflow-hidden divide-y divide-slate-100 bg-white shadow-2xs">
+                            {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => {
+                              const sched = operatingHoursState[day] || { isOpen: true, openTime: '09:00 AM', closeTime: '05:00 PM', is24Hours: false }
+                              const TIME_OPTIONS = [
+                                '12:00 AM', '01:00 AM', '02:00 AM', '03:00 AM', '04:00 AM', '05:00 AM',
+                                '06:00 AM', '07:00 AM', '08:00 AM', '08:30 AM', '09:00 AM', '09:30 AM',
+                                '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM', '12:00 PM', '12:30 PM',
+                                '01:00 PM', '01:30 PM', '02:00 PM', '02:30 PM', '03:00 PM', '03:30 PM',
+                                '04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM', '06:00 PM', '06:30 PM',
+                                '07:00 PM', '07:30 PM', '08:00 PM', '08:30 PM', '09:00 PM', '10:00 PM', '11:00 PM', '11:59 PM'
+                              ]
+
+                              return (
+                                <div key={day} className={`p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition ${sched.isOpen ? 'bg-white' : 'bg-slate-50/70'}`}>
+                                  <div className="flex items-center gap-3 sm:w-36">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOperatingHoursState(prev => ({
+                                          ...prev,
+                                          [day]: { ...sched, isOpen: !sched.isOpen }
+                                        }))
+                                      }}
+                                      className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold uppercase transition cursor-pointer ${
+                                        sched.isOpen ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
+                                      }`}
+                                    >
+                                      {sched.isOpen ? 'Open' : 'Closed'}
+                                    </button>
+                                    <span className={`text-xs font-bold ${sched.isOpen ? 'text-slate-900' : 'text-slate-400'}`}>
+                                      {day}
+                                    </span>
+                                  </div>
+
+                                  {sched.isOpen ? (
+                                    <div className="flex flex-wrap items-center gap-2.5 flex-1 justify-start sm:justify-end">
+                                      <label className="flex items-center gap-1.5 text-[11px] text-slate-600 font-semibold cursor-pointer mr-2">
+                                        <input
+                                          type="checkbox"
+                                          checked={sched.is24Hours}
+                                          onChange={(e) => {
+                                            setOperatingHoursState(prev => ({
+                                              ...prev,
+                                              [day]: { ...sched, is24Hours: e.target.checked }
+                                            }))
+                                          }}
+                                          className="w-3.5 h-3.5 text-blue-600 rounded"
+                                        />
+                                        <span>24 Hours</span>
+                                      </label>
+
+                                      {!sched.is24Hours && (
+                                        <div className="flex items-center gap-2">
+                                          <select
+                                            value={sched.openTime}
+                                            onChange={(e) => {
+                                              setOperatingHoursState(prev => ({
+                                                ...prev,
+                                                [day]: { ...sched, openTime: e.target.value }
+                                              }))
+                                            }}
+                                            className="px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-medium focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                                          >
+                                            {TIME_OPTIONS.map(t => (
+                                              <option key={t} value={t}>{t}</option>
+                                            ))}
+                                          </select>
+                                          <span className="text-xs text-slate-400 font-semibold">to</span>
+                                          <select
+                                            value={sched.closeTime}
+                                            onChange={(e) => {
+                                              setOperatingHoursState(prev => ({
+                                                ...prev,
+                                                [day]: { ...sched, closeTime: e.target.value }
+                                              }))
+                                            }}
+                                            className="px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-medium focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                                          >
+                                            {TIME_OPTIONS.map(t => (
+                                              <option key={t} value={t}>{t}</option>
+                                            ))}
+                                          </select>
+                                        </div>
+                                      )}
+
+                                      {sched.is24Hours && (
+                                        <span className="text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                                          Open 24 Hours
+                                        </span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div className="text-xs text-slate-400 font-medium sm:text-right">
+                                      Closed All Day
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+
+                          {/* BRAND AUTHORITY & GOOGLE RANK BOOSTER (GBP & SOCIAL PROFILES) */}
+                          <div className="pt-4 border-t border-slate-200/80 space-y-4">
+                            <div className="p-4 bg-gradient-to-r from-blue-50/80 to-indigo-50/80 rounded-2xl border border-blue-200/70 space-y-1">
+                              <div className="flex items-center gap-2">
+                                <Sparkles className="w-4 h-4 text-blue-600 shrink-0" />
+                                <h3 className="font-extrabold text-slate-900 text-xs sm:text-sm">
+                                  Brand Authority &amp; Google Rank Booster
+                                </h3>
+                              </div>
+                              <p className="text-[11px] text-slate-600 leading-relaxed">
+                                Connect your verified Google Business Profile, Facebook, Instagram, and LinkedIn. Linking authentic corporate profiles establishes direct brand authority, builds trust with visitors, and accelerates ranking on Google local search.
+                              </p>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                              <div>
+                                <label className="block text-xs font-bold text-slate-700 mb-1">
+                                  Google Business Profile (GBP / Maps URL)
+                                </label>
+                                <input
+                                  type="url"
+                                  placeholder="https://maps.google.com/?cid=... or https://g.page/..."
+                                  value={formData.googleBusinessProfile}
+                                  onChange={(e) => setFormData({ ...formData, googleBusinessProfile: e.target.value })}
+                                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                                />
+                                <p className="text-[10px] text-slate-400 mt-1">Strengthens local map citations and Google search visibility</p>
+                              </div>
+
+                              <div>
+                                <label className="block text-xs font-bold text-slate-700 mb-1">
+                                  Facebook Page / Profile URL
+                                </label>
+                                <input
+                                  type="url"
+                                  placeholder="https://facebook.com/yourbusiness"
+                                  value={formData.facebookUrl}
+                                  onChange={(e) => setFormData({ ...formData, facebookUrl: e.target.value })}
+                                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                                />
+                                <p className="text-[10px] text-slate-400 mt-1">Official Facebook company page or business handle</p>
+                              </div>
+
+                              <div>
+                                <label className="block text-xs font-bold text-slate-700 mb-1">
+                                  Instagram Profile URL
+                                </label>
+                                <input
+                                  type="url"
+                                  placeholder="https://instagram.com/yourbusiness"
+                                  value={formData.instagramUrl}
+                                  onChange={(e) => setFormData({ ...formData, instagramUrl: e.target.value })}
+                                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                                />
+                                <p className="text-[10px] text-slate-400 mt-1">Visual branding portfolio and customer engagement</p>
+                              </div>
+
+                              <div>
+                                <label className="block text-xs font-bold text-slate-700 mb-1">
+                                  LinkedIn Profile / Company Page
+                                </label>
+                                <input
+                                  type="url"
+                                  placeholder="https://linkedin.com/company/yourbusiness"
+                                  value={formData.linkedinUrl}
+                                  onChange={(e) => setFormData({ ...formData, linkedinUrl: e.target.value })}
+                                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                                />
+                                <p className="text-[10px] text-slate-400 mt-1">B2B corporate authority and verified professional presence</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* STEP 4: DETAILS & DESCRIPTION */}
+                      {currentStep === 4 && (
+                        <div className="space-y-6 animate-in fade-in-50">
+                          <div>
+                            <span className="text-xs font-extrabold uppercase tracking-wider text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-200">
+                              Step 4: Details &amp; FAQs
+                            </span>
+                            <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 mt-2">
+                              Comprehensive Profile &amp; Business Narrative
+                            </h2>
+                            <p className="text-xs text-slate-500 mt-1">
+                              Detailed business listings with 150+ words index faster on Google search engines. (Minimum 30 words required).
                             </p>
                           </div>
 
@@ -2734,14 +3081,14 @@ const availableCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
                             <div>
                               <div className="flex justify-between items-center mb-1.5">
                                 <label className="block text-xs font-bold text-slate-700">
-                                  Business Overview (Min 250 Words for SEO) *
+                                  Business Overview (Min 30 Words) *
                                 </label>
                                 <span className={`text-[11px] font-bold ${
-                                  (formData.description.trim().split(/\s+/).filter(Boolean).length >= 250)
+                                  (formData.description.trim().split(/\s+/).filter(Boolean).length >= 30)
                                     ? 'text-emerald-600'
                                     : 'text-amber-600'
                                 }`}>
-                                  Word Count: {formData.description.trim() ? formData.description.trim().split(/\s+/).filter(Boolean).length : 0} / 250 words
+                                  Word Count: {formData.description.trim() ? formData.description.trim().split(/\s+/).filter(Boolean).length : 0} / 30 words min (150+ recommended)
                                 </span>
                               </div>
                               <textarea
@@ -2871,18 +3218,18 @@ const availableCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
                         </div>
                       )}
 
-                      {/* STEP 4: PLAN SELECTION & REVIEW PAYMENT */}
-                      {currentStep === 4 && (
+                      {/* STEP 5: PLAN SELECTION & REVIEW PAYMENT */}
+                      {currentStep === 5 && (
                         <div className="space-y-6 animate-in fade-in-50">
                           <div>
                             <span className="text-xs font-extrabold uppercase tracking-wider text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-200">
-                              Step 4: Plan Selection &amp; Review Payment
+                              Step 5: Plan Selection &amp; Review Payment
                             </span>
                             <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 mt-2">
                               Choose Your Business Onboarding Plan
                             </h2>
                             <p className="text-xs text-slate-500 mt-1">
-                              Select an onboarding tier. All submissions undergo human compliance review before public activation.
+                              Select an onboarding tier. All submissions undergo human admin compliance review before appearing in public directory categories.
                             </p>
                           </div>
 
@@ -2900,21 +3247,21 @@ const availableCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
                             </span>
                           </div>
 
-                          {/* PLAN SELECTOR CARDS */}
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {/* PLAN 1: $1 REVIEW */}
+                          {/* 3 PLAN SELECTOR CARDS */}
+                          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                            {/* PLAN 1: $1 BASIC PLAN */}
                             <div 
                               onClick={() => setSelectedPlan('review_1')}
                               className={`p-5 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
                                 selectedPlan === 'review_1'
-                                  ? 'border-blue-600 bg-blue-50/30 shadow-md ring-2 ring-blue-500/10'
+                                  ? 'border-blue-600 bg-blue-50/40 shadow-md ring-2 ring-blue-500/20'
                                   : 'border-slate-200 hover:border-slate-300 bg-white'
                               }`}
                             >
                               <div className="space-y-3">
                                 <div className="flex items-center justify-between">
                                   <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
-                                    Standard Review
+                                    Basic Plan
                                   </span>
                                   <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
                                     selectedPlan === 'review_1' ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300'
@@ -2924,42 +3271,42 @@ const availableCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
                                 </div>
 
                                 <div>
-                                  <h3 className="text-lg font-extrabold text-slate-900">$1 Business Review</h3>
+                                  <h3 className="text-lg font-extrabold text-slate-900">$1 Basic Plan</h3>
                                   <div className="mt-1 flex items-baseline gap-1">
                                     <span className="text-2xl font-black text-slate-900">$1.00</span>
                                     <span className="text-xs text-slate-500">/ one-time review</span>
                                   </div>
                                   <p className="text-xs text-slate-600 mt-2 leading-relaxed">
-                                    Standard queue review. We ensure your business information is accurate, complete, and properly categorized before public activation.
+                                    Admin reviews &amp; approves. Appears strictly in category/subcategory List &amp; Grid views. <strong>No single page is created.</strong>
                                   </p>
                                 </div>
 
                                 <ul className="space-y-2 pt-2 border-t border-slate-200/80 text-xs text-slate-700">
                                   <li className="flex items-start gap-2">
                                     <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                                    <span>Business information &amp; contact verification</span>
+                                    <span><strong>Category List &amp; Grid View:</strong> Shows directly in search results upon admin approval</span>
                                   </li>
                                   <li className="flex items-start gap-2">
                                     <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                                    <span>Data quality review &amp; formatting check</span>
+                                    <span>Phone, hours &amp; full branch details visible on card</span>
                                   </li>
                                   <li className="flex items-start gap-2">
                                     <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                                    <span>Correction suggestions &amp; category alignment</span>
-                                  </li>
-                                  <li className="flex items-start gap-2">
-                                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                                    <span>Public business profile upon approval</span>
+                                    <span>Human admin verification check</span>
                                   </li>
                                   <li className="flex items-start gap-2 text-slate-400">
                                     <X className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-                                    <span>No blog / article publishing access</span>
+                                    <span>No standalone single profile page</span>
+                                  </li>
+                                  <li className="flex items-start gap-2 text-slate-400">
+                                    <X className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+                                    <span>No dashboard profile editing</span>
                                   </li>
                                 </ul>
                               </div>
                             </div>
 
-                            {/* PLAN 2: $5 PRIORITY */}
+                            {/* PLAN 2: $5 STANDARD PLAN */}
                             <div 
                               onClick={() => setSelectedPlan('priority_5')}
                               className={`p-5 rounded-2xl border-2 transition-all cursor-pointer relative flex flex-col justify-between ${
@@ -2975,7 +3322,7 @@ const availableCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
                               <div className="space-y-3">
                                 <div className="flex items-center justify-between">
                                   <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-100 text-blue-800">
-                                    Priority + 5 Posts
+                                    Standard Plan
                                   </span>
                                   <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
                                     selectedPlan === 'priority_5' ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300'
@@ -2985,36 +3332,101 @@ const availableCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
                                 </div>
 
                                 <div>
-                                  <h3 className="text-lg font-extrabold text-slate-900">$5 Business Priority</h3>
+                                  <h3 className="text-lg font-extrabold text-slate-900">$5 Standard Plan</h3>
                                   <div className="mt-1 flex items-baseline gap-1">
                                     <span className="text-2xl font-black text-blue-600">$5.00</span>
                                     <span className="text-xs text-slate-500">/ one-time review</span>
                                   </div>
                                   <p className="text-xs text-slate-600 mt-2 leading-relaxed">
-                                    Expedited priority processing plus content marketing: submit up to 5 business articles directly on BizNest USA linking to your profile.
+                                    <strong>Dedicated standalone page created</strong> to show business ownership. User dashboard profile &amp; business editing enabled.
                                   </p>
                                 </div>
 
                                 <ul className="space-y-2 pt-2 border-t border-slate-200/80 text-xs text-slate-700">
                                   <li className="flex items-start gap-2">
                                     <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-                                    <span><strong>Priority processing:</strong> human review within 24h</span>
+                                    <span><strong>Dedicated Single Page Created:</strong> Permanent company ownership URL (/business/[slug])</span>
                                   </li>
                                   <li className="flex items-start gap-2">
                                     <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-                                    <span><strong>Editorial exposure:</strong> opportunities on category hubs</span>
+                                    <span><strong>Category List &amp; Grid View:</strong> Shows with "View Full Profile" action</span>
                                   </li>
                                   <li className="flex items-start gap-2">
                                     <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                                    <span><strong>Publish up to 5 business blog posts</strong></span>
+                                    <span><strong>Dashboard Edit Option:</strong> Edit profile &amp; business info (applied after 24h review)</span>
                                   </li>
                                   <li className="flex items-start gap-2">
                                     <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                                    <span>Direct author/business profile backlink attribution</span>
+                                    <span>Publish up to 5 business articles</span>
                                   </li>
                                   <li className="flex items-start gap-2">
                                     <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                                    <span>Priority review badge on your listing</span>
+                                    <span>Priority human verification badge</span>
+                                  </li>
+                                </ul>
+                              </div>
+                            </div>
+
+                            {/* PLAN 3: $10 AUTHORITATIVE PLAN */}
+                            <div 
+                              onClick={() => setSelectedPlan('authoritative_10')}
+                              className={`p-5 rounded-2xl border-2 transition-all cursor-pointer relative flex flex-col justify-between ${
+                                selectedPlan === 'authoritative_10'
+                                  ? 'border-indigo-600 bg-indigo-50/40 shadow-lg ring-2 ring-indigo-500/20'
+                                  : 'border-slate-200 hover:border-slate-300 bg-white'
+                              }`}
+                            >
+                              <div className="absolute -top-3 right-4 px-3 py-0.5 bg-gradient-to-r from-amber-500 to-indigo-600 text-white font-extrabold text-[10px] uppercase tracking-wider rounded-full shadow-xs">
+                                VIP Authority
+                              </div>
+
+                              <div className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800">
+                                    Authoritative Plan
+                                  </span>
+                                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                                    selectedPlan === 'authoritative_10' ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300'
+                                  }`}>
+                                    {selectedPlan === 'authoritative_10' && <Check className="w-3 h-3 stroke-[3]" />}
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <h3 className="text-lg font-extrabold text-slate-900">$10 Authoritative Plan</h3>
+                                  <div className="mt-1 flex items-baseline gap-1">
+                                    <span className="text-2xl font-black text-indigo-600">$10.00</span>
+                                    <span className="text-xs text-slate-500">/ one-time review</span>
+                                  </div>
+                                  <p className="text-xs text-slate-600 mt-2 leading-relaxed">
+                                    Fast-track 24h approval &amp; 48h indexing, WhatsApp VIP support, directory syndication, and <strong>10 blog posts every 60 days</strong>.
+                                  </p>
+                                </div>
+
+                                <ul className="space-y-2 pt-2 border-t border-slate-200/80 text-xs text-slate-700">
+                                  <li className="flex items-start gap-2">
+                                    <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                                    <span><strong>Dedicated Single Page Created:</strong> High-authority standalone profile</span>
+                                  </li>
+                                  <li className="flex items-start gap-2">
+                                    <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                                    <span><strong>10 Blog Posts per 60 Days:</strong> Rolling cycle quota (e.g. 7 created = 3 left; refreshes to 10 after 60 days)</span>
+                                  </li>
+                                  <li className="flex items-start gap-2">
+                                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                                    <span><strong>Dashboard Edit Option:</strong> Profile &amp; business updates applied after 24h</span>
+                                  </li>
+                                  <li className="flex items-start gap-2">
+                                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                                    <span><strong>Fast-track 24h approval &amp; 48h Google indexing</strong></span>
+                                  </li>
+                                  <li className="flex items-start gap-2">
+                                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                                    <span>Multiple High DA backlinks &amp; directory syndication</span>
+                                  </li>
+                                  <li className="flex items-start gap-2">
+                                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                                    <span>Priority VIP Email &amp; WhatsApp concierge support</span>
                                   </li>
                                 </ul>
                               </div>
@@ -3038,11 +3450,13 @@ const availableCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
                               <div>
                                 <h4 className="font-extrabold text-slate-900 text-sm">Review Payment Instructions</h4>
                                 <p className="text-xs text-slate-500">
-                                  Amount Due: <strong className="text-blue-600">{selectedPlan === 'priority_5' ? '$5.00 USD' : '$1.00 USD'}</strong>
+                                  Amount Due: <strong className="text-blue-600">
+                                    {selectedPlan === 'authoritative_10' ? '$10.00 USD' : selectedPlan === 'priority_5' ? '$5.00 USD' : '$1.00 USD'}
+                                  </strong>
                                 </p>
                               </div>
                               <span className="text-[11px] font-bold px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 self-start sm:self-auto">
-                                {selectedPlan === 'priority_5' ? '$5 Business Priority' : '$1 Business Review'}
+                                {selectedPlan === 'authoritative_10' ? '$10 Authoritative Plan' : selectedPlan === 'priority_5' ? '$5 Standard Plan' : '$1 Basic Plan'}
                               </span>
                             </div>
 
@@ -3090,40 +3504,51 @@ const availableCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
                               />
                             </div>
 
-                            {/* SCREENSHOT UPLOAD */}
-                            <div>
-                              <label className="block text-xs font-bold text-slate-700 mb-1">
-                                Upload Payment Screenshot / Receipt (Optional for Fast Review)
-                              </label>
+                            {/* SCREENSHOT UPLOAD (MANDATORY REQUIREMENT) */}
+                            <div id="field-payment-screenshot">
+                              <div className="flex justify-between items-center mb-1">
+                                <label className="block text-xs font-bold text-slate-900">
+                                  Upload Payment Screenshot / Receipt (Required to Complete Submission) *
+                                </label>
+                                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-100 text-amber-900">
+                                  Mandatory Proof
+                                </span>
+                              </div>
 
                               {paymentScreenshotBase64 ? (
-                                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-3">
+                                <div className="p-3 bg-slate-50 border-2 border-emerald-500/50 rounded-xl flex items-center justify-between gap-3">
                                   <div className="flex items-center gap-3">
                                     <img
                                       src={paymentScreenshotBase64}
                                       alt="Screenshot preview"
-                                      className="w-12 h-12 rounded-lg object-cover border border-slate-200"
+                                      className="w-14 h-14 rounded-lg object-cover border border-slate-200 shadow-xs"
                                     />
                                     <div>
-                                      <p className="text-xs font-bold text-slate-900">Receipt Attached</p>
-                                      <p className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
-                                        <CheckCircle2 className="w-3 h-3" /> Ready for verification
+                                      <p className="text-xs font-bold text-slate-900">Payment Receipt Attached</p>
+                                      <p className="text-[11px] text-emerald-600 font-bold flex items-center gap-1">
+                                        <CheckCircle2 className="w-3.5 h-3.5" /> Ready for admin verification
                                       </p>
                                     </div>
                                   </div>
                                   <button
                                     type="button"
                                     onClick={() => setPaymentScreenshotBase64(null)}
-                                    className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 cursor-pointer"
+                                    className="p-2 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 cursor-pointer"
                                   >
                                     <X className="w-4 h-4" />
                                   </button>
                                 </div>
                               ) : (
-                                <label className="p-4 border-2 border-dashed border-slate-300 hover:border-blue-500 bg-slate-50/70 hover:bg-blue-50/30 rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-colors text-center">
-                                  <Upload className="w-4 h-4 text-blue-600" />
-                                  <span className="text-xs font-bold text-slate-700">Click to upload payment screenshot</span>
-                                  <span className="text-[10px] text-slate-400">(PNG, JPG, WEBP)</span>
+                                <label className="p-5 border-2 border-dashed border-amber-300 hover:border-blue-500 bg-amber-50/40 hover:bg-blue-50/30 rounded-xl flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors text-center group">
+                                  <div className="w-10 h-10 rounded-full bg-amber-100 group-hover:bg-blue-100 flex items-center justify-center text-amber-700 group-hover:text-blue-600 transition">
+                                    <Upload className="w-5 h-5" />
+                                  </div>
+                                  <span className="text-xs font-extrabold text-slate-800">
+                                    Click to attach payment transfer screenshot *
+                                  </span>
+                                  <span className="text-[11px] text-slate-500">
+                                    Submission is only unlocked once your payment receipt (PNG, JPG, WEBP) is uploaded.
+                                  </span>
                                   <input
                                     type="file"
                                     accept="image/*"
@@ -3150,7 +3575,7 @@ const availableCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
                           </button>
                         ) : <div></div>}
 
-                        {currentStep < 4 ? (
+                        {currentStep < 5 ? (
                           <button
                             type="button"
                             onClick={handleNextStep}
@@ -3160,19 +3585,31 @@ const availableCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
                             <ArrowRight className="w-4 h-4" />
                           </button>
                         ) : (
-                          <button
-                            type="button"
-                            onClick={handleSubmit}
-                            disabled={isSubmitting}
-                            className="px-8 py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-sm rounded-xl shadow-xl shadow-blue-600/20 transition-all inline-flex items-center gap-2 cursor-pointer"
-                          >
-                            <CheckCircle2 className="w-5 h-5" />
-                            <span>
-                              {isSubmitting
-                                ? 'Submitting...'
-                                : `Submit Business & Payment (${selectedPlan === 'priority_5' ? '$5.00' : '$1.00'})`}
-                            </span>
-                          </button>
+                          <div className="flex flex-col items-end gap-1.5">
+                            {!paymentScreenshotBase64 && (
+                              <span className="text-[11px] font-bold text-amber-600 flex items-center gap-1">
+                                <AlertCircle className="w-3.5 h-3.5" />
+                                Upload payment screenshot above to enable submission
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={handleSubmit}
+                              disabled={isSubmitting || !paymentScreenshotBase64}
+                              className={`px-8 py-3.5 text-white font-extrabold text-sm rounded-xl shadow-xl transition-all inline-flex items-center gap-2 cursor-pointer ${
+                                !paymentScreenshotBase64
+                                  ? 'bg-slate-400 opacity-60 cursor-not-allowed'
+                                  : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'
+                              }`}
+                            >
+                              <CheckCircle2 className="w-5 h-5" />
+                              <span>
+                                {isSubmitting
+                                  ? 'Submitting...'
+                                  : `Submit Business & Payment (${selectedPlan === 'authoritative_10' ? '$10.00' : selectedPlan === 'priority_5' ? '$5.00' : '$1.00'})`}
+                              </span>
+                            </button>
+                          </div>
                         )}
                       </div>
 
@@ -3423,14 +3860,20 @@ const availableCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
                   Close
                 </button>
                 {selectedBizModal.status === 'approved' && (
-                  <Link
-                    href={`/business/${selectedBizModal.slug}`}
-                    target="_blank"
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1"
-                  >
-                    <span>Open Live Page</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </Link>
+                  selectedBizModal.plan === 'review_1' || selectedBizModal.hasSinglePage === false ? (
+                    <span className="px-4 py-2 bg-blue-50 text-blue-700 text-xs font-bold rounded-xl border border-blue-200">
+                      Live in Category List/Grid
+                    </span>
+                  ) : (
+                    <Link
+                      href={`/business/${selectedBizModal.slug}`}
+                      target="_blank"
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1"
+                    >
+                      <span>Open Live Page</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </Link>
+                  )
                 )}
               </div>
             </div>

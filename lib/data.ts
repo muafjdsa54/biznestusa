@@ -445,7 +445,7 @@ export interface BusinessPaymentDetails {
   notes?: string
 }
 
-export type BusinessPlan = 'review_1' | 'priority_5'
+export type BusinessPlan = 'review_1' | 'priority_5' | 'authoritative_10'
 
 export interface BusinessPlanInfo {
   id: BusinessPlan
@@ -455,40 +455,79 @@ export interface BusinessPlanInfo {
   tagline: string
   features: string[]
   postsAllowed: number
+  hasSinglePage: boolean
+  canEditProfile: boolean
+  hasBacklinks: boolean
+  supportType: string
+  turnaroundTime: string
 }
 
 export const BUSINESS_PLANS: Record<BusinessPlan, BusinessPlanInfo> = {
   review_1: {
     id: 'review_1',
-    name: '$1 Business Review',
+    name: '$1 Basic Plan',
     price: 1,
-    badge: 'Standard Quality Review',
-    tagline: 'Standard queue verification & data quality audit for US businesses',
+    badge: 'Basic Directory Listing',
+    tagline: 'Admin reviewed & approved listing displayed in specific category list & grid view',
     features: [
-      'Comprehensive business information review',
-      'Data quality & address consistency verification',
-      'Correction suggestions before final approval',
-      'Standard review queue processing',
-      'Public verified business profile page',
-      'Direct customer phone & email discovery'
+      'Human compliance review & approval by site admin',
+      'Listing appears on specific subcategory page in List & Grid views',
+      'No single page created (displayed as directory card)',
+      'Verified contact phone, address & operational hours display',
+      'Direct customer phone call & discovery',
+      'Standard queue review processing'
     ],
-    postsAllowed: 0
+    postsAllowed: 0,
+    hasSinglePage: false,
+    canEditProfile: false,
+    hasBacklinks: false,
+    supportType: 'Standard Queue',
+    turnaroundTime: '48–72 hours'
   },
   priority_5: {
     id: 'priority_5',
-    name: '$5 Business Priority',
+    name: '$5 Standard Plan',
     price: 5,
-    badge: 'Priority Review + 5 Posts',
-    tagline: 'Expedited processing, promotional exposure & 5 business blog posts',
+    badge: 'Recommended — Full Ownership',
+    tagline: 'Dedicated business profile page with ownership and dashboard edit access',
     features: [
-      'Expedited priority review queue processing',
-      'Priority listing placement in directory results',
-      'Promotional / editorial exposure opportunity',
-      'Submit up to 5 business blog / content articles',
-      'Articles connected directly to your business profile',
-      'Featured business profile trust badge'
+      'Dedicated standalone single page created (/business/your-slug)',
+      'Full business ownership and comprehensive company profile',
+      'Dashboard Edit Access: edit profile details & business info (applied within 24h)',
+      'Listed in both List View and Grid View on subcategory directory',
+      'Submit up to 5 business articles / blog posts',
+      'Verified business badge & customer review enablement',
+      'Priority directory placement above basic listings'
     ],
-    postsAllowed: 5
+    postsAllowed: 5,
+    hasSinglePage: true,
+    canEditProfile: true,
+    hasBacklinks: false,
+    supportType: 'Email Support',
+    turnaroundTime: '24–48 hours'
+  },
+  authoritative_10: {
+    id: 'authoritative_10',
+    name: '$10 Authoritative Plan',
+    price: 10,
+    badge: 'Authoritative — Maximum SEO & Exposure',
+    tagline: 'Priority 24h approval, 48h indexing, 10 blog posts per 60 days & high DA backlinks',
+    features: [
+      'Priority review & admin approval within 24 hours guaranteed',
+      'Search engine submission & Google indexing within 48 hours',
+      'Dedicated standalone single page created (/business/your-slug)',
+      'Dashboard Edit Access: edit profile & business details (applied within 24h)',
+      '10 Blog Posts per 60-day rolling cycle (dynamic quota tracking)',
+      'Directory syndication & high DA backlinks for Google ranking',
+      'VIP Priority Support via Email & WhatsApp',
+      'Featured placement at top of category List & Grid views'
+    ],
+    postsAllowed: 10,
+    hasSinglePage: true,
+    canEditProfile: true,
+    hasBacklinks: true,
+    supportType: 'Priority Email & WhatsApp Support',
+    turnaroundTime: 'Within 24 hours'
   }
 }
 
@@ -578,6 +617,11 @@ export interface BusinessItem {
   whatsapp?: string
   email: string
   website: string
+  // Brand Authority & Google Ranking Profiles
+  googleBusinessProfile?: string
+  facebookUrl?: string
+  instagramUrl?: string
+  linkedinUrl?: string
   address: string
   locations?: BusinessLocation[]
   coverImage: string
@@ -592,6 +636,17 @@ export interface BusinessItem {
   plan?: BusinessPlan
   planName?: string
   planPrice?: number
+  hasSinglePage?: boolean
+  canEditProfile?: boolean
+  editRequests?: {
+    id: string
+    requestedAt: string
+    status: 'pending' | 'applied' | 'rejected'
+    appliedAt?: string
+    notes?: string
+    changes: Record<string, any>
+  }[]
+  lastEditedAt?: string
   paymentDetails?: BusinessPaymentDetails
   paymentScreenshot?: string
   transactionRef?: string

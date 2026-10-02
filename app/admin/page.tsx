@@ -7,7 +7,7 @@ import { collection, getDocs, updateDoc, deleteDoc, doc, query, orderBy, setDoc 
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth'
 import { 
   Building2, ShieldCheck, CheckCircle2, XCircle, Trash2, Search, Filter, LogOut, 
-  Eye, EyeOff, RefreshCw, Phone, Mail, MapPin, ExternalLink, Lock, Inbox, AlertTriangle, Users, 
+  Eye, EyeOff, RefreshCw, Phone, Mail, MapPin, ExternalLink, Lock, Inbox, AlertTriangle, AlertCircle, Users, 
   BookOpen, Star, Sparkles, Check, Briefcase, DollarSign, Clock, FileText, ChevronRight, X,
   Layers, Globe, Settings, Newspaper, Activity
 } from 'lucide-react'
@@ -68,7 +68,8 @@ export default function AdminPage() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        if (user.email?.toLowerCase() === 'admin@biznestusa.com') {
+        const isMasterAdmin = user.uid === 'Mg7clnjHqqTUWk4uBw2zd0yLAcX2' || user.email?.toLowerCase() === 'admin@biznestusa.com'
+        if (isMasterAdmin) {
           setAdminUid(user.uid)
           setIsAuthenticated(true)
           sessionStorage.setItem('biznestusa_admin_auth', 'true')
@@ -324,34 +325,36 @@ export default function AdminPage() {
     e.preventDefault()
     setLoginError('')
 
-  const AUTHORIZED_ADMIN_EMAIL = 'admin@biznestusa.com'
-  const inputEmail = (adminEmail || '').trim().toLowerCase()
+    const emailTrimmed = (adminEmail || '').trim()
+    const passTrimmed = (adminPass || '').trim()
 
-    if (inputEmail !== AUTHORIZED_ADMIN_EMAIL) {
-      setLoginError('Access denied: only the authorized BizNestUSA administrator can log into the Admin Portal.')
-      toast.error('Access denied: only admin@biznestusa.com can access the admin portal.')
+    if (!emailTrimmed || !passTrimmed) {
+      setLoginError('Please enter your administrator email and password.')
       return
     }
 
-    if (adminEmail && adminPass) {
-      try {
-        const userCredential = await signInWithEmailAndPassword(auth, adminEmail.trim(), adminPass)
-        if (userCredential.user.email?.toLowerCase() !== AUTHORIZED_ADMIN_EMAIL) {
-          await signOut(auth)
-          setLoginError('Access Denied: Only admin@biznestusa.com is authorized to access the Admin Portal.')
-          toast.error('Access Denied: Unauthorized admin user.')
-          return
-        }
-        setAdminUid(userCredential.user.uid)
-        setIsAuthenticated(true)
-        sessionStorage.setItem('biznestusa_admin_auth', 'true')
-        toast.success('Firebase Admin authenticated successfully.')
-        fetchAdminData()
-      } catch (err: any) {
-        setLoginError('Authentication failed: invalid credentials for admin@biznestusa.com.')
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, emailTrimmed, passTrimmed)
+      const authedUser = userCredential.user
+      const isMasterAdmin = authedUser.uid === 'Mg7clnjHqqTUWk4uBw2zd0yLAcX2' || authedUser.email?.toLowerCase() === 'admin@biznestusa.com'
+
+      if (!isMasterAdmin) {
+        await signOut(auth)
+        sessionStorage.removeItem('biznestusa_admin_auth')
+        setLoginError('Access Denied: Only the authorized administrator account is permitted to access the Admin Portal.')
+        toast.error('Access Denied: Only the authorized administrator is allowed.')
+        return
       }
-    } else {
-      setLoginError('Please enter admin@biznestusa.com and your Firebase Auth password.')
+
+      setAdminUid(authedUser.uid)
+      setIsAuthenticated(true)
+      sessionStorage.setItem('biznestusa_admin_auth', 'true')
+      toast.success('Firebase Admin authenticated successfully.')
+      fetchAdminData()
+    } catch (err: any) {
+      console.error('Admin authentication error:', err)
+      setLoginError('Authentication failed: invalid administrator credentials or password.')
+      toast.error('Authentication failed: please check your email and password.')
     }
   }
 
@@ -533,7 +536,8 @@ export default function AdminPage() {
                   type="email"
                   value={adminEmail}
                   onChange={(e) => setAdminEmail(e.target.value)}
-                  placeholder="admin@biznestusa.com"
+                  placeholder="Enter administrator email"
+                  required
                   className="w-full px-4 py-3 bg-[#F4F7FC] border border-[#D9E2F1] rounded-xl text-sm focus:outline-none focus:border-[#2563EB] text-[#0F172A]"
                 />
               </div>
@@ -2650,14 +2654,24 @@ export default function AdminPage() {
                 </button>
               </div>
 
-              {/* High-Resolution Screenshot Image Area */}
-              <div className="rounded-2xl overflow-y-auto bg-slate-950 flex flex-col items-center justify-center max-h-[55vh] p-2 border border-slate-800 relative group">
+              {/* High-Resolution Screenshot Image Area (Click to open in new tab) */}
+              <a
+                href={selectedScreenshot.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Click image to open full size in new tab"
+                className="rounded-2xl overflow-y-auto bg-slate-950 flex flex-col items-center justify-center max-h-[55vh] p-2 border border-slate-800 relative group cursor-pointer"
+              >
                 <img
                   src={selectedScreenshot.url}
                   alt="Payment Receipt"
-                  className="max-h-[50vh] w-auto object-contain rounded-xl"
+                  className="max-h-[50vh] w-auto object-contain rounded-xl group-hover:scale-[1.01] transition-transform duration-200"
                 />
-              </div>
+                <div className="absolute bottom-4 right-4 bg-black/75 px-3 py-1.5 rounded-lg text-white text-[11px] font-bold flex items-center gap-1.5 opacity-90 group-hover:opacity-100 transition shadow-lg">
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Click Image to Open Large in New Tab</span>
+                </div>
+              </a>
 
               {/* Legitimacy Checklist Box */}
               <div className="p-3.5 bg-blue-50/80 rounded-2xl border border-blue-200/80 text-xs space-y-1.5 text-slate-700">
@@ -2774,23 +2788,195 @@ export default function AdminPage() {
                   <div><strong>Email:</strong> {selectedBiz.email}</div>
                   <div><strong>Website:</strong> {selectedBiz.website}</div>
                   <div className="col-span-2"><strong>Address:</strong> {selectedBiz.address}</div>
+                  <div className="col-span-2">
+                    <strong>Onboarding Plan:</strong>{' '}
+                    <span className="font-extrabold text-blue-700">
+                      {selectedBiz.plan === 'authoritative_10'
+                        ? '$10 Authoritative Plan (VIP 24h Review, 48h Indexing, 10 Posts / 60d)'
+                        : selectedBiz.plan === 'priority_5'
+                        ? '$5 Standard Plan (Single Page + Profile Editing + 5 Posts)'
+                        : '$1 Basic Plan (Category List/Grid View Only, No Single Page)'}
+                    </span>
+                  </div>
                 </div>
 
-                {selectedBiz.paymentScreenshot && (
-                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between">
-                    <span className="font-bold text-blue-900">Listing Supporting Proof Attached:</span>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedScreenshot({
-                        url: selectedBiz.paymentScreenshot!,
-                        name: selectedBiz.name,
-                        ref: selectedBiz.paymentDetails?.referenceNumber || 'Standard Review'
-                      })}
-                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      <span>View Screenshot</span>
-                    </button>
+                {/* Operating Hours Display */}
+                {selectedBiz.operatingHours && Object.keys(selectedBiz.operatingHours).length > 0 && (
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                    <span className="font-bold text-slate-900 block mb-1">Operating Hours:</span>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-[11px]">
+                      {Object.entries(selectedBiz.operatingHours).map(([day, hrs]) => (
+                        <div key={day} className="flex justify-between bg-white px-2 py-1 rounded border border-slate-100">
+                          <span className="font-semibold text-slate-600">{day.slice(0, 3)}:</span>
+                          <span className={hrs === 'Closed' ? 'text-slate-400' : 'text-slate-900 font-bold'}>{hrs}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Pending Edit Request Notice if any */}
+                {(selectedBiz as any).pendingEditRequest && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1">
+                    <span className="font-bold text-amber-900 block">Pending Profile Edit Request (24h Review):</span>
+                    <p className="text-[11px] text-amber-800 leading-relaxed">
+                      Updated Name: {(selectedBiz as any).pendingEditRequest.name || selectedBiz.name} • Phone: {(selectedBiz as any).pendingEditRequest.phone || selectedBiz.phone}
+                    </p>
+                  </div>
+                )}
+
+                {/* Brand Authority & Social Profiles (Google Business Profile, Facebook, Instagram, LinkedIn) */}
+                {(selectedBiz.googleBusinessProfile || selectedBiz.facebookUrl || selectedBiz.instagramUrl || selectedBiz.linkedinUrl) && (
+                  <div className="p-3.5 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2">
+                    <span className="font-extrabold text-indigo-950 block text-xs flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Brand Authority &amp; Google Ranking Profiles:</span>
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                      {selectedBiz.googleBusinessProfile && (
+                        <div className="bg-white p-2 rounded-lg border border-indigo-100 flex items-center justify-between">
+                          <span className="font-bold text-slate-700">Google Business:</span>
+                          <a
+                            href={selectedBiz.googleBusinessProfile}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline flex items-center gap-1 font-semibold truncate max-w-[170px]"
+                          >
+                            <span>Open Profile / Maps</span>
+                            <ExternalLink className="w-3 h-3 shrink-0" />
+                          </a>
+                        </div>
+                      )}
+                      {selectedBiz.facebookUrl && (
+                        <div className="bg-white p-2 rounded-lg border border-indigo-100 flex items-center justify-between">
+                          <span className="font-bold text-slate-700">Facebook:</span>
+                          <a
+                            href={selectedBiz.facebookUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline flex items-center gap-1 font-semibold truncate max-w-[170px]"
+                          >
+                            <span>Open Facebook</span>
+                            <ExternalLink className="w-3 h-3 shrink-0" />
+                          </a>
+                        </div>
+                      )}
+                      {selectedBiz.instagramUrl && (
+                        <div className="bg-white p-2 rounded-lg border border-indigo-100 flex items-center justify-between">
+                          <span className="font-bold text-slate-700">Instagram:</span>
+                          <a
+                            href={selectedBiz.instagramUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-pink-600 hover:underline flex items-center gap-1 font-semibold truncate max-w-[170px]"
+                          >
+                            <span>Open Instagram</span>
+                            <ExternalLink className="w-3 h-3 shrink-0" />
+                          </a>
+                        </div>
+                      )}
+                      {selectedBiz.linkedinUrl && (
+                        <div className="bg-white p-2 rounded-lg border border-indigo-100 flex items-center justify-between">
+                          <span className="font-bold text-slate-700">LinkedIn:</span>
+                          <a
+                            href={selectedBiz.linkedinUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-700 hover:underline flex items-center gap-1 font-semibold truncate max-w-[170px]"
+                          >
+                            <span>Open LinkedIn</span>
+                            <ExternalLink className="w-3 h-3 shrink-0" />
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Payment Screenshot & Large Image Verification in Details Modal */}
+                {selectedBiz.paymentScreenshot ? (
+                  <div className="p-4 bg-emerald-50/80 border-2 border-emerald-200 rounded-2xl space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-emerald-200/60 pb-2">
+                      <div>
+                        <span className="font-extrabold text-emerald-950 text-xs flex items-center gap-1.5">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                          <span>Payment Screenshot Attached for Verification</span>
+                        </span>
+                        <p className="text-[11px] text-emerald-800 mt-0.5">
+                          Plan: <strong>{selectedBiz.planName || selectedBiz.plan}</strong> • Ref: <strong>{selectedBiz.transactionRef || selectedBiz.paymentDetails?.referenceNumber || 'N/A'}</strong>
+                        </p>
+                      </div>
+
+                      <a
+                        href={selectedBiz.paymentScreenshot}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-extrabold shadow-sm transition hover:scale-105 cursor-pointer self-start sm:self-auto"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span>Open Large Image in New Tab</span>
+                      </a>
+                    </div>
+
+                    {/* Screenshot image display with click-to-open-new-tab */}
+                    <div className="flex flex-col sm:flex-row items-center gap-4 bg-white p-3 rounded-xl border border-emerald-200">
+                      <a
+                        href={selectedBiz.paymentScreenshot}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Click to open large image in new tab for verification"
+                        className="relative group cursor-pointer block shrink-0 overflow-hidden rounded-xl border-2 border-slate-200 hover:border-emerald-500 transition-all shadow-md"
+                      >
+                        <img
+                          src={selectedBiz.paymentScreenshot}
+                          alt={`Payment receipt for ${selectedBiz.name}`}
+                          className="w-36 h-36 object-contain bg-slate-900 group-hover:scale-105 transition-transform duration-200"
+                        />
+                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center transition-opacity text-white text-[11px] font-bold gap-1 text-center p-2">
+                          <ExternalLink className="w-4 h-4" />
+                          <span>Click to Open Large Image</span>
+                        </div>
+                      </a>
+
+                      <div className="space-y-1.5 text-xs text-slate-700 flex-1">
+                        <p className="font-extrabold text-slate-900 text-xs">
+                          Click image or &quot;Open Large Image in New Tab&quot; above to inspect high-resolution transaction details, sender account name, and bank confirmation ID.
+                        </p>
+                        <p className="text-[11px] text-slate-500">
+                          Payment Status: <span className="font-bold uppercase text-emerald-700">{selectedBiz.paymentStatus || 'SUBMITTED'}</span>
+                        </p>
+                        {selectedBiz.status === 'pending' && (
+                          <div className="pt-2 flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleApprove(selectedBiz.id, selectedBiz.name)
+                                setSelectedBiz({ ...selectedBiz, status: 'approved', paymentStatus: 'VERIFIED' })
+                              }}
+                              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-sm transition hover:scale-105 cursor-pointer"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Verify &amp; Approve Business</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleReject(selectedBiz.id, selectedBiz.name)
+                                setSelectedBiz({ ...selectedBiz, status: 'rejected' })
+                              }}
+                              className="px-3.5 py-2 bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-700 rounded-xl text-xs font-bold transition cursor-pointer"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>No payment screenshot attached yet for this listing.</span>
                   </div>
                 )}
               </div>
@@ -2801,14 +2987,25 @@ export default function AdminPage() {
                 </span>
 
                 <div className="flex gap-2">
-                  <Link
-                    href={`/business/${selectedBiz.slug}`}
-                    target="_blank"
-                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs"
-                  >
-                    <Eye className="w-4 h-4" />
-                    <span>View Live Page</span>
-                  </Link>
+                  {selectedBiz.plan === 'review_1' || selectedBiz.hasSinglePage === false ? (
+                    <Link
+                      href={`/category/${selectedBiz.category ? selectedBiz.category.toLowerCase().replace(/[^a-z0-9]+/g, '-') : 'general'}`}
+                      target="_blank"
+                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs"
+                    >
+                      <Eye className="w-4 h-4" />
+                      <span>View in Category</span>
+                    </Link>
+                  ) : (
+                    <Link
+                      href={`/business/${selectedBiz.slug}`}
+                      target="_blank"
+                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs"
+                    >
+                      <Eye className="w-4 h-4" />
+                      <span>View Live Page</span>
+                    </Link>
+                  )}
                   {selectedBiz.status === 'pending' && (
                     <button
                       onClick={() => handleApprove(selectedBiz.id, selectedBiz.name)}

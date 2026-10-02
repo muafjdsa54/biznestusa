@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Navbar from '@/components/navbar'
 import Footer from '@/components/footer'
-import { Mail, Phone, MapPin, MessageSquare, ShieldCheck, AlertCircle } from 'lucide-react'
+import { Mail, MapPin, MessageSquare, MessageCircle, ShieldCheck, AlertCircle, ExternalLink, Sparkles } from 'lucide-react'
 import { saveContactMessage } from '@/lib/db-service'
 import { isValidPersonName, validatePersonName, filterPersonNameInput, isValidUsPhone, validateUsPhone, formatUsPhone, isValidEmail } from '@/lib/validation'
 import { toast } from 'sonner'
@@ -95,14 +95,35 @@ export default function ContactPage() {
         
         {/* HERO SECTION */}
         <section className="bg-white border-b border-slate-200 py-14 sm:py-16">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-3">
-            <span className="text-xs font-bold uppercase tracking-wider text-blue-600">Support & Inquiries</span>
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-4">
+            <span className="text-xs font-bold uppercase tracking-wider text-blue-600">Support &amp; Inquiries</span>
             <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900 max-w-4xl mx-auto">
               Contact Directory Administration
             </h1>
             <p className="text-sm sm:text-base text-slate-600 max-w-2xl mx-auto leading-relaxed">
-              Need assistance with your business profile, professional page, job posting, or directory verification? We are here to help.
+              Need assistance with your business listing, profile editing, verification status, or technical support? We are here to assist you.
             </p>
+
+            {/* FAST INQUIRY WHATSAPP HERO CTA */}
+            <div className="pt-2 flex flex-wrap justify-center items-center gap-3">
+              <a
+                href="https://wa.me/923345636230?text=Hello%20BizNest%20USA%2C%20I%20have%20an%20inquiry%20regarding%20my%20business%20listing."
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs sm:text-sm rounded-2xl shadow-lg shadow-emerald-600/20 transition-all hover:scale-105 cursor-pointer"
+              >
+                <MessageCircle className="w-5 h-5 fill-white" />
+                <span>Fast Inquiry: Chat on WhatsApp</span>
+                <ExternalLink className="w-4 h-4 opacity-80" />
+              </a>
+              <a
+                href="mailto:support@biznestusa.com"
+                className="inline-flex items-center gap-2 px-5 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs sm:text-sm rounded-2xl transition-colors cursor-pointer"
+              >
+                <Mail className="w-4 h-4 text-blue-600" />
+                <span>support@biznestusa.com</span>
+              </a>
+            </div>
           </div>
         </section>
 
@@ -111,50 +132,88 @@ export default function ContactPage() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               
-              {/* Email Support */}
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 shadow-xs space-y-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
-                  <Mail className="w-5 h-5" />
+              {/* Email Support (ONLY support@biznestusa.com as requested) */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 shadow-xs space-y-3 flex flex-col justify-between">
+                <div className="space-y-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
+                    <Mail className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-base">Official Support Email</h3>
+                    <p className="text-xs text-slate-500">For all business listings, billing &amp; general inquiries</p>
+                  </div>
+                  <div className="pt-2 border-t border-slate-200/80">
+                    <a
+                      href="mailto:support@biznestusa.com"
+                      className="text-sm font-extrabold text-blue-600 hover:text-blue-800 hover:underline block"
+                    >
+                      support@biznestusa.com
+                    </a>
+                    <span className="text-[11px] text-slate-500 mt-1 block">Replies usually within 2 to 4 business hours</span>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-bold text-slate-900 text-base">Email Support</h3>
-                  <p className="text-xs text-slate-500">Fast response for listing and technical inquiries</p>
-                </div>
-                <ul className="space-y-1.5 text-xs text-slate-600 pt-2 border-t border-slate-200/80">
-                  <li><strong>Support:</strong> support@biznestusa.com</li>
-                  <li><strong>Listings:</strong> admin@biznestusa.com</li>
-                  <li><strong>Recruitment:</strong> careers@biznestusa.com</li>
-                </ul>
+                <a
+                  href="mailto:support@biznestusa.com"
+                  className="w-full py-2.5 px-4 bg-white hover:bg-blue-50 text-blue-700 font-bold text-xs rounded-xl border border-blue-200 transition text-center flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Mail className="w-3.5 h-3.5" />
+                  <span>Send Direct Email</span>
+                </a>
               </div>
 
-              {/* Phone Assistance */}
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 shadow-xs space-y-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
-                  <Phone className="w-5 h-5" />
+              {/* Fast Inquiry WhatsApp (NUMBER HIDDEN FROM UI DISPLAY AS REQUESTED) */}
+              <div className="bg-emerald-50/60 border border-emerald-200 rounded-2xl p-6 shadow-xs space-y-3 flex flex-col justify-between">
+                <div className="space-y-3">
+                  <div className="flex justify-between items-start">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                      <MessageCircle className="w-5 h-5" />
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-extrabold uppercase tracking-wider">
+                      Instant Chat
+                    </span>
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-base">Fast Inquiry on WhatsApp</h3>
+                    <p className="text-xs text-slate-600">Quickest way to contact directory support &amp; track listings</p>
+                  </div>
+                  <div className="space-y-1.5 text-xs text-slate-600 pt-2 border-t border-emerald-200/60">
+                    <p className="flex items-center gap-1.5 font-semibold text-emerald-950">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      <span>Direct Representative Access</span>
+                    </p>
+                    <p className="text-[11px] text-slate-500">Available 7 Days • Instant response for priority assistance</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-bold text-slate-900 text-base">Direct Assistance</h3>
-                  <p className="text-xs text-slate-500">Business verification and listing guidance</p>
-                </div>
-                <div className="space-y-1.5 text-xs text-slate-600 pt-2 border-t border-slate-200/80">
-                  <p><strong>Toll-Free Support:</strong> (800) 555-0199</p>
-                  <p><strong>Operating Hours:</strong> Mon – Fri, 9:00 AM – 6:00 PM EST</p>
-                </div>
+                <a
+                  href="https://wa.me/923345636230?text=Hello%20BizNest%20USA%2C%20I%20have%20an%20inquiry%20regarding%20my%20business%20listing."
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition text-center flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <MessageCircle className="w-4 h-4 fill-white" />
+                  <span>Chat on WhatsApp</span>
+                  <ExternalLink className="w-3.5 h-3.5 opacity-80" />
+                </a>
               </div>
 
               {/* Office Address */}
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 shadow-xs space-y-3">
-                <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center">
-                  <MapPin className="w-5 h-5" />
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 shadow-xs space-y-3 flex flex-col justify-between">
+                <div className="space-y-3">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center">
+                    <MapPin className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-base">Corporate Office</h3>
+                    <p className="text-xs text-slate-500">United States Operations</p>
+                  </div>
+                  <div className="space-y-1 text-xs text-slate-600 pt-2 border-t border-slate-200/80">
+                    <p className="font-bold text-slate-800">BizNestUSA Directory Network</p>
+                    <p>100 Wall Street, Suite 500</p>
+                    <p>New York, NY 10005, United States</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-bold text-slate-900 text-base">Corporate Office</h3>
-                  <p className="text-xs text-slate-500">United States Operations</p>
-                </div>
-                <div className="space-y-1 text-xs text-slate-600 pt-2 border-t border-slate-200/80">
-                  <p><strong>BizNestUSA Directory Network</strong></p>
-                  <p>100 Wall Street, Suite 500</p>
-                  <p>New York, NY 10005, United States</p>
+                <div className="pt-2 text-[11px] text-slate-400">
+                  Business Hours: Mon – Fri 9:00 AM – 6:00 PM EST
                 </div>
               </div>
 
@@ -286,6 +345,18 @@ export default function ContactPage() {
             )}
           </div>
         </section>
+
+        {/* FLOATING FAST INQUIRY WHATSAPP BUTTON (Number hidden from UI, active behind icon) */}
+        <a
+          href="https://wa.me/923345636230?text=Hello%20BizNest%20USA%2C%20I%20have%20an%20inquiry%20regarding%20my%20business%20listing."
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Fast Inquiry on WhatsApp"
+          className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-3 rounded-full shadow-2xl shadow-emerald-950/40 hover:scale-105 active:scale-95 transition-all duration-200 group border-2 border-white/20 cursor-pointer"
+        >
+          <MessageCircle className="w-5 h-5 fill-white shrink-0" />
+          <span className="font-extrabold text-xs tracking-wide">WhatsApp Fast Inquiry</span>
+        </a>
       </main>
       <Footer />
     </>

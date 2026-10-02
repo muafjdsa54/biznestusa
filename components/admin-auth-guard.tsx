@@ -16,7 +16,8 @@ export default function AdminAuthGuard({ children }: { children: React.ReactNode
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setIsAuthenticated(user?.email?.toLowerCase() === 'admin@biznestusa.com')
+      const isMasterAdmin = user?.uid === 'Mg7clnjHqqTUWk4uBw2zd0yLAcX2' || user?.email?.toLowerCase() === 'admin@biznestusa.com'
+      setIsAuthenticated(Boolean(isMasterAdmin))
     })
     return () => unsubscribe()
   }, [])
@@ -27,7 +28,8 @@ export default function AdminAuthGuard({ children }: { children: React.ReactNode
     setError('')
     try {
       const credential = await signInWithEmailAndPassword(auth, email.trim(), password)
-      if (credential.user.email?.toLowerCase() !== 'admin@biznestusa.com') {
+      const isMasterAdmin = credential.user.uid === 'Mg7clnjHqqTUWk4uBw2zd0yLAcX2' || credential.user.email?.toLowerCase() === 'admin@biznestusa.com'
+      if (!isMasterAdmin) {
         await signOut(auth)
         throw new Error('Unauthorized administrator')
       }

@@ -20,6 +20,7 @@ import {
 } from '@/lib/directory-helpers'
 import { CATEGORIES } from '@/lib/data'
 import { BreadcrumbSchema } from '@/components/seo/breadcrumb-schema'
+import CategoryListingsView from '@/components/business/category-listings-view'
 import {
   Building2,
   MapPin,
@@ -246,104 +247,8 @@ export default async function CategoryCityLandingPage(props: {
           </p>
         </div>
 
-        {/* Business Listings Grid */}
-        <section className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
-              <Building2 className="w-5 h-5 text-blue-600" />
-              <span>Available {categoryName} in {cityName}</span>
-            </h2>
-            <Link href={`/city/${citySlug}`} className="text-xs font-bold text-blue-600 hover:underline">
-              All Businesses in {cityName} &rarr;
-            </Link>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {businesses.map((biz) => (
-              <div
-                key={biz.id}
-                className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
-              >
-                <div className="space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3.5">
-                      <Image
-                        src={biz.logo}
-                        alt={biz.name}
-                        width={52}
-                        height={52}
-                        loading="lazy"
-                        sizes="52px"
-                        className="w-13 h-13 rounded-xl object-cover border border-slate-100 shrink-0"
-                      />
-                      <div>
-                        <Link
-                          href={`/business/${biz.slug}`}
-                          className="font-bold text-slate-900 text-base hover:text-blue-600 flex items-center gap-1.5 transition-colors"
-                        >
-                          <span>{biz.name}</span>
-                          {biz.verified && (
-                            <span title="Verified Business" className="inline-flex">
-                              <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
-                            </span>
-                          )}
-                        </Link>
-                        <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
-                          <MapPin className="w-3 h-3 text-slate-400" />
-                          <span>{biz.address || `${cityName}, USA`}</span>
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1 text-amber-700 text-xs font-bold bg-amber-50 px-2 py-1 rounded-lg shrink-0">
-                      <Star className="w-3.5 h-3.5 fill-current text-amber-500" />
-                      <span>{biz.reviewCount > 0 && biz.rating > 0 ? biz.rating : 'Active'}</span>
-                    </div>
-                  </div>
-
-                  <p className="text-xs text-slate-600 line-clamp-3 leading-relaxed">
-                    {biz.description}
-                  </p>
-
-                  {biz.services && biz.services.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {biz.services.slice(0, 4).map((svc) => (
-                        <span
-                          key={svc}
-                          className="text-[11px] font-medium px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700"
-                        >
-                          {svc}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between text-xs">
-                  {biz.phone ? (
-                    <a
-                      href={`tel:${biz.phone}`}
-                      className="font-bold text-slate-700 hover:text-blue-600 flex items-center gap-1 transition-colors"
-                    >
-                      <Phone className="w-3.5 h-3.5 text-blue-600" />
-                      <span>{biz.phone}</span>
-                    </a>
-                  ) : (
-                    <span className="text-slate-400">Contact via Profile</span>
-                  )}
-
-                  <Link
-                    href={`/business/${biz.slug}`}
-                    className="font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1"
-                  >
-                    <span>View Profile</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </Link>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
+        {/* Business Listings (List View & Grid View supporting $1, $5, $10 plans) */}
+        <CategoryListingsView businesses={businesses} categoryName={categoryName} cityName={cityName} />
 
         {/* Cross-Link Section 1: Other Popular Categories in this City */}
         {otherCategoriesInCity.length > 0 && (
