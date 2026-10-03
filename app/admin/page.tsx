@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { db, auth } from '@/lib/firebase'
 import { collection, getDocs, updateDoc, deleteDoc, doc, query, orderBy, setDoc } from 'firebase/firestore'
@@ -9,13 +9,13 @@ import {
   Building2, ShieldCheck, CheckCircle2, XCircle, Trash2, Search, Filter, LogOut, 
   Eye, EyeOff, RefreshCw, Phone, Mail, MapPin, ExternalLink, Lock, Inbox, AlertTriangle, AlertCircle, Users, 
   BookOpen, Star, Sparkles, Check, Briefcase, DollarSign, Clock, FileText, ChevronRight, X,
-  Layers, Globe, Settings, Newspaper, Activity
+  Layers, Globe, Settings, Newspaper, Activity, Copy
 } from 'lucide-react'
 import Navbar from '@/components/navbar'
 import Footer from '@/components/footer'
 import AdminCmsTabs from '@/components/admin/admin-cms-tabs'
 import AdminSeoDiagnostics from '@/components/admin/admin-seo-diagnostics'
-import { BusinessItem, ContactMessage, CATEGORIES, ProfessionalItem, CompanyItem, JobItem, ProfessionalVerificationRequest, JobApplication } from '@/lib/data'
+import { BusinessItem, ContactMessage, CATEGORIES, ProfessionalItem, CompanyItem, JobItem, ProfessionalVerificationRequest, JobApplication, PaymentRecord } from '@/lib/data'
 import { getAllBusinesses, getPendingBusinesses, approveBusiness, rejectBusiness, getContactMessages, markContactMessageRead, deleteContactMessage } from '@/lib/db-service'
 import { 
   getAllProfessionals, approveProfessional, rejectProfessional, verifyProfessional, 
@@ -30,17 +30,22 @@ import { toast } from 'sonner'
 
 export default function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [adminEmail, setAdminEmail] = useState('admin@biznestusa.com')
+  const [adminEmail, setAdminEmail] = useState('')
   const [adminPass, setAdminPass] = useState('')
   const [showAdminPass, setShowAdminPass] = useState(false)
   const [loginError, setLoginError] = useState('')
-  const [adminUid, setAdminUid] = useState('admin-master')
+  const [adminUid, setAdminUid] = useState('0LM7RVOwGIMVK4rwVD6muuzPYij1')
 
   const [activeTab, setActiveTab] = useState<
     'overview' | 'payments' | 'pending' | 'businesses' | 'professionals' | 'verifications' | 'companies' | 'jobs' | 'applications' | 'messages' | 'categories' | 'locations' | 'articles' | 'settings' | 'seo'
   >('overview')
 
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'pending' | 'plan_1' | 'plan_5' | 'verified' | 'rejected' | 'needs_changes'>('all')
+  const [payStatusFilter, setPayStatusFilter] = useState<'all' | 'PENDING_PAYMENT' | 'PAYMENT_VERIFICATION_PENDING' | 'PAID' | 'REJECTED' | 'REFUNDED'>('all')
+  const [paymentRecords, setPaymentRecords] = useState<PaymentRecord[]>([])
+  const [selectedPaymentDetail, setSelectedPaymentDetail] = useState<PaymentRecord | null>(null)
+  const [rejectPaymentTarget, setRejectPaymentTarget] = useState<PaymentRecord | null>(null)
+  const [rejectReasonInput, setRejectReasonInput] = useState<string>('')
   const [adminNotesMap, setAdminNotesMap] = useState<Record<string, string>>({})
 
   const [allBusinesses, setAllBusinesses] = useState<BusinessItem[]>([])
@@ -68,7 +73,7 @@ export default function AdminPage() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        const isMasterAdmin = user.uid === 'Mg7clnjHqqTUWk4uBw2zd0yLAcX2' || user.email?.toLowerCase() === 'admin@biznestusa.com'
+        const isMasterAdmin = user.uid === '0LM7RVOwGIMVK4rwVD6muuzPYij1'
         if (isMasterAdmin) {
           setAdminUid(user.uid)
           setIsAuthenticated(true)
@@ -102,6 +107,19 @@ export default function AdminPage() {
       setAllJobApplications(apps)
       const msgs = await getContactMessages()
       setContactMessages(msgs)
+
+      // Fetch unified payment records
+      try {
+        const payRes = await fetch('/api/payments/list?isAdmin=true')
+        if (payRes.ok) {
+          const payData = await payRes.json()
+          if (payData.payments && Array.isArray(payData.payments)) {
+            setPaymentRecords(payData.payments)
+          }
+        }
+      } catch (payErr) {
+        console.warn('Payment records fetch notice:', payErr)
+      }
     } catch (err) {
       console.error('Error fetching admin data:', err)
     } finally {
@@ -336,7 +354,7 @@ export default function AdminPage() {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, emailTrimmed, passTrimmed)
       const authedUser = userCredential.user
-      const isMasterAdmin = authedUser.uid === 'Mg7clnjHqqTUWk4uBw2zd0yLAcX2' || authedUser.email?.toLowerCase() === 'admin@biznestusa.com'
+      const isMasterAdmin = authedUser.uid === '0LM7RVOwGIMVK4rwVD6muuzPYij1'
 
       if (!isMasterAdmin) {
         await signOut(auth)
@@ -454,6 +472,116 @@ export default function AdminPage() {
       await fetchAdminData()
     } catch (err: any) {
       toast.error(err.message || 'Failed to process payment action.')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  // Consolidated payments from payments collection and businesses
+  const combinedPayments: PaymentRecord[] = useMemo(() => {
+    const map = new Map<string, PaymentRecord>()
+    paymentRecords.forEach(p => {
+      if (p.business_id) map.set(p.business_id, p)
+      else if (p.id) map.set(p.id, p)
+    })
+
+    allBusinesses.forEach(biz => {
+      const existing = map.get(biz.id)
+      if (!existing && (biz.plan || biz.paymentStatus || biz.paymentScreenshot || (biz as any).paymentDetails)) {
+        const rawStatus = (biz.paymentStatus || 'PENDING').toUpperCase()
+        let normStatus: any = 'PENDING_PAYMENT'
+        if (rawStatus === 'VERIFIED' || rawStatus === 'PAID') normStatus = 'PAID'
+        else if (rawStatus === 'REJECTED') normStatus = 'REJECTED'
+        else if (rawStatus === 'REFUNDED') normStatus = 'REFUNDED'
+        else if (rawStatus === 'SUBMITTED' || rawStatus === 'PAYMENT_VERIFICATION_PENDING' || rawStatus === 'UNDER_REVIEW' || Boolean(biz.paymentScreenshot || (biz as any).paymentDetails?.paymentScreenshot)) {
+          normStatus = 'PAYMENT_VERIFICATION_PENDING'
+        }
+
+        const price = biz.plan === 'authoritative_10' ? 10 : biz.plan === 'priority_5' ? 5 : 1
+        const planName = biz.plan === 'authoritative_10' ? 'Authoritative Plan' : biz.plan === 'priority_5' ? 'Standard Plan' : 'Basic Plan'
+        const ref = biz.payment_reference || (biz as any).paymentDetails?.referenceNumber || biz.transactionRef || ('BNUSA-2026-' + (biz.id ? biz.id.slice(-6).toUpperCase() : '000000'))
+
+        map.set(biz.id, {
+          id: `pay_${biz.id}`,
+          user_id: biz.userId || 'direct_user',
+          user_email: biz.email || (biz as any).userEmail || '',
+          business_id: biz.id,
+          business_name: biz.name,
+          business_slug: biz.slug,
+          customer_name: biz.ownerName || 'Business Owner',
+          customer_email: biz.email || '',
+          plan_id: biz.plan || 'priority_5',
+          plan_name: planName,
+          amount: price,
+          currency: 'USD',
+          payment_reference: ref,
+          payment_provider: 'payoneer',
+          payment_status: normStatus,
+          payment_screenshot_url: biz.paymentScreenshot || (biz as any).paymentDetails?.paymentScreenshot || null,
+          payoneer_transaction_id: biz.payoneer_transaction_id || (biz as any).paymentDetails?.transactionId || null,
+          customer_note: biz.customer_note || (biz as any).paymentDetails?.customerNote || null,
+          created_at: (biz as any).createdAt || biz.submittedAt || new Date().toISOString(),
+          screenshot_submitted_at: biz.submittedAt || null,
+          verified_at: (biz as any).paymentVerifiedAt || (biz as any).approvedAt || null,
+          verified_by: (biz as any).paymentVerifiedBy || (biz as any).approvedBy || null,
+          rejection_reason: biz.rejectionReason || null
+        })
+      }
+    })
+
+    return Array.from(map.values())
+  }, [paymentRecords, allBusinesses])
+
+  const handleApprovePayment = async (payment: PaymentRecord) => {
+    setActionLoading(payment.business_id + '_approve_payment')
+    try {
+      const res = await fetch('/api/admin/payment-actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          businessId: payment.business_id,
+          action: 'approve_payment',
+          adminId: adminUid
+        })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to approve payment')
+      toast.success(`Payment verified and plan entitlements activated for "${payment.business_name || 'business'}"!`)
+      setSelectedPaymentDetail(null)
+      await fetchAdminData()
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to approve payment')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleRejectPayment = async (payment: PaymentRecord, reason: string) => {
+    if (!reason || !reason.trim()) {
+      toast.error('Rejection reason is required.')
+      return
+    }
+    setActionLoading(payment.business_id + '_reject_payment')
+    try {
+      const res = await fetch('/api/admin/payment-actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          businessId: payment.business_id,
+          action: 'reject_payment',
+          adminId: adminUid,
+          adminNotes: reason.trim()
+        })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to reject payment')
+      toast.info(`Payment rejected for "${payment.business_name || 'business'}". Reason recorded.`)
+      setRejectPaymentTarget(null)
+      setRejectReasonInput('')
+      setSelectedPaymentDetail(null)
+      await fetchAdminData()
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to reject payment')
     } finally {
       setActionLoading(null)
     }

@@ -436,6 +436,8 @@ export interface BusinessPaymentDetails {
   paymentMethod?: string
   referenceNumber?: string
   transactionRef?: string
+  transactionId?: string
+  customerNote?: string
   amount: number
   screenshotUrl?: string
   paymentScreenshot?: string
@@ -540,6 +542,56 @@ export type BusinessPaymentStatus =
   | 'NEEDS_CHANGES' 
   | 'FREE' 
   | 'UNPAID'
+  | 'PENDING_PAYMENT'
+  | 'PAYMENT_VERIFICATION_PENDING'
+  | 'PAID'
+  | 'REFUNDED'
+
+export type PaymentStatus =
+  | 'PENDING_PAYMENT'
+  | 'PAYMENT_VERIFICATION_PENDING'
+  | 'PAID'
+  | 'REJECTED'
+  | 'REFUNDED'
+
+export interface PaymentRecord {
+  id: string
+  user_id: string
+  user_email?: string
+  business_id: string
+  business_name: string
+  business_slug?: string
+  customer_name?: string
+  customer_email?: string
+  plan_id: BusinessPlan
+  plan_name: string
+  amount: number
+  currency: string
+  payment_reference: string
+  payment_provider: 'payoneer'
+  payment_status: PaymentStatus
+  payoneer_transaction_id?: string | null
+  payment_screenshot_url?: string | null
+  customer_note?: string | null
+  created_at: string
+  screenshot_submitted_at?: string | null
+  verified_at?: string | null
+  rejected_at?: string | null
+  verified_by?: string | null
+  rejection_reason?: string | null
+  admin_notes?: string | null
+}
+
+export interface PaymentAuditLog {
+  id: string
+  payment_id: string
+  payment_reference: string
+  business_id: string
+  action: 'created' | 'screenshot_submitted' | 'approved' | 'rejected' | 'refunded'
+  admin_id?: string | null
+  notes?: string | null
+  created_at: string
+}
 
 export interface UserBlogPost {
   id: string
@@ -650,6 +702,10 @@ export interface BusinessItem {
   paymentDetails?: BusinessPaymentDetails
   paymentScreenshot?: string
   transactionRef?: string
+  payment_reference?: string
+  payment_provider?: string
+  payoneer_transaction_id?: string
+  customer_note?: string
   paymentStatus?: BusinessPaymentStatus
   paymentSubmittedAt?: string
   paymentVerifiedAt?: string

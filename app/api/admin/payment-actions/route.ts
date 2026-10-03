@@ -44,16 +44,43 @@ export async function POST(req: NextRequest) {
 
     switch (action) {
       case 'verify_payment':
-        updates.paymentStatus = 'VERIFIED'
+      case 'approve_payment':
+        updates.paymentStatus = 'PAID'
         updates.paymentVerifiedAt = nowIso
         updates.paymentVerifiedBy = adminId || 'admin-master'
-        // If it's a priority_5 plan, automatically enable blog entitlement upon payment verification
-        if (bizData.plan === 'priority_5') {
+        
+        // Activate plan entitlements
+        if (bizData.plan === 'authoritative_10') {
+          updates.hasSinglePage = true
+          updates.canEditProfile = true
+          updates.blog_post_feature_enabled = true
+          updates.blog_post_entitled = true
+          updates.blog_posts_allowed = 10
+          updates.blog_post_feature_enabled_at = nowIso
+          updates.enabled_by_admin_id = adminId || 'admin-master'
+        } else if (bizData.plan === 'priority_5') {
+          updates.hasSinglePage = true
+          updates.canEditProfile = true
           updates.blog_post_feature_enabled = true
           updates.blog_post_entitled = true
           updates.blog_posts_allowed = 5
           updates.blog_post_feature_enabled_at = nowIso
           updates.enabled_by_admin_id = adminId || 'admin-master'
+        } else {
+          // review_1 ($1 basic): basic directory card only
+          updates.hasSinglePage = false
+          updates.canEditProfile = false
+          updates.blog_post_feature_enabled = false
+          updates.blog_post_entitled = false
+          updates.blog_posts_allowed = 0
+        }
+
+        // Also update matching record in payments collection
+        try {
+          const { approvePayment } = await import('@/lib/payment-service')
+          await approvePayment(businessId, adminId || 'admin-master')
+        } catch (payErr) {
+          console.warn('payment-service approve sync notice:', payErr)
         }
         break
 
@@ -67,7 +94,7 @@ export async function POST(req: NextRequest) {
       case 'enable_blog_feature':
         updates.blog_post_feature_enabled = true
         updates.blog_post_entitled = true
-        updates.blog_posts_allowed = 5
+        updates.blog_posts_allowed = bizData.plan === 'authoritative_10' ? 10 : 5
         updates.blog_post_feature_enabled_at = nowIso
         updates.enabled_by_admin_id = adminId || 'admin-master'
         break
@@ -81,10 +108,20 @@ export async function POST(req: NextRequest) {
         updates.paymentStatus = 'NEEDS_CHANGES'
         break
 
+      case 'reject_payment':
       case 'reject':
         updates.status = 'rejected'
         updates.paymentStatus = 'REJECTED'
         updates.rejectedAt = nowIso
+        if (adminNotes) {
+          updates.rejectionReason = adminNotes
+        }
+        try {
+          const { rejectPayment } = await import('@/lib/payment-service')
+          await rejectPayment(businessId, adminNotes || 'Payment rejected by administrator.', adminId || 'admin-master')
+        } catch (rejErr) {
+          console.warn('payment-service reject sync notice:', rejErr)
+        }
         break
 
       case 'save_notes':

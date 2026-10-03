@@ -11,7 +11,7 @@ service cloud.firestore {
     function isAdmin() {
       return signedIn()
         && (
-          request.auth.uid == 'Mg7clnjHqqTUWk4uBw2zd0yLAcX2' ||
+          request.auth.uid == '0LM7RVOwGIMVK4rwVD6muuzPYij1' ||
           request.auth.token.email == 'admin@biznestusa.com' ||
           request.auth.token.email == 'contact@biznestusa.com' ||
           request.auth.token.admin == true
@@ -103,9 +103,19 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    match /platform_settings/{settingId} {
-      allow read: if true;
-      allow write: if isAdmin();
+    // 9. BUSINESS PAYMENTS & AUDIT LOGS
+    match /payments/{paymentId} {
+      allow read: if isAdmin() || (signedIn() && (
+        resource.data.user_id == request.auth.uid ||
+        resource.data.userId == request.auth.uid ||
+        resource.data.user_email == request.auth.token.email
+      ));
+      allow create: if signedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    match /payment_audit_logs/{logId} {
+      allow read, write: if isAdmin();
     }
 
     // Default lock down for everything else

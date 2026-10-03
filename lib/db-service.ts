@@ -4,6 +4,7 @@ import { db } from './firebase'
 import { collection, getDocs, query, where, limit, addDoc, doc, updateDoc, deleteDoc, setDoc } from 'firebase/firestore'
 import { sanitizeText, sanitizeUrl, sanitizeImageUrl, sanitizePhone, sanitizePersonName } from './sanitizer'
 import { isPakistaniEntity } from './directory-helpers'
+import { generatePaymentReference, createOrGetPaymentRecord, submitPaymentProof } from './payment-service'
 
 // Memory cache store for super fast reads and SSG generation
 let memoryBusinessesCache: BusinessItem[] = [...MOCK_BUSINESSES]
@@ -554,150 +555,205 @@ export async function saveBusinessToDatabase(businessData: Partial<BusinessItem>
   const resolvedHasSinglePage = businessData.hasSinglePage !== undefined ? businessData.hasSinglePage : !isBasic
   const resolvedCanEditProfile = businessData.canEditProfile !== undefined ? businessData.canEditProfile : (isStandard || isAuthoritative)
   const resolvedPostsAllowed = businessData.blog_posts_allowed ?? (isAuthoritative ? 10 : (isStandard ? 5 : 0))
+  const resolvedPaymentRef = businessData.payment_reference || businessData.transactionRef || generatePaymentReference()
+  const resolvedPaymentStatus = businessData.paymentStatus || (businessData.paymentScreenshot ? 'PAYMENT_VERIFICATION_PENDING' : 'PENDING_PAYMENT')
+  const primaryCity = primaryLoc.city || summaryCity
 
   const newBiz: BusinessItem = {
-    id: bizId,
-    userId: businessData.userId || '',
-    slug,
-    name: cleanName,
-    category: sanitizeText(businessData.category || 'Services', 80),
-    categoryId: sanitizeText(businessData.categoryId || 'services', 80),
-    subCategory: sanitizeText(businessData.subCategory || businessData.subcategory || (businessData.secondaryCategories?.[0] || ''), 80),
-    secondaryCategories: Array.isArray(businessData.secondaryCategories)
-      ? businessData.secondaryCategories.map(s => sanitizeText(s, 60))
-      : (businessData.subcategory ? [sanitizeText(businessData.subcategory, 60)] : []),
-    city: summaryCity,
-    cities: allCities,
-    locations: inputLocations,
-    state: sanitizeText(businessData.state || businessData.province || 'New York', 80),
-    province: sanitizeText(businessData.state || businessData.province || 'New York', 80),
-    rating: 0,
-    reviewCount: 0,
-    verified: false,
-    isClaimed: false,
-    isFeatured: false,
-    status: 'pending', // MANDATORY PENDING WORKFLOW
-    plan: chosenPlan,
-    planName: resolvedPlanName,
-    planPrice: resolvedPrice,
-    hasSinglePage: resolvedHasSinglePage,
-    canEditProfile: resolvedCanEditProfile,
-    paymentStatus: businessData.paymentStatus || (businessData.paymentScreenshot ? 'SUBMITTED' : 'PENDING'),
-    paymentScreenshot: sanitizeImageUrl(businessData.paymentScreenshot || ''),
-    transactionRef: businessData.transactionRef || businessData.paymentDetails?.referenceNumber || '',
-    adminNotes: businessData.adminNotes || '',
-    blog_post_entitled: businessData.blog_post_entitled || (isStandard || isAuthoritative),
-    blog_posts_allowed: resolvedPostsAllowed,
-    blog_posts_used: businessData.blog_posts_used ?? 0,
-    blog_post_feature_enabled: businessData.blog_post_feature_enabled ?? false,
-    paymentDetails: businessData.paymentDetails,
-    submittedAt: new Date().toISOString(),
-    ownerName: sanitizeText(businessData.ownerName || 'Business Representative', 80),
-    phone: sanitizePhone(businessData.phone || '(555) 000-0000'),
-    whatsapp: businessData.whatsapp ? sanitizePhone(businessData.whatsapp) : '',
-    email: sanitizeText(businessData.email || 'contact@business.com', 120),
-    website: sanitizeUrl(businessData.website || 'https://biznestusa.com'),
-    googleBusinessProfile: sanitizeUrl(businessData.googleBusinessProfile || ''),
-    facebookUrl: sanitizeUrl(businessData.facebookUrl || ''),
-    instagramUrl: sanitizeUrl(businessData.instagramUrl || ''),
-    linkedinUrl: sanitizeUrl(businessData.linkedinUrl || ''),
-    address: summaryAddress,
-    coverImage: sanitizeImageUrl(businessData.coverImage || 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1200&q=80'),
-    logo: sanitizeImageUrl(businessData.logo || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=200&q=80'),
-    description: sanitizeText(businessData.description || 'Verified local business listing on BizNestUSA.', 5000),
-    services: Array.isArray(businessData.services) ? businessData.services.map(s => sanitizeText(s, 60)) : ['Professional Services'],
-    operatingHours: businessData.operatingHours || { 'Monday - Saturday': '09:00 AM - 06:00 PM', 'Sunday': 'Closed' },
-    features: [],
-    reviews: [],
-    faqs: Array.isArray(businessData.faqs) && businessData.faqs.length > 0
-      ? businessData.faqs.map((f: any) => ({
-          question: sanitizeText(f.question || f.q || '', 300),
-          answer: sanitizeText(f.answer || f.a || '', 2000)
-        })).filter((f: any) => f.question && f.answer)
-      : []
-  }
-
-  // Update memory cache
-  memoryBusinessesCache = [newBiz, ...memoryBusinessesCache.filter(b => b.slug !== slug && b.id !== bizId)]
-
-  // Persist immediately to localStorage so Ctrl+R refresh always preserves newly added businesses
-  saveStoredCustomBusiness(newBiz)
-
-  // Clean all undefined fields before sending to Firestore
-  const cleanPayload = JSON.parse(JSON.stringify({
-    ...newBiz,
-    businessName: newBiz.name,
-    createdAt: new Date().toISOString(),
-    status: 'pending'
-  }))
-
-  // Persist to Firestore with explicit ID using setDoc
-  try {
-    const docRef = doc(db, 'businesses', bizId)
-    await setDoc(docRef, cleanPayload)
-  } catch (err) {
-    console.warn('Firestore setDoc save fallback, trying addDoc:', err)
-    try {
-      const addedDoc = await addDoc(collection(db, 'businesses'), cleanPayload)
-      newBiz.id = addedDoc.id
-      saveStoredCustomBusiness(newBiz)
-    } catch (innerErr) {
-      console.warn('Firestore addDoc fallback error:', innerErr)
+      id: bizId,
+      name: sanitizeText(businessData.name, 120),
+      slug,
+      category: sanitizeText(businessData.category, 60),
+      categoryId: businessData.categoryId || 'local-services',
+      subCategory: businessData.subCategory ? sanitizeText(businessData.subCategory, 60) : undefined,
+      subcategory: businessData.subCategory ? sanitizeText(businessData.subCategory, 60) : undefined,
+      secondaryCategories: Array.isArray(businessData.secondaryCategories) ? businessData.secondaryCategories : [],
+      city: sanitizeText(primaryCity, 60),
+      cities: allCities,
+      locations: inputLocations,
+      state: sanitizeText(businessData.state || businessData.province || 'New York', 80),
+      province: sanitizeText(businessData.state || businessData.province || 'New York', 80),
+      rating: 0,
+      reviewCount: 0,
+      verified: false,
+      isClaimed: false,
+      isFeatured: isAuthoritative,
+      status: 'pending', // MANDATORY PENDING WORKFLOW
+      plan: chosenPlan,
+      planName: resolvedPlanName,
+      planPrice: resolvedPrice,
+      hasSinglePage: resolvedHasSinglePage,
+      canEditProfile: resolvedCanEditProfile,
+      paymentStatus: resolvedPaymentStatus,
+      paymentScreenshot: sanitizeImageUrl(businessData.paymentScreenshot || ''),
+      transactionRef: businessData.transactionRef || resolvedPaymentRef,
+      payment_reference: resolvedPaymentRef,
+      payment_provider: 'payoneer',
+      adminNotes: businessData.adminNotes || '',
+      blog_post_entitled: isStandard || isAuthoritative,
+      blog_posts_allowed: resolvedPostsAllowed,
+      blog_posts_used: businessData.blog_posts_used ?? 0,
+      blog_post_feature_enabled: false, // Activated only upon admin payment verification
+      paymentDetails: businessData.paymentDetails,
+      submittedAt: new Date().toISOString(),
+      ownerName: sanitizeText(businessData.ownerName || 'Business Representative', 80),
+      phone: sanitizePhone(businessData.phone || '(555) 000-0000'),
+      whatsapp: businessData.whatsapp ? sanitizePhone(businessData.whatsapp) : '',
+      email: sanitizeText(businessData.email || 'contact@business.com', 120),
+      website: sanitizeUrl(businessData.website || 'https://biznestusa.com'),
+      googleBusinessProfile: sanitizeUrl(businessData.googleBusinessProfile || ''),
+      facebookUrl: sanitizeUrl(businessData.facebookUrl || ''),
+      instagramUrl: sanitizeUrl(businessData.instagramUrl || ''),
+      linkedinUrl: sanitizeUrl(businessData.linkedinUrl || ''),
+      address: summaryAddress,
+      coverImage: sanitizeImageUrl(businessData.coverImage || 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1200&q=80'),
+      logo: sanitizeImageUrl(businessData.logo || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=200&q=80'),
+      description: sanitizeText(businessData.description || 'Verified local business listing on BizNestUSA.', 5000),
+      services: Array.isArray(businessData.services) ? businessData.services.map(s => sanitizeText(s, 60)) : ['Professional Services'],
+      operatingHours: businessData.operatingHours || { 'Monday - Saturday': '09:00 AM - 06:00 PM', 'Sunday': 'Closed' },
+      features: [],
+      reviews: [],
+      faqs: Array.isArray(businessData.faqs) && businessData.faqs.length > 0
+        ? businessData.faqs.map((f: any) => ({
+            question: sanitizeText(f.question || f.q || '', 300),
+            answer: sanitizeText(f.answer || f.a || '', 2000)
+          })).filter((f: any) => f.question && f.answer)
+        : []
     }
+
+    // Update memory cache
+    memoryBusinessesCache = [newBiz, ...memoryBusinessesCache.filter(b => b.slug !== slug && b.id !== bizId)]
+
+    // Persist immediately to localStorage
+    saveStoredCustomBusiness(newBiz)
+
+    // Clean all undefined fields before sending to Firestore
+    const cleanPayload = JSON.parse(JSON.stringify({
+      ...newBiz,
+      businessName: newBiz.name,
+      createdAt: new Date().toISOString(),
+      status: 'pending'
+    }))
+
+    // Persist to Firestore with explicit ID using setDoc
+    try {
+      const docRef = doc(db, 'businesses', bizId)
+      await setDoc(docRef, cleanPayload)
+    } catch (err) {
+      console.warn('Firestore setDoc save fallback, trying addDoc:', err)
+      try {
+        const addedDoc = await addDoc(collection(db, 'businesses'), cleanPayload)
+        newBiz.id = addedDoc.id
+        saveStoredCustomBusiness(newBiz)
+      } catch (innerErr) {
+        console.warn('Firestore addDoc fallback error:', innerErr)
+      }
+    }
+
+    // Sync with payments collection in Firestore
+    try {
+      const paymentRec = await createOrGetPaymentRecord({
+        userId: newBiz.userId || 'user',
+        userEmail: newBiz.email,
+        businessId: newBiz.id,
+        businessName: newBiz.name,
+        businessSlug: newBiz.slug,
+        planId: chosenPlan
+      })
+      if (newBiz.paymentScreenshot) {
+        await submitPaymentProof({
+          paymentIdOrRef: paymentRec.id,
+          screenshotDataUrl: newBiz.paymentScreenshot,
+          payoneerTransactionId: newBiz.transactionRef,
+          userId: newBiz.userId
+        })
+      }
+    } catch (paySyncErr) {
+      console.warn('Payment record sync warning:', paySyncErr)
+    }
+
+    return newBiz
   }
 
-  return newBiz
-}
+  export async function updateBusinessPaymentProof(
+    idOrSlug: string,
+    payment: {
+      paymentMethod: string
+      referenceNumber?: string
+      paymentScreenshot: string
+      amount?: number
+      plan?: BusinessPlan
+      customerNote?: string
+    }
+  ): Promise<boolean> {
+    const norm = idOrSlug.toLowerCase().trim()
+    const nowIso = new Date().toISOString()
+    const selectedPlan: BusinessPlan = payment.plan || (payment.amount === 10 ? 'authoritative_10' : (payment.amount === 5 ? 'priority_5' : 'review_1'))
+    const isAuthoritative = selectedPlan === 'authoritative_10'
+    const isStandard = selectedPlan === 'priority_5'
+    const amount = payment.amount ?? (isAuthoritative ? 10 : (isStandard ? 5 : 1))
+    
+    const paymentDetails = {
+      plan: selectedPlan,
+      paymentMethod: payment.paymentMethod || 'Payoneer',
+      referenceNumber: payment.referenceNumber || '',
+      transactionRef: payment.referenceNumber || '',
+      paymentScreenshot: payment.paymentScreenshot,
+      customerNote: payment.customerNote,
+      amount,
+      paymentDate: nowIso
+    }
 
-export async function updateBusinessPaymentProof(
-  idOrSlug: string,
-  payment: {
-    paymentMethod: string
-    referenceNumber?: string
-    paymentScreenshot: string
-    amount?: number
-    plan?: BusinessPlan
+    const patch: Partial<BusinessItem> = {
+      plan: selectedPlan,
+      planPrice: amount,
+      paymentScreenshot: payment.paymentScreenshot,
+      transactionRef: payment.referenceNumber || '',
+      payment_reference: payment.referenceNumber || '',
+      payment_provider: 'payoneer',
+      paymentDetails,
+      paymentStatus: 'PAYMENT_VERIFICATION_PENDING',
+      status: 'pending',
+      submittedAt: nowIso,
+      blog_post_entitled: isStandard || isAuthoritative,
+      blog_posts_allowed: isAuthoritative ? 10 : (isStandard ? 5 : 0),
+      blog_post_feature_enabled: false
+    }
+
+    const idx = memoryBusinessesCache.findIndex(b => b.id === idOrSlug || b.slug.toLowerCase() === norm || b.name.toLowerCase() === norm)
+    if (idx !== -1) {
+      Object.assign(memoryBusinessesCache[idx], patch)
+      ;(memoryBusinessesCache[idx] as any).lastRequestedAt = nowIso
+    }
+
+    updateStoredCustomBusiness(idOrSlug, patch as any)
+
+    await updateBusinessInFirestore(idOrSlug, patch as any)
+
+    // Sync to payments collection
+    try {
+      const biz = memoryBusinessesCache[idx]
+      const paymentRec = await createOrGetPaymentRecord({
+        userId: biz?.userId || 'user',
+        userEmail: biz?.email,
+        businessId: biz?.id || idOrSlug,
+        businessName: biz?.name || 'Business Listing',
+        businessSlug: biz?.slug,
+        planId: selectedPlan
+      })
+      await submitPaymentProof({
+        paymentIdOrRef: paymentRec.id,
+        screenshotDataUrl: payment.paymentScreenshot,
+        payoneerTransactionId: payment.referenceNumber,
+        customerNote: payment.customerNote,
+        userId: biz?.userId
+      })
+    } catch (e) {
+      console.warn('Payment proof sync to payments collection notice:', e)
+    }
+
+    return true
   }
-): Promise<boolean> {
-  const norm = idOrSlug.toLowerCase().trim()
-  const nowIso = new Date().toISOString()
-  const selectedPlan: BusinessPlan = payment.plan || (payment.amount === 5 ? 'priority_5' : 'review_1')
-  const amount = payment.amount ?? (selectedPlan === 'priority_5' ? 5 : 1)
-  
-  const paymentDetails = {
-    plan: selectedPlan,
-    paymentMethod: payment.paymentMethod,
-    referenceNumber: payment.referenceNumber || '',
-    paymentScreenshot: payment.paymentScreenshot,
-    amount,
-    paymentDate: nowIso
-  }
-
-  const patch: Partial<BusinessItem> = {
-    plan: selectedPlan,
-    planPrice: amount,
-    paymentScreenshot: payment.paymentScreenshot,
-    transactionRef: payment.referenceNumber || '',
-    paymentDetails,
-    paymentStatus: 'SUBMITTED',
-    status: 'pending',
-    submittedAt: nowIso,
-    blog_post_entitled: selectedPlan === 'priority_5',
-    blog_posts_allowed: selectedPlan === 'priority_5' ? 5 : 0
-  }
-
-  const idx = memoryBusinessesCache.findIndex(b => b.id === idOrSlug || b.slug.toLowerCase() === norm || b.name.toLowerCase() === norm)
-  if (idx !== -1) {
-    Object.assign(memoryBusinessesCache[idx], patch)
-    ;(memoryBusinessesCache[idx] as any).lastRequestedAt = nowIso
-  }
-
-  updateStoredCustomBusiness(idOrSlug, patch as any)
-
-  await updateBusinessInFirestore(idOrSlug, patch as any)
-
-  return true
-}
 
 export async function submitBusinessEditRequest(
   idOrSlug: string,

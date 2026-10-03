@@ -103,7 +103,7 @@ export default function AdminLogin({ onLoginSuccess }: { onLoginSuccess: () => v
       const passTrimmed = (password || '').trim()
       const userCredential = await signInWithEmailAndPassword(auth, emailTrimmed, passTrimmed)
       const authed = userCredential.user
-      const isMasterAdmin = authed.uid === 'Mg7clnjHqqTUWk4uBw2zd0yLAcX2' || authed.email?.toLowerCase() === 'admin@biznestusa.com'
+      const isMasterAdmin = authed.uid === '0LM7RVOwGIMVK4rwVD6muuzPYij1'
 
       if (!isMasterAdmin) {
         await signOut(auth)

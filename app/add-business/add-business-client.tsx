@@ -132,6 +132,45 @@ export default function AddBusinessClient() {
   const [isWhyFeeModalOpen, setIsWhyFeeModalOpen] = useState(false)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
 
+  // Payoneer Payment Reference & Workflow State
+  const [payoneerReference, setPayoneerReference] = useState<string>('')
+  const [payoneerUrl, setPayoneerUrl] = useState<string>('')
+  const [isLoadingPayoneerUrl, setIsLoadingPayoneerUrl] = useState(false)
+  const [hasClickedCompletedPayment, setHasClickedCompletedPayment] = useState(false)
+  const [customerNote, setCustomerNote] = useState('')
+  const [payoneerTxId, setPayoneerTxId] = useState('')
+  const [submittedPaymentRef, setSubmittedPaymentRef] = useState('')
+
+  // Generate unique payment reference on mount
+  useEffect(() => {
+    if (!payoneerReference) {
+      const year = new Date().getFullYear()
+      const rand = Math.floor(100000 + Math.random() * 900000)
+      setPayoneerReference(`BNUSA-${year}-${rand}`)
+    }
+  }, [payoneerReference])
+
+  // Fetch Payoneer URL for selected plan
+  useEffect(() => {
+    let isMounted = true
+    const fetchPayoneerUrl = async () => {
+      setIsLoadingPayoneerUrl(true)
+      try {
+        const res = await fetch(`/api/payments/payoneer-url?plan=${selectedPlan}`)
+        const data = await res.json()
+        if (isMounted && data?.url) {
+          setPayoneerUrl(data.url)
+        }
+      } catch (e) {
+        console.warn('Error fetching payoneer url:', e)
+      } finally {
+        if (isMounted) setIsLoadingPayoneerUrl(false)
+      }
+    }
+    fetchPayoneerUrl()
+    return () => { isMounted = false }
+  }, [selectedPlan])
+
   // Wizard Step State (5 Steps: Identity, Locations, Operating Hours, Details, Verify & Pay)
   const [currentStep, setCurrentStep] = useState(1)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -992,6 +1031,8 @@ export default function AddBusinessClient() {
       const isStandard = selectedPlan === 'priority_5'
       const isBasic = selectedPlan === 'review_1'
 
+      const finalPaymentRef = payoneerReference || ('BNUSA-' + new Date().getFullYear() + '-' + Math.floor(100000 + Math.random() * 900000))
+
       const saved = await saveBusinessToDatabase({
         name: formData.businessName,
         category: formData.category,
@@ -1023,9 +1064,13 @@ export default function AddBusinessClient() {
         planPrice: planConfig.price,
         hasSinglePage: !isBasic,
         canEditProfile: isStandard || isAuthoritative,
-        paymentStatus: 'SUBMITTED',
+        paymentStatus: 'PAYMENT_VERIFICATION_PENDING',
         paymentScreenshot: paymentScreenshotBase64,
-        transactionRef: paymentRefNumber.trim() || '',
+        payment_reference: finalPaymentRef,
+        payment_provider: 'payoneer',
+        transactionRef: payoneerTxId.trim() || paymentRefNumber.trim() || finalPaymentRef,
+        payoneer_transaction_id: payoneerTxId.trim() || undefined,
+        customer_note: customerNote.trim() || undefined,
         blog_post_entitled: isStandard || isAuthoritative,
         blog_posts_allowed: isAuthoritative ? 10 : (isStandard ? 5 : 0),
         blog_posts_used: 0,
@@ -1033,17 +1078,42 @@ export default function AddBusinessClient() {
         paymentDetails: {
           plan: selectedPlan,
           amount: planConfig.price,
-          paymentMethod: channelConfig.name,
-          referenceNumber: paymentRefNumber.trim() || '',
+          paymentMethod: 'Payoneer',
+          referenceNumber: finalPaymentRef,
           paymentScreenshot: paymentScreenshotBase64 || '',
-          paymentDate: new Date().toISOString()
+          paymentDate: new Date().toISOString(),
+          transactionId: payoneerTxId.trim() || undefined,
+          customerNote: customerNote.trim() || undefined
         }
       })
+
+      // Sync to canonical payment records collection
+      try {
+        await fetch('/api/payments/submit-proof', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            businessId: saved.id || saved.slug,
+            businessName: saved.name,
+            businessSlug: saved.slug,
+            userId: resolvedUserId,
+            userEmail: formData.email || currentUser?.email || '',
+            planId: selectedPlan,
+            paymentReference: finalPaymentRef,
+            paymentScreenshot: paymentScreenshotBase64,
+            payoneerTransactionId: payoneerTxId.trim() || undefined,
+            customerNote: customerNote.trim() || undefined
+          })
+        })
+      } catch (paySyncErr) {
+        console.warn('Payment record sync notice:', paySyncErr)
+      }
 
       setIsSubmitting(false)
       setSubmittedSlug(saved.slug)
       setSubmittedBizName(saved.name)
       setSubmittedPlan(selectedPlan)
+      setSubmittedPaymentRef(finalPaymentRef)
       
       // Refresh user businesses
       const targetEmail = formData.email || currentUser?.email || ''
@@ -1996,24 +2066,50 @@ export default function AddBusinessClient() {
                         Your listing submission for <strong className="text-slate-900 text-base">{submittedBizName || formData.businessName}</strong> and your review payment have been recorded.
                       </p>
 
-                      {/* PLAN SUMMARY BADGE */}
-                      <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-left max-w-xl mx-auto space-y-2">
-                        <div className="flex items-center justify-between text-xs border-b border-slate-200 pb-2">
-                          <span className="font-semibold text-slate-600">Selected Plan:</span>
+                      {/* PLAN & PAYMENT SUMMARY BADGE */}
+                      <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 text-left max-w-xl mx-auto space-y-2.5 text-xs">
+                        <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                          <span className="font-semibold text-slate-600">Plan:</span>
                           <span className="font-extrabold text-slate-900">
-                            {submittedPlan === 'priority_5' ? '$5 Business Priority ($5.00)' : '$1 Business Review ($1.00)'}
+                            {submittedPlan === 'authoritative_10'
+                              ? 'Authoritative'
+                              : submittedPlan === 'priority_5'
+                              ? 'Standard'
+                              : 'Basic'}
                           </span>
                         </div>
-                        <div className="flex items-center justify-between text-xs border-b border-slate-200 pb-2">
-                          <span className="font-semibold text-slate-600">Verification Status:</span>
-                          <span className="font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-                            Under Admin Review
+                        <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                          <span className="font-semibold text-slate-600">Amount:</span>
+                          <span className="font-extrabold text-blue-600">
+                            {submittedPlan === 'authoritative_10'
+                              ? '$10 USD'
+                              : submittedPlan === 'priority_5'
+                              ? '$5 USD'
+                              : '$1 USD'}
                           </span>
                         </div>
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-semibold text-slate-600">Content Blog Entitlement:</span>
-                          <span className="font-bold text-slate-800">
-                            {submittedPlan === 'priority_5' ? '5 Posts (Unlocks Upon Payment Verification)' : 'Not Included in $1 Review Plan'}
+                        <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                          <span className="font-semibold text-slate-600">Payment Reference:</span>
+                          <span className="font-mono font-bold text-slate-900">
+                            {submittedPaymentRef || 'BNUSA-2026-PENDING'}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                          <span className="font-semibold text-slate-600">Status:</span>
+                          <span className="font-bold text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-full border border-amber-300">
+                            Payment Verification Pending
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                          <span className="font-semibold text-slate-600">Screenshot:</span>
+                          <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                            Submitted
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-slate-600">Directory Approval Status:</span>
+                          <span className="font-bold text-slate-700">
+                            Pending Editorial Review (Separate from Payment)
                           </span>
                         </div>
                       </div>
@@ -2023,19 +2119,19 @@ export default function AddBusinessClient() {
                         <div className="flex items-start gap-2">
                           <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
                           <p>
-                            <strong>Truthful Editorial Policy:</strong> The business listing does NOT automatically become approved solely because payment was made. Our admin editorial team reviews all details for accuracy and completeness.
+                            <strong>Manual Admin Verification:</strong> Our administrative team will manually verify your Payoneer payment transaction before your business listing is approved.
                           </p>
                         </div>
                         <div className="flex items-start gap-2">
                           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                           <p>
-                            <strong>Queue Processing:</strong> {submittedPlan === 'priority_5' ? 'Priority Queue (processed within 24 hours)' : 'Standard Queue (processed within 48–72 hours)'}.
+                            <strong>Review &amp; Approval:</strong> The website does not automatically approve or publish listings merely upon returning from payment. Features and blog post entitlements activate once payment is verified.
                           </p>
                         </div>
                         <div className="flex items-start gap-2">
                           <FileText className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
                           <p>
-                            <strong>Live Tracking:</strong> Track listing review status, admin notes, and manage your business profile anytime from your User Dashboard.
+                            <strong>User Dashboard Tracking:</strong> You can view and track your payment verification status and business approval status separately inside your dashboard anytime.
                           </p>
                         </div>
                       </div>
@@ -3445,119 +3541,216 @@ const availableCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
                           </div>
 
                           {/* PAYMENT DETAILS & SCREENSHOT UPLOAD */}
-                          <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-xs space-y-4">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-2">
+                          <div className="p-6 bg-white rounded-3xl border border-slate-200 shadow-sm space-y-6">
+                            {/* Header */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-3">
                               <div>
-                                <h4 className="font-extrabold text-slate-900 text-sm">Review Payment Instructions</h4>
-                                <p className="text-xs text-slate-500">
-                                  Amount Due: <strong className="text-blue-600">
-                                    {selectedPlan === 'authoritative_10' ? '$10.00 USD' : selectedPlan === 'priority_5' ? '$5.00 USD' : '$1.00 USD'}
-                                  </strong>
+                                <span className="inline-flex items-center gap-1.5 text-[11px] font-extrabold px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 mb-1.5">
+                                  <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
+                                  <span>Secure payment processed through Payoneer</span>
+                                </span>
+                                <h4 className="font-extrabold text-slate-900 text-lg">Complete Your Payment</h4>
+                                <p className="text-xs text-slate-600 mt-0.5">
+                                  You selected <strong>{selectedPlan === 'authoritative_10' ? '$10 Authoritative Plan' : selectedPlan === 'priority_5' ? '$5 Standard Plan' : '$1 Basic Plan'}</strong> — <strong className="text-blue-600">{selectedPlan === 'authoritative_10' ? '$10.00 USD' : selectedPlan === 'priority_5' ? '$5.00 USD' : '$1.00 USD'}</strong>.
                                 </p>
                               </div>
-                              <span className="text-[11px] font-bold px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 self-start sm:self-auto">
-                                {selectedPlan === 'authoritative_10' ? '$10 Authoritative Plan' : selectedPlan === 'priority_5' ? '$5 Standard Plan' : '$1 Basic Plan'}
-                              </span>
-                            </div>
-
-                            {/* CHANNELS */}
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                              {US_PAYMENT_CHANNELS.map(ch => (
-                                <button
-                                  key={ch.id}
-                                  type="button"
-                                  onClick={() => setSelectedChannel(ch.id)}
-                                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                                    selectedChannel === ch.id
-                                      ? 'border-blue-600 bg-blue-50 text-blue-900 font-bold'
-                                      : 'border-slate-200 hover:border-slate-300 text-slate-700'
-                                  }`}
-                                >
-                                  <p className="text-xs font-extrabold">{ch.badge}</p>
-                                  <p className="text-[11px] text-slate-500 truncate mt-0.5">{ch.name}</p>
-                                </button>
-                              ))}
-                            </div>
-
-                            {/* SELECTED CHANNEL DETAILS */}
-                            {(() => {
-                              const activeCh = US_PAYMENT_CHANNELS.find(c => c.id === selectedChannel) || US_PAYMENT_CHANNELS[0]
-                              return (
-                                <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1">
-                                  <p className="font-bold text-slate-800">{activeCh.name}</p>
-                                  <p className="text-slate-600 text-[11px] leading-relaxed">{activeCh.instructions}</p>
-                                </div>
-                              )
-                            })()}
-
-                            {/* REFERENCE NUMBER */}
-                            <div>
-                              <label className="block text-xs font-bold text-slate-700 mb-1">
-                                Transaction / Confirmation ID (Optional or Reference)
-                              </label>
-                              <input
-                                type="text"
-                                value={paymentRefNumber}
-                                onChange={(e) => setPaymentRefNumber(e.target.value)}
-                                placeholder="e.g. AUTH-882341 or Transfer Confirmation #"
-                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 font-mono"
-                              />
-                            </div>
-
-                            {/* SCREENSHOT UPLOAD (MANDATORY REQUIREMENT) */}
-                            <div id="field-payment-screenshot">
-                              <div className="flex justify-between items-center mb-1">
-                                <label className="block text-xs font-bold text-slate-900">
-                                  Upload Payment Screenshot / Receipt (Required to Complete Submission) *
-                                </label>
-                                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-100 text-amber-900">
-                                  Mandatory Proof
+                              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 text-right self-start sm:self-auto">
+                                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Business Listing</span>
+                                <span className="text-xs font-black text-slate-800 truncate max-w-[180px] block">
+                                  {formData.businessName || 'Your Business'}
                                 </span>
                               </div>
+                            </div>
 
-                              {paymentScreenshotBase64 ? (
-                                <div className="p-3 bg-slate-50 border-2 border-emerald-500/50 rounded-xl flex items-center justify-between gap-3">
-                                  <div className="flex items-center gap-3">
-                                    <img
-                                      src={paymentScreenshotBase64}
-                                      alt="Screenshot preview"
-                                      className="w-14 h-14 rounded-lg object-cover border border-slate-200 shadow-xs"
-                                    />
-                                    <div>
-                                      <p className="text-xs font-bold text-slate-900">Payment Receipt Attached</p>
-                                      <p className="text-[11px] text-emerald-600 font-bold flex items-center gap-1">
-                                        <CheckCircle2 className="w-3.5 h-3.5" /> Ready for admin verification
-                                      </p>
-                                    </div>
-                                  </div>
+                            {/* UNIQUE PAYMENT REFERENCE CARD */}
+                            <div className="p-4 bg-gradient-to-br from-slate-50 to-blue-50/30 rounded-2xl border border-blue-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                              <div className="space-y-0.5">
+                                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+                                  BizNestUSA Payment Reference
+                                </span>
+                                <p className="text-base sm:text-lg font-mono font-black text-blue-700 tracking-wider">
+                                  {payoneerReference}
+                                </p>
+                                <p className="text-[11px] text-slate-500">
+                                  Please include this reference if Payoneer asks for a memo or payment note.
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (navigator.clipboard) {
+                                    navigator.clipboard.writeText(payoneerReference)
+                                    setCopiedKey('ref')
+                                    toast.success('Payment reference copied to clipboard!')
+                                    setTimeout(() => setCopiedKey(null), 2500)
+                                  }
+                                }}
+                                className="px-4 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5 self-start sm:self-auto cursor-pointer"
+                              >
+                                {copiedKey === 'ref' ? (
+                                  <>
+                                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                    <span className="text-emerald-700">Copied</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="w-3.5 h-3.5 text-slate-500" />
+                                    <span>Copy Reference</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+
+                            {/* STEP 1: PAY VIA PAYONEER BUTTON */}
+                            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
+                                  <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px]">1</span>
+                                  <span>Complete payment securely through Payoneer</span>
+                                </span>
+                                <span className="text-[11px] font-bold text-slate-500">Official Checkout Link</span>
+                              </div>
+                              <p className="text-[11px] text-slate-600 leading-relaxed">
+                                Click the button below to open Payoneer in a secure tab and complete your payment of <strong>{selectedPlan === 'authoritative_10' ? '$10.00 USD' : selectedPlan === 'priority_5' ? '$5.00 USD' : '$1.00 USD'}</strong>.
+                              </p>
+                              
+                              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1">
+                                {payoneerUrl ? (
+                                  <a
+                                    href={payoneerUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={() => setHasClickedCompletedPayment(true)}
+                                    className="flex-1 py-3 px-5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-extrabold rounded-xl shadow-md shadow-blue-600/20 transition-all flex items-center justify-center gap-2 text-center"
+                                  >
+                                    <ExternalLink className="w-4 h-4" />
+                                    <span>Pay Securely with Payoneer ({selectedPlan === 'authoritative_10' ? '$10.00' : selectedPlan === 'priority_5' ? '$5.00' : '$1.00'})</span>
+                                  </a>
+                                ) : (
                                   <button
                                     type="button"
-                                    onClick={() => setPaymentScreenshotBase64(null)}
-                                    className="p-2 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 cursor-pointer"
+                                    onClick={() => toast.info('Payoneer link is loading. Please check in a moment.')}
+                                    className="flex-1 py-3 px-5 bg-slate-200 text-slate-600 text-xs font-bold rounded-xl cursor-not-allowed flex items-center justify-center gap-2"
                                   >
-                                    <X className="w-4 h-4" />
+                                    <Clock className="w-4 h-4 animate-spin" />
+                                    <span>Loading Payoneer Link...</span>
                                   </button>
-                                </div>
-                              ) : (
-                                <label className="p-5 border-2 border-dashed border-amber-300 hover:border-blue-500 bg-amber-50/40 hover:bg-blue-50/30 rounded-xl flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors text-center group">
-                                  <div className="w-10 h-10 rounded-full bg-amber-100 group-hover:bg-blue-100 flex items-center justify-center text-amber-700 group-hover:text-blue-600 transition">
-                                    <Upload className="w-5 h-5" />
-                                  </div>
-                                  <span className="text-xs font-extrabold text-slate-800">
-                                    Click to attach payment transfer screenshot *
-                                  </span>
-                                  <span className="text-[11px] text-slate-500">
-                                    Submission is only unlocked once your payment receipt (PNG, JPG, WEBP) is uploaded.
-                                  </span>
-                                  <input
-                                    type="file"
-                                    accept="image/*"
-                                    onChange={handleScreenshotFileChange}
-                                    className="hidden"
-                                  />
-                                </label>
-                              )}
+                                )}
+
+                                {!hasClickedCompletedPayment && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setHasClickedCompletedPayment(true)}
+                                    className="px-5 py-3 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer"
+                                  >
+                                    I&apos;ve Completed My Payment
+                                  </button>
+                                )}
+                              </div>
                             </div>
+
+                            {/* STEP 2: CONFIRMATION & SCREENSHOT FORM (REVEALED WHEN USER HAS PAID OR READY) */}
+                            {hasClickedCompletedPayment && (
+                              <div className="p-5 bg-blue-50/40 rounded-2xl border border-blue-200 space-y-4 animate-in fade-in-50">
+                                <div className="flex items-center justify-between pb-2 border-b border-blue-100">
+                                  <span className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
+                                    <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px]">2</span>
+                                    <span>Upload Payment Confirmation &amp; Details</span>
+                                  </span>
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
+                                    Manual Verification Queue
+                                  </span>
+                                </div>
+
+                                <p className="text-[11px] text-slate-600 leading-relaxed">
+                                  After completing the payment, return to BizNestUSA and upload your payment confirmation screenshot. Your payment will be manually verified by our team before your business listing is approved.
+                                </p>
+
+                                {/* OPTIONAL TRANSACTION ID */}
+                                <div>
+                                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                                    Payoneer Transaction ID (Optional)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={payoneerTxId}
+                                    onChange={(e) => setPayoneerTxId(e.target.value)}
+                                    placeholder="e.g. 192837465 or Payoneer payment reference"
+                                    className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 font-mono"
+                                  />
+                                </div>
+
+                                {/* OPTIONAL CUSTOMER NOTE */}
+                                <div>
+                                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                                    Customer Note (Optional)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={customerNote}
+                                    onChange={(e) => setCustomerNote(e.target.value)}
+                                    placeholder="e.g. Payment sent from company account or payer name"
+                                    className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                                  />
+                                </div>
+
+                                {/* SCREENSHOT UPLOAD (MANDATORY REQUIREMENT) */}
+                                <div id="field-payment-screenshot">
+                                  <div className="flex justify-between items-center mb-1">
+                                    <label className="block text-xs font-bold text-slate-900">
+                                      Upload Payment Screenshot / Receipt (Required to Complete Submission) *
+                                    </label>
+                                    <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-100 text-amber-900">
+                                      Mandatory Proof
+                                    </span>
+                                  </div>
+
+                                  {paymentScreenshotBase64 ? (
+                                    <div className="p-3 bg-white border-2 border-emerald-500/50 rounded-xl flex items-center justify-between gap-3 shadow-xs">
+                                      <div className="flex items-center gap-3">
+                                        <img
+                                          src={paymentScreenshotBase64}
+                                          alt="Screenshot preview"
+                                          className="w-14 h-14 rounded-lg object-cover border border-slate-200 shadow-xs"
+                                        />
+                                        <div>
+                                          <p className="text-xs font-bold text-slate-900">Payment Receipt Attached</p>
+                                          <p className="text-[11px] text-emerald-600 font-bold flex items-center gap-1">
+                                            <CheckCircle2 className="w-3.5 h-3.5" /> Ready for admin manual verification
+                                          </p>
+                                        </div>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => setPaymentScreenshotBase64(null)}
+                                        className="p-2 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 cursor-pointer"
+                                        title="Remove screenshot"
+                                      >
+                                        <X className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <label className="p-5 border-2 border-dashed border-amber-300 hover:border-blue-500 bg-amber-50/40 hover:bg-blue-50/30 rounded-xl flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors text-center group">
+                                      <div className="w-10 h-10 rounded-full bg-amber-100 group-hover:bg-blue-100 flex items-center justify-center text-amber-700 group-hover:text-blue-600 transition">
+                                        <Upload className="w-5 h-5" />
+                                      </div>
+                                      <span className="text-xs font-extrabold text-slate-800">
+                                        Click to attach payment transfer screenshot *
+                                      </span>
+                                      <span className="text-[11px] text-slate-500">
+                                        Submission is unlocked once your payment receipt (PNG, JPG, WEBP, max 10MB) is uploaded.
+                                      </span>
+                                      <input
+                                        type="file"
+                                        accept="image/png,image/jpeg,image/webp"
+                                        onChange={handleScreenshotFileChange}
+                                        className="hidden"
+                                      />
+                                    </label>
+                                  )}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}

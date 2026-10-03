@@ -16,9 +16,9 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    if (plan !== 'review_1' && plan !== 'priority_5') {
+    if (plan !== 'review_1' && plan !== 'priority_5' && plan !== 'authoritative_10') {
       return NextResponse.json(
-        { success: false, error: 'Invalid plan selected. Must be review_1 ($1) or priority_5 ($5).' },
+        { success: false, error: 'Invalid plan selected. Must be review_1 ($1), priority_5 ($5), or authoritative_10 ($10).' },
         { status: 400 }
       )
     }
