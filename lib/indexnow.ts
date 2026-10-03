@@ -3,7 +3,7 @@
  * Automates real-time URL submission to search engines (Bing, Yandex, IndexNow.org)
  */
 
-export const INDEXNOW_API_KEY = '43b9d5f2de814afe8a49c2551466070d'
+export const INDEXNOW_API_KEY = '2878f52e4b6c4b1fb29b59d471a9ee17'
 export const INDEXNOW_HOST = process.env.NEXT_PUBLIC_SITE_DOMAIN || 'biznestusa.com'
 export const INDEXNOW_KEY_LOCATION = `https://${INDEXNOW_HOST}/${INDEXNOW_API_KEY}.txt`
 
