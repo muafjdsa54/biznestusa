@@ -1079,8 +1079,7 @@ export default function AddBusinessClient() {
           plan: selectedPlan,
           amount: planConfig.price,
           paymentMethod: 'Payoneer',
-          referenceNumber: finalPaymentRef,
-          paymentScreenshot: paymentScreenshotBase64 || '',
+          paymentScreenshot: paymentScreenshotBase64 ? 'ATTACHED' : '',
           paymentDate: new Date().toISOString(),
           transactionId: payoneerTxId.trim() || undefined,
           customerNote: customerNote.trim() || undefined
@@ -1228,7 +1227,7 @@ export default function AddBusinessClient() {
           const canvas = document.createElement('canvas')
           let width = img.width
           let height = img.height
-          const maxDim = 1200
+          const maxDim = 800
           if (width > maxDim || height > maxDim) {
             if (width > height) {
               height = Math.round((height * maxDim) / width)
@@ -1243,18 +1242,18 @@ export default function AddBusinessClient() {
           const ctx = canvas.getContext('2d')
           if (ctx) {
             ctx.drawImage(img, 0, 0, width, height)
-            const compressed = canvas.toDataURL('image/jpeg', 0.8)
+            const compressed = canvas.toDataURL('image/jpeg', 0.65)
             setPaymentScreenshotBase64(compressed)
           } else {
-            setPaymentScreenshotBase64(rawBase64)
+            setPaymentScreenshotBase64(rawBase64.slice(0, 500000))
           }
         }
         img.onerror = () => {
-          setPaymentScreenshotBase64(rawBase64)
+          setPaymentScreenshotBase64(rawBase64.slice(0, 500000))
         }
         img.src = rawBase64
       } catch (_) {
-        setPaymentScreenshotBase64(rawBase64)
+        setPaymentScreenshotBase64(rawBase64.slice(0, 500000))
       }
     }
     reader.readAsDataURL(file)

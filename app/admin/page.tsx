@@ -591,7 +591,7 @@ export default function AdminPage() {
     .filter(b => {
       const s = (b.status || '').toLowerCase().trim()
       const ps = (b.paymentStatus || '').toUpperCase().trim()
-      return s === 'pending' || s === 'pending_approval' || (ps === 'PENDING' && s !== 'rejected')
+      return s === 'pending' || s === 'pending_approval' || ps === 'PENDING' || ps === 'PAYMENT_VERIFICATION_PENDING' || ps === 'SUBMITTED'
     })
     .sort((a, b) => {
       // 1. Listings with payment screenshot proof attached first

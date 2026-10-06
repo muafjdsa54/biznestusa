@@ -4,7 +4,11 @@ import { submitPaymentProof } from '@/lib/payment-service'
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { paymentIdOrRef, screenshotDataUrl, payoneerTransactionId, customerNote, userId } = body
+    const paymentIdOrRef = body.paymentIdOrRef || body.paymentReference || body.payment_reference || body.businessId
+    const screenshotDataUrl = body.screenshotDataUrl || body.paymentScreenshot || body.screenshot
+    const payoneerTransactionId = body.payoneerTransactionId || body.payoneer_transaction_id || body.transactionId
+    const customerNote = body.customerNote || body.customer_note
+    const userId = body.userId || body.uid
 
     if (!paymentIdOrRef) {
       return NextResponse.json(

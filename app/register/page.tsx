@@ -8,6 +8,8 @@ import Footer from '@/components/footer'
 import { Mail, Lock, UserPlus, Building2, Phone, ArrowRight, Eye, EyeOff, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { isValidPersonName, validatePersonName, isValidUsPhone, validateUsPhone, formatUsPhone, filterPersonNameInput, isValidEmail, isValidPassword } from '@/lib/validation'
+import { auth } from '@/lib/firebase'
+import { createUserWithEmailAndPassword, updateProfile, signInWithEmailAndPassword } from 'firebase/auth'
 
 export default function RegisterPage() {
   const [name, setName] = useState('')
@@ -35,7 +37,7 @@ export default function RegisterPage() {
     setNameError('')
   }
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
     setErrorMsg('')
     setNameError('')
@@ -75,24 +77,53 @@ export default function RegisterPage() {
 
     setIsLoading(true)
 
-    // Store user session for seamless flow
-    const userSession = JSON.stringify({
-      name: name.trim(),
-      email: email.trim().toLowerCase(),
-      phone: phone.trim(),
-      company: company.trim(),
-      role: 'business'
-    })
     try {
-      sessionStorage.setItem('biznestusa_user_session', userSession)
-      localStorage.setItem('biznestusa_user_session', userSession)
-    } catch {}
+      let fbUid = ''
+      try {
+        const cred = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), password)
+        fbUid = cred.user.uid
+        if (name.trim()) {
+          await updateProfile(cred.user, { displayName: name.trim() }).catch(() => {})
+        }
+      } catch (authErr: any) {
+        if (authErr?.code === 'auth/email-already-in-use') {
+          // If already registered, sign in to link session
+          try {
+            const cred = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password)
+            fbUid = cred.user.uid
+          } catch (signInErr) {
+            console.warn('Sign-in with existing email warning:', signInErr)
+          }
+        } else {
+          console.warn('Firebase Auth creation notice:', authErr?.message)
+        }
+      }
 
-    setTimeout(() => {
-      setIsLoading(false)
+      // Store user session for seamless flow
+      const userSession = JSON.stringify({
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        phone: phone.trim(),
+        company: company.trim(),
+        role: 'business',
+        uid: fbUid || auth.currentUser?.uid || '',
+        userId: fbUid || auth.currentUser?.uid || ''
+      })
+
+      try {
+        sessionStorage.setItem('biznestusa_user_session', userSession)
+        localStorage.setItem('biznestusa_user_session', userSession)
+      } catch {}
+
       toast.success('BizNestUSA Business Account registered successfully!')
       router.push('/add-business')
-    }, 900)
+    } catch (err: any) {
+      console.error('Registration error:', err)
+      setErrorMsg(err.message || 'Registration failed. Please try again.')
+      toast.error(err.message || 'Registration failed.')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (

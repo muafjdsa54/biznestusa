@@ -669,6 +669,11 @@ export async function saveBusinessToDatabase(businessData: Partial<BusinessItem>
       status: 'pending'
     }))
 
+    // Deduplicate base64 screenshot if present in both top-level and paymentDetails to ensure payload < 1MB
+    if (cleanPayload.paymentScreenshot && cleanPayload.paymentDetails?.paymentScreenshot) {
+      cleanPayload.paymentDetails.paymentScreenshot = 'ATTACHED'
+    }
+
     // Persist to Firestore with explicit ID using setDoc
     try {
       const docRef = doc(db, 'businesses', bizId)
