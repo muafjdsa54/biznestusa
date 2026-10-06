@@ -8,7 +8,9 @@ import { getPublicJobPath } from '@/lib/job-url'
 import { BLOG_POSTS } from '@/lib/blog-data'
 import {
   getPopulatedCategoryCityPairs,
+  getPopulatedCategorySubcategoryPairs,
   normalizeCitySlug,
+  normalizeSubcategorySlug,
   isUsCity,
   isPakistaniCity,
   isPakistaniEntity
@@ -166,6 +168,30 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.85,
     }))
 
+  // 6b. All Subcategory Landing Pages (e.g. /category/automotive/auto-repair/)
+  const allSubcategoryRoutes: MetadataRoute.Sitemap = []
+  for (const cat of BUSINESS_CATEGORIES) {
+    for (const sub of cat.subcategories) {
+      allSubcategoryRoutes.push({
+        url: canonicalUrl(`/category/${cat.id}/${normalizeSubcategorySlug(sub)}`),
+        lastModified: currentDate,
+        changeFrequency: 'weekly' as const,
+        priority: 0.85,
+      })
+    }
+  }
+
+  const populatedCategorySubcategoryPairs = getPopulatedCategorySubcategoryPairs(rawBusinesses)
+  const categorySubcategoryRoutes = [
+    ...allSubcategoryRoutes,
+    ...populatedCategorySubcategoryPairs.map((pair) => ({
+      url: canonicalUrl(`/category/${pair.categorySlug}/${pair.subcategorySlug}`),
+      lastModified: currentDate,
+      changeFrequency: 'weekly' as const,
+      priority: 0.85,
+    }))
+  ]
+
   // 7. Approved Business Pages (Strict USA Only)
   const approvedBusinesses = rawBusinesses.filter(b => 
     (b.status || 'approved') === 'approved' && 
@@ -267,6 +293,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...corePages,
     ...policyPages,
     ...categoryRoutes,
+    ...categorySubcategoryRoutes,
     ...serviceRoutes,
     ...cityRoutes,
     ...categoryCityRoutes,

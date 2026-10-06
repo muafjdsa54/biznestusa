@@ -1,4 +1,4 @@
-import { CATEGORIES, CITIES, BusinessItem } from './data'
+import { CATEGORIES, BUSINESS_CATEGORIES, CITIES, BusinessItem } from './data'
 
 export const VERIFICATION_DISCLAIMER =
   "BizNestUSA verification indicates that the business or professional profile completed our basic validation process. Verification does not independently guarantee every claim made by the lister."
@@ -159,6 +159,113 @@ export function filterBusinessesByCategoryAndCity(
 ): BusinessItem[] {
   const inCat = filterBusinessesByCategory(businesses, categoryId)
   return filterBusinessesByCity(inCat, citySlug)
+}
+
+export function normalizeSubcategorySlug(name: string): string {
+  return (name || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+}
+
+export function getSubcategoryDefinition(param1: string, param2: string): { name: string; slug: string; categoryId: string; categoryName: string } | null {
+  let normCat = (param1 || '').toLowerCase().trim()
+  let normSub = normalizeSubcategorySlug(param2 || '')
+  let cat = BUSINESS_CATEGORIES.find(c => c.id === normCat)
+
+  if (!cat) {
+    normCat = (param2 || '').toLowerCase().trim()
+    normSub = normalizeSubcategorySlug(param1 || '')
+    cat = BUSINESS_CATEGORIES.find(c => c.id === normCat)
+  }
+
+  if (!cat) return null
+
+  // Direct match in subcategories
+  for (const sub of cat.subcategories) {
+    if (normalizeSubcategorySlug(sub) === normSub) {
+      return {
+        name: sub,
+        slug: normSub,
+        categoryId: cat.id,
+        categoryName: cat.name
+      }
+    }
+  }
+
+  // Substring match
+  for (const sub of cat.subcategories) {
+    const sNorm = normalizeSubcategorySlug(sub)
+    if (sNorm.includes(normSub) || normSub.includes(sNorm)) {
+      return {
+        name: sub,
+        slug: sNorm,
+        categoryId: cat.id,
+        categoryName: cat.name
+      }
+    }
+  }
+
+  return null
+}
+
+export function filterBusinessesByCategoryAndSubcategory(
+  businesses: BusinessItem[],
+  categorySlug: string,
+  subcategorySlug: string
+): BusinessItem[] {
+  const normCat = categorySlug.toLowerCase().trim()
+  const normSub = normalizeSubcategorySlug(subcategorySlug)
+
+  return businesses.filter(b => {
+    if (isPakistaniEntity(b)) return false
+    const bCat = (b.main_category_slug || b.categoryId || normalizeBusinessCategoryId(b) || '').toLowerCase()
+    if (bCat !== normCat) return false
+
+    const bSubSlug = (b.subcategory_slug || '').toLowerCase()
+    if (bSubSlug && bSubSlug === normSub) return true
+
+    const bSub = normalizeSubcategorySlug(b.subcategory || b.subCategory || '')
+    if (bSub === normSub) return true
+
+    if (Array.isArray(b.services) && b.services.some(s => normalizeSubcategorySlug(s) === normSub || normalizeSubcategorySlug(s).includes(normSub))) {
+      return true
+    }
+
+    return false
+  })
+}
+
+export function getPopulatedCategorySubcategoryPairs(businesses: BusinessItem[]): {
+  categorySlug: string
+  categoryName: string
+  subcategorySlug: string
+  subcategoryName: string
+  count: number
+}[] {
+  const map = new Map<string, { categorySlug: string; categoryName: string; subcategorySlug: string; subcategoryName: string; count: number }>()
+
+  for (const b of businesses) {
+    if (isPakistaniEntity(b)) continue
+    const catSlug = (b.main_category_slug || b.categoryId || normalizeBusinessCategoryId(b) || '').toLowerCase()
+    const subSlugRaw = b.subcategory_slug || b.subcategory || b.subCategory || ''
+    const subDef = getSubcategoryDefinition(catSlug, subSlugRaw)
+    
+    if (subDef) {
+      const key = `${subDef.categoryId}:::${subDef.slug}`
+      const existing = map.get(key)
+      if (existing) {
+        existing.count += 1
+      } else {
+        map.set(key, {
+          categorySlug: subDef.categoryId,
+          categoryName: subDef.categoryName,
+          subcategorySlug: subDef.slug,
+          subcategoryName: subDef.name,
+          count: 1
+        })
+      }
+    }
+  }
+
+  return Array.from(map.values()).sort((a, b) => b.count - a.count || a.subcategoryName.localeCompare(b.subcategoryName))
 }
 
 export interface PopulatedCategoryCityPair {

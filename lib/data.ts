@@ -284,6 +284,96 @@ export const BUSINESS_CATEGORIES: CategoryDefinition[] = [
       'Wedding Venue', 'Event Planner', 'Wedding Photographer', 'Party Rentals',
       'DJ & Entertainment', 'Florist', 'Bridal Shop', 'Banquet Hall', 'Photo Booth Rental'
     ]
+  },
+  {
+    id: 'business-finance-professionals',
+    name: 'Business & Finance',
+    icon: 'finance',
+    desc: 'Certified accountants, bookkeepers, financial analysts, consultants, and project leaders',
+    color: '#059669',
+    subcategories: [
+      'Accountant', 'Bookkeeper', 'Business Analyst', 'Business Consultant',
+      'Financial Analyst', 'HR Specialist', 'Project Manager', 'Recruiter'
+    ]
+  },
+  {
+    id: 'design-creative',
+    name: 'Design & Creative',
+    icon: 'beauty',
+    desc: 'Graphic designers, UX designers, video editors, 3D artists, and creative professionals',
+    color: '#ec4899',
+    subcategories: [
+      '3D Designer', 'Animator', 'Graphic Designer', 'Illustrator',
+      'Motion Designer', 'Photographer', 'Product Designer', 'UI/UX Designer',
+      'Video Editor', 'Web Designer'
+    ]
+  },
+  {
+    id: 'education-professionals',
+    name: 'Education Professionals',
+    icon: 'education',
+    desc: 'Certified teachers, college professors, specialized tutors, and career coaches',
+    color: '#7c3aed',
+    subcategories: [
+      'Academic Advisor', 'Career Coach', 'Professor', 'Teacher', 'Tutor'
+    ]
+  },
+  {
+    id: 'healthcare-professionals',
+    name: 'Healthcare Professionals',
+    icon: 'healthcare',
+    desc: 'Licensed physicians, registered nurses, dentists, therapists, and medical specialists',
+    color: '#dc2626',
+    subcategories: [
+      'Dentist', 'Doctor', 'Medical Assistant', 'Nurse', 'Pharmacist',
+      'Physical Therapist', 'Therapist'
+    ]
+  },
+  {
+    id: 'legal-professionals',
+    name: 'Legal Professionals',
+    icon: 'legal',
+    desc: 'Licensed attorneys, trial lawyers, certified paralegals, and legal consultants',
+    color: '#4f46e5',
+    subcategories: [
+      'Attorney', 'Lawyer', 'Legal Consultant', 'Paralegal'
+    ]
+  },
+  {
+    id: 'marketing-professionals',
+    name: 'Marketing & Digital',
+    icon: 'technology',
+    desc: 'Digital strategists, SEO specialists, copywriters, and performance marketers',
+    color: '#f97316',
+    subcategories: [
+      'Brand Strategist', 'Content Writer', 'Copywriter', 'Digital Marketer',
+      'Email Marketing Specialist', 'PPC Specialist', 'SEO Specialist', 'Social Media Manager'
+    ]
+  },
+  {
+    id: 'skilled-trades',
+    name: 'Skilled Trades & Craft',
+    icon: 'construction',
+    desc: 'Licensed electricians, master plumbers, HVAC technicians, carpenters, and roofers',
+    color: '#d97706',
+    subcategories: [
+      'Carpenter', 'Construction Worker', 'Electrician', 'HVAC Technician',
+      'Mason', 'Mechanic', 'Painter', 'Plumber', 'Roofer', 'Welder'
+    ]
+  },
+  {
+    id: 'technology-professionals',
+    name: 'Technology Professionals',
+    icon: 'technology',
+    desc: 'Software engineers, cloud architects, cybersecurity specialists, and AI researchers',
+    color: '#2563eb',
+    subcategories: [
+      'AI Engineer', 'Backend Developer', 'Cloud Engineer', 'Cybersecurity Specialist',
+      'Data Analyst', 'Data Scientist', 'Database Administrator', 'DevOps Engineer',
+      'Frontend Developer', 'Full Stack Developer', 'Machine Learning Engineer',
+      'Mobile App Developer', 'Network Administrator', 'QA Engineer', 'Software Developer',
+      'Software Engineer', 'System Administrator', 'Web Developer'
+    ]
   }
 ]
 
@@ -690,6 +780,38 @@ export interface BusinessItem {
   planPrice?: number
   hasSinglePage?: boolean
   canEditProfile?: boolean
+  // Seed Directory & Data Provenance Fields
+  source_type?: 'seed_research' | 'user_submission' | 'claim' | string
+  claim_status?: 'unclaimed' | 'claimed' | 'pending_verification' | string
+  ownership_status?: 'directory_seed' | 'claimed_owner' | 'unclaimed' | string
+  account_id?: string | null
+  created_by?: string
+  source_urls?: string[]
+  official_source_url?: string
+  secondary_source_urls?: string[]
+  source_checked_date?: string
+  source_notes?: string
+  data_quality_notes?: string
+  verification_confidence?: string
+  professional_title?: string | null
+  organization?: string | null
+  year_established?: number | string | null
+  service_area?: string | null
+  social_profiles?: string[] | null
+  main_category?: string
+  main_category_slug?: string
+  subcategory_slug?: string
+  state_code?: string | null
+  country?: string | null
+  zip?: string | null
+  hours?: string | Record<string, string> | null
+  priceRange?: string | null
+  short_description?: string | null
+  longer_factual_description?: string | null
+  created_at?: string
+  updated_at?: string
+  business_name?: string
+  business_slug?: string
   editRequests?: {
     id: string
     requestedAt: string

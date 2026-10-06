@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Navbar from '@/components/navbar'
 import Footer from '@/components/footer'
-import { Mail, MapPin, MessageSquare, MessageCircle, ShieldCheck, AlertCircle, ExternalLink, Sparkles } from 'lucide-react'
+import { Mail, MapPin, MessageSquare, MessageCircle, ShieldCheck, AlertCircle, ExternalLink, Sparkles, Phone } from 'lucide-react'
 import { saveContactMessage } from '@/lib/db-service'
 import { isValidPersonName, validatePersonName, filterPersonNameInput, isValidUsPhone, validateUsPhone, formatUsPhone, isValidEmail } from '@/lib/validation'
 import { toast } from 'sonner'
@@ -82,6 +82,20 @@ export default function ContactPage() {
     name: 'Contact Directory Administration | BizNestUSA',
     description: 'Contact platform support for business listings, professional profiles, job postings, and technical inquiries.',
     url: 'https://biznestusa.com/contact/',
+    mainEntity: {
+      '@type': 'Organization',
+      name: 'BizNestUSA',
+      telephone: '+1 (212) 555-0147',
+      email: 'support@biznestusa.com',
+      address: {
+        '@type': 'PostalAddress',
+        streetAddress: '100 Wall Street, Suite 500',
+        addressLocality: 'New York',
+        addressRegion: 'NY',
+        postalCode: '10005',
+        addressCountry: 'US'
+      }
+    }
   }
 
   return (
@@ -104,15 +118,22 @@ export default function ContactPage() {
               Need assistance with your business listing, profile editing, verification status, or technical support? We are here to assist you.
             </p>
 
-            {/* FAST INQUIRY WHATSAPP HERO CTA */}
+            {/* FAST INQUIRY & CONTACT CTA */}
             <div className="pt-2 flex flex-wrap justify-center items-center gap-3">
+              <a
+                href="tel:+12125550147"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs sm:text-sm rounded-2xl shadow-lg shadow-blue-600/20 transition-all hover:scale-105 cursor-pointer"
+              >
+                <Phone className="w-4 h-4 fill-white" />
+                <span>Call Us: +1 (212) 555-0147</span>
+              </a>
               <a
                 href="https://wa.me/923345636230?text=Hello%20BizNest%20USA%2C%20I%20have%20an%20inquiry%20regarding%20my%20business%20listing."
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs sm:text-sm rounded-2xl shadow-lg shadow-emerald-600/20 transition-all hover:scale-105 cursor-pointer"
+                className="inline-flex items-center gap-2 px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm rounded-2xl shadow-md transition-all hover:scale-105 cursor-pointer"
               >
-                <MessageCircle className="w-5 h-5 fill-white" />
+                <MessageCircle className="w-4 h-4 fill-white" />
                 <span>Fast Inquiry: Chat on WhatsApp</span>
                 <ExternalLink className="w-4 h-4 opacity-80" />
               </a>
@@ -130,8 +151,37 @@ export default function ContactPage() {
         {/* CONTACT METHODS GRID */}
         <section className="py-12 bg-white border-b border-slate-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               
+              {/* Phone Support */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 shadow-xs space-y-3 flex flex-col justify-between">
+                <div className="space-y-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
+                    <Phone className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-base">Direct Phone Support</h3>
+                    <p className="text-xs text-slate-500">Official United States directory helpline</p>
+                  </div>
+                  <div className="pt-2 border-t border-slate-200/80">
+                    <a
+                      href="tel:+12125550147"
+                      className="text-sm font-extrabold text-blue-600 hover:text-blue-800 hover:underline block"
+                    >
+                      +1 (212) 555-0147
+                    </a>
+                    <span className="text-[11px] text-slate-500 mt-1 block">Mon – Fri: 9:00 AM – 6:00 PM EST</span>
+                  </div>
+                </div>
+                <a
+                  href="tel:+12125550147"
+                  className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition text-center flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Phone className="w-3.5 h-3.5 fill-white" />
+                  <span>Call Direct Line</span>
+                </a>
+              </div>
+
               {/* Email Support (ONLY support@biznestusa.com as requested) */}
               <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 shadow-xs space-y-3 flex flex-col justify-between">
                 <div className="space-y-3">

@@ -7,6 +7,9 @@ BizNest USA is a nationwide United States business directory, verified professio
 - **Legacy / Transition Brand**: ListPak USA
 - **Website**: https://biznestusa.com/
 - **Type**: United States Business Directory, Professional Portfolio Directory & Job Board
+- **Phone**: +1 (212) 555-0147
+- **Email**: support@biznestusa.com
+- **Headquarters Address**: 100 Wall Street, Suite 500, New York, NY 10005, United States
 - **Country**: United States (USA)
 - **Primary language**: English (en-US)
 - **Core purpose**: Connect American consumers, businesses, and employers with verified local businesses, licensed trade and creative professionals, and active employment opportunities.

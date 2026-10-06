@@ -34,6 +34,10 @@ export default function Footer() {
                 <span><strong>Serving:</strong> Businesses, professionals, and job seekers across the United States</span>
               </div>
               <div className="flex items-center gap-2">
+                <Phone className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                <span><strong>Phone:</strong> <a href="tel:+12125550147" className="hover:text-blue-300 transition-colors">+1 (212) 555-0147</a></span>
+              </div>
+              <div className="flex items-center gap-2">
                 <Globe className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                 <span><strong>Coverage:</strong> All 50 states and Washington, D.C.</span>
               </div>

@@ -104,14 +104,15 @@ export default function CategoryListingsView({
       {viewMode === 'list' ? (
         <div className="space-y-4">
           {approvedListings.map((biz) => {
-            const isBasicPlan = biz.plan === 'review_1' || biz.hasSinglePage === false
+            const isSeed = biz.source_type === 'seed_research' || biz.ownership_status === 'directory_seed'
+            const isBasicPlan = !isSeed && (biz.plan === 'review_1' || biz.hasSinglePage === false)
             const isAuthoritative = biz.plan === 'authoritative_10'
-            const isStandard = biz.plan === 'priority_5'
+            const isStandard = biz.plan === 'priority_5' && !isSeed
 
             // Format hours snippet
             const hoursSnippet = biz.operatingHours 
-              ? (biz.operatingHours['Monday - Friday'] || biz.operatingHours['Monday - Saturday'] || biz.operatingHours['Monday'] || 'Mon-Sat 9AM-6PM')
-              : 'Mon-Sat 9:00 AM - 6:00 PM'
+              ? (biz.operatingHours['Monday - Friday'] || biz.operatingHours['Monday - Saturday'] || biz.operatingHours['General Hours'] || biz.operatingHours['Monday'] || 'Mon-Sat 9AM-6PM')
+              : (typeof biz.hours === 'string' ? biz.hours : 'Hours on official site')
 
             return (
               <div
@@ -136,7 +137,11 @@ export default function CategoryListingsView({
                   
                   {/* Floating Badges */}
                   <div className="absolute top-3 left-3 flex flex-wrap gap-1">
-                    {isAuthoritative ? (
+                    {isSeed ? (
+                      <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-white text-[10px] font-bold uppercase tracking-wider shadow-sm flex items-center gap-1">
+                        <span>Unclaimed Listing</span>
+                      </span>
+                    ) : isAuthoritative ? (
                       <span className="px-2.5 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-black uppercase tracking-wider shadow-sm flex items-center gap-1">
                         <Sparkles className="w-3 h-3 text-amber-300" />
                         <span>Featured Partner</span>
@@ -175,7 +180,7 @@ export default function CategoryListingsView({
                           {isBasicPlan ? (
                             <h3 className="font-extrabold text-slate-900 text-base sm:text-lg flex items-center gap-1.5">
                               <span>{biz.name}</span>
-                              {biz.verified && (
+                              {biz.verified && !isSeed && (
                                 <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
                               )}
                             </h3>
@@ -185,36 +190,42 @@ export default function CategoryListingsView({
                               className="font-extrabold text-slate-900 text-base sm:text-lg hover:text-blue-600 flex items-center gap-1.5 transition-colors group"
                             >
                               <span className="group-hover:underline">{biz.name}</span>
-                              {biz.verified && (
+                              {biz.verified && !isSeed && (
                                 <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
                               )}
                             </Link>
                           )}
 
                           <div className="flex flex-wrap items-center gap-2 mt-1">
-                            {/* Stars Rating */}
-                            <div className="flex items-center gap-1 text-amber-600 text-xs font-extrabold">
-                              <span className="text-slate-900 font-bold">{biz.rating > 0 ? biz.rating.toFixed(1) : '5.0'}</span>
-                              <div className="flex items-center">
-                                {[...Array(5)].map((_, i) => (
-                                  <Star key={i} className="w-3.5 h-3.5 fill-current text-amber-400" />
-                                ))}
+                            {/* Stars Rating (no fake stars if 0 ratings) */}
+                            {biz.rating > 0 && biz.reviewCount > 0 ? (
+                              <div className="flex items-center gap-1 text-amber-600 text-xs font-extrabold">
+                                <span className="text-slate-900 font-bold">{biz.rating.toFixed(1)}</span>
+                                <div className="flex items-center">
+                                  {[...Array(5)].map((_, i) => (
+                                    <Star key={i} className="w-3.5 h-3.5 fill-current text-amber-400" />
+                                  ))}
+                                </div>
+                                <span className="text-slate-500 font-normal">
+                                  ({biz.reviewCount} {biz.reviewCount === 1 ? 'Review' : 'Reviews'})
+                                </span>
                               </div>
-                              <span className="text-slate-500 font-normal">
-                                ({biz.reviewCount > 0 ? `${biz.reviewCount} Reviews` : 'Verified Business'})
+                            ) : (
+                              <span className="text-xs text-slate-500 font-medium">
+                                {isSeed ? 'Unclaimed Public Listing' : 'Verified Directory Listing'}
                               </span>
-                            </div>
+                            )}
 
                             <span className="text-slate-300">•</span>
                             <span className="text-xs font-semibold text-slate-600">
-                              {biz.category || categoryName}
+                              {biz.subcategory || biz.subCategory || biz.category || categoryName}
                             </span>
                           </div>
                         </div>
                       </div>
                     </div>
 
-                    {/* Briefcase Icon with Description Snippet (Matching Screenshot) */}
+                    {/* Description Snippet */}
                     <div className="flex items-start gap-2 pt-1 text-xs text-slate-600 leading-relaxed">
                       <Briefcase className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
                       <p className="line-clamp-2">
@@ -229,24 +240,28 @@ export default function CategoryListingsView({
                         <span>{biz.address || `${biz.city}, United States`}</span>
                       </div>
                       
-                      <div className="flex items-center gap-1 text-slate-600">
-                        <Clock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                        <span className="font-medium">Hours: {hoursSnippet}</span>
-                      </div>
+                      {biz.hours && (
+                        <div className="flex items-center gap-1 text-slate-600">
+                          <Clock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                          <span className="font-medium">Hours: {hoursSnippet}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
                   {/* BOTTOM ACTION BAR */}
                   <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
-                    {/* Direct Contact Phone */}
+                    {/* Direct Contact Phone & Website */}
                     <div className="flex items-center gap-2">
-                      <a
-                        href={`tel:${biz.phone || '+18005550199'}`}
-                        className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl transition flex items-center gap-1.5"
-                      >
-                        <Phone className="w-3.5 h-3.5 text-blue-600" />
-                        <span>{biz.phone || 'Contact Business'}</span>
-                      </a>
+                      {biz.phone && (
+                        <a
+                          href={`tel:${biz.phone}`}
+                          className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl transition flex items-center gap-1.5"
+                        >
+                          <Phone className="w-3.5 h-3.5 text-blue-600" />
+                          <span>{biz.phone}</span>
+                        </a>
+                      )}
 
                       {biz.website && !biz.website.includes('biznestusa.com') && (
                         <a
@@ -285,7 +300,7 @@ export default function CategoryListingsView({
                         href={`/business/${biz.slug}`}
                         className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 group cursor-pointer"
                       >
-                        <span>View Full Profile</span>
+                        <span>View Profile</span>
                         <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
                       </Link>
                     )}
@@ -299,13 +314,13 @@ export default function CategoryListingsView({
         /* 2. GRID VIEW */
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {approvedListings.map((biz) => {
-            const isBasicPlan = biz.plan === 'review_1' || biz.hasSinglePage === false
+            const isSeed = biz.source_type === 'seed_research' || biz.ownership_status === 'directory_seed'
+            const isBasicPlan = !isSeed && (biz.plan === 'review_1' || biz.hasSinglePage === false)
             const isAuthoritative = biz.plan === 'authoritative_10'
-            const isStandard = biz.plan === 'priority_5'
 
             const hoursSnippet = biz.operatingHours 
-              ? (biz.operatingHours['Monday - Friday'] || biz.operatingHours['Monday - Saturday'] || biz.operatingHours['Monday'] || 'Mon-Sat 9AM-6PM')
-              : 'Mon-Sat 9AM-6PM'
+              ? (biz.operatingHours['Monday - Friday'] || biz.operatingHours['Monday - Saturday'] || biz.operatingHours['General Hours'] || biz.operatingHours['Monday'] || 'Mon-Sat 9AM-6PM')
+              : (typeof biz.hours === 'string' ? biz.hours : 'Hours on official site')
 
             return (
               <div
@@ -335,7 +350,7 @@ export default function CategoryListingsView({
                         {isBasicPlan ? (
                           <h3 className="font-bold text-slate-900 text-base truncate flex items-center gap-1">
                             <span className="truncate">{biz.name}</span>
-                            {biz.verified && <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />}
+                            {biz.verified && !isSeed && <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />}
                           </h3>
                         ) : (
                           <Link
@@ -343,39 +358,51 @@ export default function CategoryListingsView({
                             className="font-bold text-slate-900 text-base hover:text-blue-600 flex items-center gap-1 truncate transition-colors"
                           >
                             <span className="truncate">{biz.name}</span>
-                            {biz.verified && <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />}
+                            {biz.verified && !isSeed && <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />}
                           </Link>
                         )}
                         <p className="text-xs text-slate-500 truncate mt-0.5">
-                          {biz.city}, {biz.state || biz.province || 'USA'}
+                          {biz.city}, {biz.state_code || biz.state || biz.province || 'USA'}
                         </p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1 text-slate-700 text-xs font-bold bg-slate-100 px-2 py-1 rounded-lg shrink-0">
-                      <Star className="w-3.5 h-3.5 fill-current text-amber-500" />
-                      <span>{biz.rating > 0 ? biz.rating.toFixed(1) : '5.0'}</span>
-                    </div>
+                    {biz.rating > 0 && biz.reviewCount > 0 ? (
+                      <div className="flex items-center gap-1 text-slate-700 text-xs font-bold bg-slate-100 px-2 py-1 rounded-lg shrink-0">
+                        <Star className="w-3.5 h-3.5 fill-current text-amber-500" />
+                        <span>{biz.rating.toFixed(1)}</span>
+                      </div>
+                    ) : (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 shrink-0">
+                        {isSeed ? 'Unclaimed' : 'Directory'}
+                      </span>
+                    )}
                   </div>
 
                   <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
                     {biz.description}
                   </p>
 
-                  <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                    <Clock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                    <span className="truncate">{hoursSnippet}</span>
-                  </div>
+                  {biz.hours && (
+                    <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                      <Clock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                      <span className="truncate">{hoursSnippet}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="pt-3 border-t border-slate-100 flex justify-between items-center text-xs">
-                  <a
-                    href={`tel:${biz.phone || '+18005550199'}`}
-                    className="font-bold text-slate-700 hover:text-blue-600 flex items-center gap-1"
-                  >
-                    <Phone className="w-3.5 h-3.5 text-slate-400" />
-                    <span>{biz.phone || 'Call'}</span>
-                  </a>
+                  {biz.phone ? (
+                    <a
+                      href={`tel:${biz.phone}`}
+                      className="font-bold text-slate-700 hover:text-blue-600 flex items-center gap-1"
+                    >
+                      <Phone className="w-3.5 h-3.5 text-slate-400" />
+                      <span>{biz.phone}</span>
+                    </a>
+                  ) : (
+                    <span className="text-slate-400 italic">No phone listed</span>
+                  )}
 
                   {isBasicPlan ? (
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">

@@ -17,7 +17,8 @@ import {
   filterBusinessesByCategory,
   getCitiesWithListingsForCategory,
   toCanonicalUrl,
-  VERIFICATION_DISCLAIMER
+  VERIFICATION_DISCLAIMER,
+  normalizeSubcategorySlug
 } from '@/lib/directory-helpers'
 import { getCmsCategoryBySlug } from '@/lib/admin-cms-service'
 import { getServicesByCategory } from '@/lib/services-data'
@@ -33,6 +34,49 @@ export async function generateStaticParams() {
   }))
 }
 
+function formatCategoryTitle(name: string): string {
+  const candidates = [
+    `${name} Businesses in the USA | BizNestUSA`,
+    `${name} Directory & Businesses in USA | BizNestUSA`,
+    `${name} Businesses & Directory in USA | BizNestUSA`,
+    `${name} in the United States | BizNestUSA Directory`,
+    `Verified ${name} Businesses in USA | BizNestUSA`,
+    `${name} Directory | BizNestUSA Directory`,
+    `${name} | BizNestUSA Business Directory`
+  ]
+
+  for (const c of candidates) {
+    if (c.length >= 50 && c.length <= 60) return c
+  }
+  for (const c of candidates) {
+    if (c.length > 60) {
+      const truncated = `${name} Businesses in the USA`.slice(0, 46).trim() + ' | BizNestUSA'
+      if (truncated.length >= 50 && truncated.length <= 60) return truncated
+    }
+  }
+  return `${name} – Official Directory | BizNestUSA`.slice(0, 60)
+}
+
+function formatCategoryDescription(name: string): string {
+  const templates = [
+    `Browse verified ${name.toLowerCase()} businesses across the USA. Compare top local companies, service specialties, contact details, and addresses on BizNestUSA.`,
+    `Find verified ${name.toLowerCase()} providers across the USA. Explore local company ratings, verified contact numbers, addresses, and profiles on BizNestUSA.`,
+    `Discover top-rated ${name.toLowerCase()} companies across the USA. Compare verified local business profiles, services, phone contacts, and details on BizNestUSA.`
+  ]
+
+  for (const t of templates) {
+    if (t.length >= 140 && t.length <= 160) return t
+  }
+  for (const t of templates) {
+    if (t.length > 160) {
+      const trimmed = t.slice(0, 156)
+      const lastSpace = trimmed.lastIndexOf(' ')
+      return trimmed.slice(0, lastSpace) + '...'
+    }
+  }
+  return templates[0]
+}
+
 export async function generateMetadata(props: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const params = await props.params
   const cat = CATEGORIES.find(c => c.id === params.slug)
@@ -43,8 +87,8 @@ export async function generateMetadata(props: { params: Promise<{ slug: string }
     }
   }
   const cmsCat = await getCmsCategoryBySlug(params.slug)
-  const title = cmsCat?.seoTitle || `${cat.name} Directory & Local Services in the USA | BizNest USA`
-  const description = cmsCat?.metaDescription || `Find verified ${cat.name.toLowerCase()} businesses and licensed specialists across the United States. Compare locations, contact details, and services on BizNest USA.`
+  const title = cmsCat?.seoTitle || formatCategoryTitle(cat.name)
+  const description = cmsCat?.metaDescription || formatCategoryDescription(cat.name)
   const canonicalUrl = toCanonicalUrl(`category/${cat.id}`)
   const shouldIndex = cmsCat?.noIndex ? false : true
 
@@ -83,16 +127,18 @@ export default async function CategoryDetailPage(props: { params: Promise<{ slug
   const relatedCategories = CATEGORIES.filter(c => c.id !== cat.id).slice(0, 8)
   const seoCopy = getCategorySeoCopy(cat.id)
   const cmsCat = await getCmsCategoryBySlug(cat.id)
-  const subServices = getServicesByCategory(cat.id)
 
   const currentPath = `category/${cat.id}`
   const canonicalUrl = toCanonicalUrl(currentPath)
 
-  const displayH1 = cmsCat?.h1 || seoCopy?.title || `${cat.name} Directory`
+  const displayH1 = cmsCat?.h1 || `${cat.name} Businesses in the USA`
   const displayIntro = cmsCat?.introContent || seoCopy?.intro || cat.desc
   const displayWhatIs = cmsCat?.longDescription || seoCopy?.whatIs || `This directory connects American consumers, business owners, and project managers with verified ${cat.name.toLowerCase()} providers across the country.`
   const ctaHeading = cmsCat?.ctaHeading || seoCopy?.ctaHeading || `Own a ${cat.name} Business?`
   const ctaText = cmsCat?.ctaText || seoCopy?.ctaText || `Create your verified business profile on BizNest USA and make it easy for local customers to discover your services.`
+
+  // Category subcategories list
+  const categorySubcategories = (cat as any).subcategories || []
 
   const collectionSchema = {
     '@context': 'https://schema.org',
@@ -219,52 +265,47 @@ export default async function CategoryDetailPage(props: { params: Promise<{ slug
               </p>
             </div>
 
-            {/* Specialized Sub-Services Landing Pages (Plumbers, Roofers, etc.) */}
-            {subServices.length > 0 && (
+            {/* Relevant Subcategories Links */}
+            {categorySubcategories.length > 0 && (
               <section className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-8 space-y-5 shadow-xs">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <Wrench className="w-5 h-5 text-blue-600" />
-                      <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
-                        Browse {cat.name} by Specialty
-                      </h2>
-                    </div>
-                    <p className="text-xs sm:text-sm text-slate-500">
-                      Explore dedicated landing pages, hourly pricing guides, and verified US contractors:
-                    </p>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Wrench className="w-5 h-5 text-blue-600" />
+                    <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
+                      Browse {cat.name} Subcategories
+                    </h2>
                   </div>
-                  <Link
-                    href="/services"
-                    className="text-xs font-bold text-blue-700 hover:text-blue-900 transition-colors"
-                  >
-                    View All Services →
-                  </Link>
+                  <p className="text-xs sm:text-sm text-slate-500">
+                    Explore specialized {cat.name.toLowerCase()} sectors, verified providers, and service details:
+                  </p>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 pt-2">
-                  {subServices.map((srv) => (
-                    <Link
-                      key={srv.slug}
-                      href={`/services/${srv.slug}`}
-                      className="group p-4 rounded-2xl border border-slate-200/90 hover:border-blue-400 bg-slate-50/50 hover:bg-blue-50/40 transition-all flex flex-col justify-between space-y-2 hover:shadow-xs"
-                    >
-                      <div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
-                            {srv.title}
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 pt-2">
+                  {categorySubcategories.map((sub: string) => {
+                    const subSlug = normalizeSubcategorySlug(sub)
+                    const count = businesses.filter(b => 
+                      (b.subcategory_slug || '').toLowerCase() === subSlug || 
+                      normalizeSubcategorySlug(b.subcategory || b.subCategory || '') === subSlug
+                    ).length
+
+                    return (
+                      <Link
+                        key={sub}
+                        href={`/category/${cat.id}/${subSlug}`}
+                        className="group p-3.5 rounded-2xl border border-slate-200/90 hover:border-blue-500 bg-slate-50/60 hover:bg-blue-50/40 transition-all flex items-center justify-between shadow-2xs hover:shadow-xs"
+                      >
+                        <div className="min-w-0 pr-2">
+                          <span className="text-xs font-bold text-slate-900 group-hover:text-blue-700 transition-colors block truncate">
+                            {sub}
                           </span>
-                          <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-transform" />
+                          <span className="text-[11px] text-slate-500">
+                            {count > 0 ? `${count} ${count === 1 ? 'listing' : 'listings'}` : 'View directory'}
+                          </span>
                         </div>
-                        <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
-                          {srv.badge}
-                        </p>
-                      </div>
-                      <div className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md inline-block w-fit border border-emerald-100">
-                        {srv.typicalCost.split('(')[0].trim()}
-                      </div>
-                    </Link>
-                  ))}
+                        <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-transform shrink-0" />
+                      </Link>
+                    )
+                  })}
                 </div>
               </section>
             )}

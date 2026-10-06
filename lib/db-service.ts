@@ -108,12 +108,15 @@ export function normalizeBusinessDoc(docId: string, data: any): BusinessItem {
     paymentDate: data.paymentDate || data.submittedAt || data.createdAt || new Date().toISOString()
   } : undefined)
 
+  const isSeed = data.source_type === 'seed_research' || data.ownership_status === 'directory_seed'
+
   // Determine normalized status:
+  // Seed listings and admin-approved listings are approved.
   // User-submitted listings (with userId or submittedAt/createdAt) are pending unless explicitly approved
   let itemStatus: 'pending' | 'approved' | 'rejected' = 'approved'
   if (rawStatus === 'rejected') {
     itemStatus = 'rejected'
-  } else if (rawStatus === 'approved' || (data.approvedAt && rawStatus !== 'pending')) {
+  } else if (isSeed || rawStatus === 'approved' || (data.approvedAt && rawStatus !== 'pending')) {
     itemStatus = 'approved'
   } else if (rawStatus === 'pending' || rawStatus === 'pending_approval' || data.submittedAt || data.userId || (data.createdAt && !data.approvedAt) || screenshot || rawPaymentStatus === 'PENDING') {
     itemStatus = 'pending'
@@ -121,73 +124,105 @@ export function normalizeBusinessDoc(docId: string, data: any): BusinessItem {
 
   const paymentStatus = rawPaymentStatus || (screenshot || paymentDetails ? 'PENDING' : (itemStatus === 'approved' ? 'VERIFIED' : 'UNPAID'))
 
-  const itemSlug = data.slug || normalizeSlug(bName)
+  const itemSlug = data.slug || data.business_slug || normalizeSlug(bName)
   
   const docLocations = data.locations && data.locations.length > 0
     ? data.locations
-    : [{ city: data.city || '', address: data.address || '', isPrimary: true }]
+    : [{ city: data.city || '', address: data.street_address || data.address || '', isPrimary: true }]
   const docCities = data.cities && data.cities.length > 0
     ? data.cities
     : Array.from(new Set(docLocations.map((l: { city: string }) => l.city)))
   const primaryLoc = docLocations.find((l: { isPrimary?: boolean }) => l.isPrimary) || docLocations[0]
 
   return {
-    id: docId || data.id || 'biz-' + Date.now(),
+    id: docId || data.id || data.record_id || 'biz-' + Date.now(),
     userId: data.userId || '',
     slug: itemSlug,
     name: bName,
-    category: data.category || 'Services',
-    categoryId: data.categoryId || data.category || 'services',
+    business_name: bName,
+    business_slug: itemSlug,
+    category: data.main_category || data.category || 'Services',
+    categoryId: data.main_category_slug || data.categoryId || data.category || 'services',
+    main_category: data.main_category || data.category,
+    main_category_slug: data.main_category_slug || data.categoryId,
+    subcategory: data.subcategory || data.subCategory,
+    subcategory_slug: data.subcategory_slug || (data.subCategory ? normalizeSlug(data.subCategory) : (data.subcategory ? normalizeSlug(data.subcategory) : undefined)),
+    subCategory: data.subcategory || data.subCategory,
     city: primaryLoc.city || data.city || '',
     cities: docCities,
     state: data.state || data.province || 'USA',
+    state_code: data.state_code,
     province: data.state || data.province || 'USA',
-    rating: Number.isFinite(data.rating) ? data.rating : 0,
-    reviewCount: data.reviewCount || (data.reviews ? data.reviews.length : 0),
-    verified: data.verified === true,
-    isClaimed: data.isClaimed === true,
+    zipCode: data.zip || data.zipCode,
+    country: data.country || 'US',
+    rating: isSeed ? (Number.isFinite(data.rating) ? data.rating : 0) : (Number.isFinite(data.rating) ? data.rating : 0),
+    reviewCount: isSeed ? (data.reviewCount || 0) : (data.reviewCount || (data.reviews ? data.reviews.length : 0)),
+    verified: isSeed ? Boolean(data.verified === true) : (data.verified === true),
+    isClaimed: isSeed ? false : (data.isClaimed === true),
     isFeatured: data.isFeatured === true,
     status: itemStatus,
-    submittedAt: data.submittedAt || data.createdAt || new Date().toISOString(),
-    approvedAt: data.approvedAt,
-    approvedBy: data.approvedBy,
-    ownerName: sanitizePersonName(data.ownerName || data.fullName) || 'Business Representative',
+    submittedAt: data.submittedAt || data.created_at || data.createdAt || new Date().toISOString(),
+    approvedAt: data.approvedAt || (isSeed ? (data.source_checked_date ? `${data.source_checked_date}T00:00:00.000Z` : new Date().toISOString()) : undefined),
+    approvedBy: data.approvedBy || (isSeed ? 'biznestusa_seed_import' : undefined),
+    ownerName: isSeed ? (data.professional_title ? `${bName} (${data.professional_title})` : 'Unclaimed Directory Listing') : (sanitizePersonName(data.ownerName || data.fullName) || 'Business Representative'),
     phone: sanitizePhone(data.phone || ''),
     whatsapp: sanitizePhone(data.whatsapp || ''),
     email: data.email || '',
-    website: data.website || data.websiteUrl || '',
+    website: data.website || data.website_url || data.websiteUrl || '',
     googleBusinessProfile: sanitizeUrl(data.googleBusinessProfile || ''),
     facebookUrl: sanitizeUrl(data.facebookUrl || ''),
     instagramUrl: sanitizeUrl(data.instagramUrl || ''),
     linkedinUrl: sanitizeUrl(data.linkedinUrl || ''),
-    address: primaryLoc.address || data.address || '',
+    address: primaryLoc.address || data.street_address || data.address || '',
     locations: docLocations,
     coverImage: data.coverImage || 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1200&q=80',
-    logo: (data.logo || data.logoUrl || '').trim() || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=200&q=80',
-    description: data.description || data.aboutText || 'Verified local business listing on BizNestUSA.',
+    logo: (data.logo || data.logo_url || data.logoUrl || '').trim() || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=200&q=80',
+    description: data.longer_factual_description || data.description || data.short_description || data.aboutText || 'Verified local business listing on BizNestUSA.',
+    short_description: data.short_description,
+    longer_factual_description: data.longer_factual_description,
     metaTitle: data.metaTitle,
     metaDescription: data.metaDescription,
     canonical: data.canonical,
-    introduction: data.introduction || data.shortIntro,
+    introduction: data.short_description || data.introduction || data.shortIntro,
     secondaryCategories: data.secondaryCategories,
     schemaType: data.schemaType,
-    services: data.services || ['General Services', 'Customer Support'],
+    services: Array.isArray(data.services) && data.services.length > 0 ? data.services : ['General Services', 'Customer Support'],
     detailedServices: data.detailedServices,
     sections: data.sections,
-    operatingHours: data.operatingHours || { 'Monday - Saturday': '09:00 AM - 06:00 PM', 'Sunday': 'Closed' },
-    features: data.features || ['Verified Profile'],
+    operatingHours: data.operatingHours || (data.hours ? { 'General Hours': data.hours } : { 'Monday - Saturday': '09:00 AM - 06:00 PM', 'Sunday': 'Closed' }),
+    features: data.features || (isSeed ? ['Public Directory Listing', 'Unclaimed Profile'] : ['Verified Profile']),
+    // Seed Directory & Provenance Details
+    source_type: data.source_type || (isSeed ? 'seed_research' : undefined),
+    claim_status: data.claim_status || (isSeed ? 'unclaimed' : (data.isClaimed ? 'claimed' : 'unclaimed')),
+    ownership_status: data.ownership_status || (isSeed ? 'directory_seed' : (data.isClaimed ? 'claimed_owner' : 'unclaimed')),
+    account_id: data.account_id !== undefined ? data.account_id : null,
+    created_by: data.created_by || (isSeed ? 'biznestusa_seed_import' : undefined),
+    source_urls: data.source_urls || [data.official_source_url, ...(data.secondary_source_urls || [])].filter(Boolean),
+    official_source_url: data.official_source_url,
+    secondary_source_urls: data.secondary_source_urls,
+    source_checked_date: data.source_checked_date,
+    source_notes: data.source_notes,
+    data_quality_notes: data.data_quality_notes,
+    verification_confidence: data.verification_confidence,
+    professional_title: data.professional_title,
+    organization: data.organization,
+    year_established: data.year_established,
+    service_area: data.service_area,
+    social_profiles: data.social_profiles,
+    created_at: data.created_at || data.createdAt || data.submittedAt,
+    updated_at: data.updated_at || data.updatedAt,
     // Plan, Payment & Entitlements
-    plan: data.plan || (data.amount === 10 || data.planPrice === 10 ? 'authoritative_10' : (data.amount === 5 || data.planPrice === 5 ? 'priority_5' : 'review_1')),
-    planName: data.planName || (data.plan === 'authoritative_10' ? '$10 Authoritative Plan' : (data.plan === 'priority_5' ? '$5 Standard Plan' : '$1 Basic Plan')),
-    planPrice: data.planPrice || (data.plan === 'authoritative_10' ? 10 : (data.plan === 'priority_5' ? 5 : 1)),
-    hasSinglePage: data.hasSinglePage !== undefined ? Boolean(data.hasSinglePage) : (data.plan !== 'review_1'),
-    canEditProfile: data.canEditProfile !== undefined ? Boolean(data.canEditProfile) : (data.plan === 'priority_5' || data.plan === 'authoritative_10'),
+    plan: isSeed ? 'priority_5' : (data.plan || (data.amount === 10 || data.planPrice === 10 ? 'authoritative_10' : (data.amount === 5 || data.planPrice === 5 ? 'priority_5' : 'review_1'))),
+    planName: isSeed ? 'Directory Seed Listing' : (data.planName || (data.plan === 'authoritative_10' ? '$10 Authoritative Plan' : (data.plan === 'priority_5' ? '$5 Standard Plan' : '$1 Basic Plan'))),
+    planPrice: isSeed ? 0 : (data.planPrice || (data.plan === 'authoritative_10' ? 10 : (data.plan === 'priority_5' ? 5 : 1))),
+    hasSinglePage: true,
+    canEditProfile: isSeed ? false : (data.canEditProfile !== undefined ? Boolean(data.canEditProfile) : (data.plan === 'priority_5' || data.plan === 'authoritative_10')),
     editRequests: Array.isArray(data.editRequests) ? data.editRequests : [],
     lastEditedAt: data.lastEditedAt,
     paymentDetails,
     paymentScreenshot: screenshot,
     transactionRef: refNumber,
-    paymentStatus: (data.paymentStatus || rawPaymentStatus || (screenshot ? 'SUBMITTED' : (itemStatus === 'approved' ? 'VERIFIED' : 'PENDING'))) as any,
+    paymentStatus: (isSeed ? 'VERIFIED' : (data.paymentStatus || rawPaymentStatus || (screenshot ? 'SUBMITTED' : (itemStatus === 'approved' ? 'VERIFIED' : 'PENDING')))) as any,
     paymentSubmittedAt: data.paymentSubmittedAt || data.submittedAt || data.createdAt,
     paymentVerifiedAt: data.paymentVerifiedAt,
     paymentVerifiedBy: data.paymentVerifiedBy,
@@ -200,7 +235,7 @@ export function normalizeBusinessDoc(docId: string, data: any): BusinessItem {
     blog_post_feature_enabled: Boolean(data.blog_post_feature_enabled),
     blog_post_feature_enabled_at: data.blog_post_feature_enabled_at,
     enabled_by_admin_id: data.enabled_by_admin_id,
-    reviews: data.reviews && data.reviews.length > 0 ? data.reviews : [],
+    reviews: isSeed ? [] : (data.reviews && data.reviews.length > 0 ? data.reviews : []),
     faqs: data.faqs || []
   }
 }
@@ -465,8 +500,8 @@ export const getBusinessBySlug = cache(async function getBusinessBySlug(slug: st
         item,
         ...memoryBusinessesCache.filter(b => b.slug.toLowerCase() !== normalized && b.id !== item.id)
       ]
-      // $1 Basic Plan does not have a single page
-      if (item.status === 'approved' && !isPakistaniEntity(item) && item.hasSinglePage !== false && item.plan !== 'review_1') {
+      // $1 Basic Plan does not have a single page, but seed directory listings and paid plans do
+      if (item.status === 'approved' && !isPakistaniEntity(item) && item.hasSinglePage !== false && (item.plan !== 'review_1' || item.source_type === 'seed_research')) {
         return item
       }
       return null
@@ -477,8 +512,7 @@ export const getBusinessBySlug = cache(async function getBusinessBySlug(slug: st
       const direct = await getDocs(query(collection(db, 'businesses'), where('id', '==', raw), limit(1)))
       if (!direct.empty) {
         const item = normalizeBusinessDoc(direct.docs[0].id, direct.docs[0].data())
-        // $1 Basic Plan does not have a single page
-        if (item.status === 'approved' && !isPakistaniEntity(item) && item.hasSinglePage !== false && item.plan !== 'review_1') {
+        if (item.status === 'approved' && !isPakistaniEntity(item) && item.hasSinglePage !== false && (item.plan !== 'review_1' || item.source_type === 'seed_research')) {
           return item
         }
       }
@@ -495,7 +529,7 @@ export const getBusinessBySlug = cache(async function getBusinessBySlug(slug: st
     normalizeSlug(b.name) === normalized ||
     (b.city && `${normalizeSlug(b.name)}-${normalizeSlug(b.city)}` === normalized)
   )
-  if (localFound && (localFound.status || 'approved') === 'approved' && !isPakistaniEntity(localFound) && localFound.hasSinglePage !== false && localFound.plan !== 'review_1') {
+  if (localFound && (localFound.status || 'approved') === 'approved' && !isPakistaniEntity(localFound) && localFound.hasSinglePage !== false && (localFound.plan !== 'review_1' || localFound.source_type === 'seed_research')) {
     return localFound
   }
 
@@ -506,7 +540,7 @@ export const getBusinessBySlug = cache(async function getBusinessBySlug(slug: st
     normalizeSlug(b.name) === normalized ||
     (b.city && `${normalizeSlug(b.name)}-${normalizeSlug(b.city)}` === normalized)
   )
-  if (cached && (cached.status || 'approved') === 'approved' && !isPakistaniEntity(cached) && cached.hasSinglePage !== false && cached.plan !== 'review_1') {
+  if (cached && (cached.status || 'approved') === 'approved' && !isPakistaniEntity(cached) && cached.hasSinglePage !== false && (cached.plan !== 'review_1' || cached.source_type === 'seed_research')) {
     return cached
   }
 
@@ -517,7 +551,7 @@ export const getBusinessBySlug = cache(async function getBusinessBySlug(slug: st
     normalizeSlug(b.name) === normalized ||
     (b.city && `${normalizeSlug(b.name)}-${normalizeSlug(b.city)}` === normalized)
   )
-  if (mockFound && (mockFound.status || 'approved') === 'approved' && !isPakistaniEntity(mockFound) && mockFound.hasSinglePage !== false && mockFound.plan !== 'review_1') {
+  if (mockFound && (mockFound.status || 'approved') === 'approved' && !isPakistaniEntity(mockFound) && mockFound.hasSinglePage !== false && (mockFound.plan !== 'review_1' || mockFound.source_type === 'seed_research')) {
     return mockFound
   }
 
