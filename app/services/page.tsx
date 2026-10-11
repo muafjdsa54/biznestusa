@@ -24,14 +24,14 @@ import {
 export const revalidate = 86400
 
 export const metadata: Metadata = {
-  title: 'All Professional & Home Services in USA | Verified Contractors & Specialists | BizNestUSA',
-  description: 'Browse specialized, state-licensed professional contractors and local services across all 50 states. Dedicated landing pages for plumbers, roofers, electricians, HVAC, and more on BizNestUSA.',
+  title: 'Professional & Home Services in USA | BizNestUSA Guide',
+  description: 'Explore verified home and professional services in the USA. Compare local trade contractor costs, state licensing standards, and hiring guides on BizNestUSA.',
   alternates: {
     canonical: toCanonicalUrl('services'),
   },
   openGraph: {
-    title: 'All Professional & Home Services in USA | BizNestUSA',
-    description: 'Browse specialized, state-licensed professional contractors and local services across all 50 states.',
+    title: 'Professional & Home Services in USA | BizNestUSA Guide',
+    description: 'Explore verified home and professional services in the USA. Compare local trade contractor costs, state licensing standards, and hiring guides on BizNestUSA.',
     url: toCanonicalUrl('services'),
     siteName: 'BizNestUSA',
     locale: 'en_US',
@@ -75,7 +75,7 @@ export default function AllServicesIndexPage() {
         '@type': 'ListItem',
         position: 1,
         name: 'Home',
-        item: 'https://biznestusa.com/'
+        item: 'https://www.biznestusa.com/'
       },
       {
         '@type': 'ListItem',

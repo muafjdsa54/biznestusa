@@ -13,12 +13,12 @@ import { Metadata } from 'next'
 
 export const metadata: Metadata = {
   title: 'Business Categories in the USA | BizNestUSA Directory',
-  description: 'Explore business categories in the United States including home services, technology, healthcare, professional services, pet care, legal, automotive, and local contractors.',
-  alternates: { canonical: 'https://biznestusa.com/categories/' },
+  description: 'Explore business categories in the United States including home services, technology, healthcare, professional services, pet care, legal, and contractors.',
+  alternates: { canonical: 'https://www.biznestusa.com/categories/' },
   openGraph: {
     title: 'Business Categories in the USA | BizNestUSA Directory',
-    description: 'Explore business categories in the United States including home services, technology, healthcare, professional services, pet care, legal, automotive, and local contractors.',
-    url: 'https://biznestusa.com/categories/',
+    description: 'Explore business categories in the United States including home services, technology, healthcare, professional services, pet care, legal, and contractors.',
+    url: 'https://www.biznestusa.com/categories/',
     type: 'website',
   },
 }

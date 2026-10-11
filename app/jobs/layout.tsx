@@ -1,12 +1,12 @@
 import { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Jobs in the USA | Search Career Vacancies by State & City | BizNestUSA',
-  description: 'Find active job openings across the United States by title, company, category, state, city, and remote options on BizNestUSA.',
+  title: 'Jobs in USA: Search Open Career Vacancies | BizNest',
+  description: 'Find verified job openings across the United States. Search career vacancies, remote roles, and top hiring employers by city and industry on BizNestUSA.',
   alternates: { canonical: 'https://www.biznestusa.com/jobs/' },
   openGraph: {
-    title: 'Jobs in the USA | Search Career Vacancies by State & City | BizNestUSA',
-    description: 'Find active job openings across the United States by title, company, category, state, city, and remote options on BizNestUSA.',
+    title: 'Jobs in USA: Search Open Career Vacancies | BizNest',
+    description: 'Find verified job openings across the United States. Search career vacancies, remote roles, and top hiring employers by city and industry on BizNestUSA.',
     url: 'https://www.biznestusa.com/jobs/',
     type: 'website',
   },

@@ -4,10 +4,16 @@ import Footer from '@/components/footer'
 import { HelpCircle } from 'lucide-react'
 
 export const metadata: Metadata = {
-  title: 'Frequently Asked Questions (FAQs) | BizNest USA',
+  title: 'Frequently Asked Questions (FAQs) | BizNestUSA Hub',
   description: 'Find answers to common questions about listing your business, professional portfolios, posting jobs, and searching companies across the United States.',
   alternates: {
-    canonical: 'https://biznestusa.com/faqs/',
+    canonical: 'https://www.biznestusa.com/faqs/',
+  },
+  openGraph: {
+    title: 'Frequently Asked Questions (FAQs) | BizNestUSA Hub',
+    description: 'Find answers to common questions about listing your business, professional portfolios, posting jobs, and searching companies across the United States.',
+    url: 'https://www.biznestusa.com/faqs/',
+    type: 'website',
   },
 }
 

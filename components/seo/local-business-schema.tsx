@@ -17,7 +17,7 @@ export function LocalBusinessSchema({ business }: { business: BusinessData }) {
     '@type': 'LocalBusiness',
     name: business.name,
     description: business.description || `${business.name} - ${business.category} in ${business.city}`,
-    url: business.website || `https://biznestusa.com/`,
+    url: business.website || `https://www.biznestusa.com/`,
     telephone: business.phone,
     address: {
       '@type': 'PostalAddress',
@@ -31,7 +31,7 @@ export function LocalBusinessSchema({ business }: { business: BusinessData }) {
       '@type': 'Country',
       name: 'United States'
     },
-    logo: business.logo || 'https://biznestusa.com/logo.svg',
+    logo: business.logo || 'https://www.biznestusa.com/logo.svg',
     contactPoint: {
       '@type': 'ContactPoint',
       telephone: business.phone,
@@ -54,11 +54,11 @@ export function DirectorySchema() {
     '@type': 'WebSite',
     name: 'BizNestUSA',
     description: 'United States Business Directory - Find and list local businesses',
-    url: 'https://biznestusa.com/',
+    url: 'https://www.biznestusa.com/',
     mainEntity: {
       '@type': 'Organization',
       name: 'BizNestUSA',
-      url: 'https://biznestusa.com/',
+      url: 'https://www.biznestusa.com/',
       description: 'United States Business Directory',
       areaServed: {
         '@type': 'Country',
@@ -69,7 +69,7 @@ export function DirectorySchema() {
       '@type': 'SearchAction',
       target: {
         '@type': 'EntryPoint',
-        urlTemplate: 'https://biznestusa.com/categories/?q={search_term_string}'
+        urlTemplate: 'https://www.biznestusa.com/categories/?q={search_term_string}'
       },
       'query-input': 'required name=search_term_string'
     }

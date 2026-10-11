@@ -5,10 +5,16 @@ import Link from 'next/link'
 import React from 'react'
 
 export const metadata: Metadata = {
-  title: 'Privacy Policy | BizNestUSA - United States Business, Professional & Jobs Directory',
-  description: 'Read the BizNestUSA privacy policy. Learn how we collect, store, and protect your data, including Google AdSense advertising cookie disclosures, CCPA, and GDPR compliance.',
+  title: 'Privacy Policy & Data Protection Notice | BizNestUSA',
+  description: 'Read the BizNestUSA privacy policy. Learn how we collect, store, and protect user data with CCPA, GDPR, and Google advertising cookie compliance protocols.',
   alternates: {
-    canonical: 'https://biznestusa.com/privacy/',
+    canonical: 'https://www.biznestusa.com/privacy/',
+  },
+  openGraph: {
+    title: 'Privacy Policy & Data Protection Notice | BizNestUSA',
+    description: 'Read the BizNestUSA privacy policy. Learn how we collect, store, and protect user data with CCPA, GDPR, and Google advertising cookie compliance protocols.',
+    url: 'https://www.biznestusa.com/privacy/',
+    type: 'website',
   },
   robots: { index: true, follow: true },
 }
@@ -25,7 +31,7 @@ export default function PrivacyPage() {
 
         <div className="prose prose-blue max-w-none text-gray-700 leading-relaxed space-y-6">
           <p>
-            At <strong>BizNestUSA</strong> (accessible via <a href="https://biznestusa.com/" className="text-blue-600 hover:underline">https://biznestusa.com/</a>), the privacy and protection of our users, business owners, professionals, and visitors is of paramount importance. This Privacy Policy describes the types of personal and business information collected, recorded, and utilized by BizNestUSA, as well as the safeguards and rights available to you.
+            At <strong>BizNestUSA</strong> (accessible via <a href="https://www.biznestusa.com/" className="text-blue-600 hover:underline">https://www.biznestusa.com/</a>), the privacy and protection of our users, business owners, professionals, and visitors is of paramount importance. This Privacy Policy describes the types of personal and business information collected, recorded, and utilized by BizNestUSA, as well as the safeguards and rights available to you.
           </p>
           <p>
             If you have questions or require more information about our Privacy Policy, please contact our administrative team at <a href="mailto:privacy@biznestusa.com" className="text-blue-600 hover:underline">privacy@biznestusa.com</a>.

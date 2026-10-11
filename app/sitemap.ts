@@ -196,6 +196,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const approvedBusinesses = rawBusinesses.filter(b => 
     (b.status || 'approved') === 'approved' && 
     Boolean(b.slug && b.slug.trim()) &&
+    b.slug !== 'verified-business' &&
+    b.hasSinglePage !== false &&
+    (b.plan !== 'review_1' || b.source_type === 'seed_research') &&
     !isPakistaniEntity(b)
   )
   const businessRoutes = approvedBusinesses.map((biz) => ({

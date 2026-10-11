@@ -1,58 +1,75 @@
-'use client'
-
-import { useState, useEffect } from 'react'
-import Image from 'next/image'
+import { Suspense } from 'react'
+import Link from 'next/link'
 import Navbar from '@/components/navbar'
 import Footer from '@/components/footer'
-import { CompanyItem, TOP_CITIES } from '@/lib/data'
 import { getAllCompanies } from '@/lib/company-service'
-import Link from 'next/link'
-import { 
-  Building2, MapPin, Search, ShieldCheck, Star, ArrowRight, Briefcase, 
-  Linkedin, Users, Filter, Globe, Plus
-} from 'lucide-react'
+import CompaniesDirectoryClient from '@/components/companies/companies-directory-client'
+import { Building2, Plus, ShieldCheck, HelpCircle } from 'lucide-react'
 
-export default function CompaniesPage() {
-  const [companies, setCompanies] = useState<CompanyItem[]>([])
-  const [loading, setLoading] = useState(true)
+export const revalidate = 60
 
-  // Filters
-  const [query, setQuery] = useState('')
-  const [selectedCity, setSelectedCity] = useState('')
-  const [selectedIndustry, setSelectedIndustry] = useState('')
-  const [onlyVerified, setOnlyVerified] = useState(false)
+export default async function CompaniesPage() {
+  const companies = await getAllCompanies(false)
 
-  useEffect(() => {
-    async function loadData() {
-      setLoading(true)
-      try {
-        const data = await getAllCompanies(false)
-        setCompanies(data)
-      } catch (err) {
-        console.error('Error fetching companies:', err)
-      } finally {
-        setLoading(false)
-      }
+  const faqItems = [
+    {
+      q: 'How does BizNestUSA verify hiring employers and company profiles?',
+      a: 'We corroborate corporate entity filings with state Secretaries of State, confirm official corporate domains and HR email routes, and verify active headquarters addresses before awarding Verified status to employer profiles.'
+    },
+    {
+      q: 'How can our company list open vacancies and claim our profile?',
+      a: 'Corporate HR representatives and talent acquisition teams can register through our Register Company portal. Once verified, managers can update company overviews, post active job openings, and feature employee benefits.'
+    },
+    {
+      q: 'What workplace transparency standards are supported on BizNestUSA?',
+      a: 'We promote full transparency regarding Equal Employment Opportunity (EEO) policies, transparent wage and salary bands, employee healthcare options, remote flexibility terms, and workplace safety compliance.'
+    },
+    {
+      q: 'Can job seekers apply directly to companies listed in the directory?',
+      a: 'Yes. Each verified company profile provides direct links to the employer’s official careers portal, listed application emails, and current job postings active on BizNestUSA.'
     }
-    loadData()
-  }, [])
+  ]
 
-  const filtered = companies.filter(c => {
-    const q = query.toLowerCase().trim()
-    const industry = c.industry || ''
-    const matchesQuery = !q || c.name.toLowerCase().includes(q) || (c.description || '').toLowerCase().includes(q) || industry.toLowerCase().includes(q)
-    const matchesCity = !selectedCity || c.city.toLowerCase() === selectedCity.toLowerCase()
-    const matchesIndustry = !selectedIndustry || industry.toLowerCase().includes(selectedIndustry.toLowerCase())
-    const matchesVerified = !onlyVerified || c.verified
+  const jsonLdFaq = {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faqItems.map((item) => ({
+      '@type': 'Question',
+      name: item.q,
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: item.a
+      }
+    }))
+  }
 
-    return matchesQuery && matchesCity && matchesIndustry && matchesVerified
-  })
+  const jsonLdList = {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: 'Top Hiring Companies in the United States',
+    itemListElement: companies.slice(0, 15).map((comp, idx) => ({
+      '@type': 'ListItem',
+      position: idx + 1,
+      name: comp.name,
+      url: `https://www.biznestusa.com/companies/${comp.slug}/`
+    }))
+  }
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans">
       <Navbar />
 
-      <section className="bg-[#0F172A] text-white pt-12 pb-14 px-4 sm:px-6 lg:px-8 border-b border-slate-800">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdFaq) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdList) }}
+      />
+
+      {/* Hero Header */}
+      <section className="bg-gradient-to-br from-[#0F172A] via-[#1E293B] to-[#0F172A] text-white pt-12 pb-16 px-4 sm:px-6 lg:px-8 border-b border-slate-800">
         <div className="max-w-7xl mx-auto space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="space-y-2">
@@ -61,7 +78,7 @@ export default function CompaniesPage() {
                 <span>Company and Employer Directory</span>
               </span>
               <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-                Top Hiring Companies & HR Departments
+                Top Hiring Companies &amp; Employers in the USA
               </h1>
               <p className="text-slate-400 text-xs sm:text-sm max-w-2xl">
                 Explore verified technology companies, corporate employers, healthcare institutions, and commercial organizations across the United States.
@@ -76,119 +93,89 @@ export default function CompaniesPage() {
               <span>Register Company Profile</span>
             </Link>
           </div>
-
-          <div className="bg-white rounded-2xl p-4 shadow-xl border border-slate-200/80 grid grid-cols-1 md:grid-cols-12 gap-3">
-            <div className="md:col-span-6 flex items-center gap-3 px-3 py-2.5 bg-slate-50 rounded-xl border border-slate-200/60">
-              <Search className="w-4 h-4 text-slate-400 shrink-0" />
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search company name or industry..."
-                className="w-full bg-transparent text-slate-900 text-xs focus:outline-none"
-              />
-            </div>
-
-            <div className="md:col-span-3 flex items-center gap-3 px-3 py-2.5 bg-slate-50 rounded-xl border border-slate-200/60">
-              <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
-              <select
-                value={selectedCity}
-                onChange={(e) => setSelectedCity(e.target.value)}
-                className="w-full bg-transparent text-slate-900 text-xs focus:outline-none"
-              >
-                <option value="">All US Metros &amp; Cities</option>
-                {TOP_CITIES.map(city => (
-                  <option key={city} value={city}>{city}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="md:col-span-3 flex items-center gap-3 px-3 py-2.5 bg-slate-50 rounded-xl border border-slate-200/60">
-              <Filter className="w-4 h-4 text-slate-400 shrink-0" />
-              <select
-                value={selectedIndustry}
-                onChange={(e) => setSelectedIndustry(e.target.value)}
-                className="w-full bg-transparent text-slate-900 text-xs focus:outline-none"
-              >
-                <option value="">All Industries</option>
-                <option value="Technology">Technology & IT</option>
-                <option value="Construction">Construction & Building</option>
-                <option value="Healthcare">Healthcare & Medical</option>
-                <option value="Education">Education & Training</option>
-                <option value="Finance">Finance & Banking</option>
-              </select>
-            </div>
-          </div>
         </div>
       </section>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 flex-1 w-full space-y-6">
-        <div className="flex justify-between items-center pb-2 border-b border-slate-200">
-          <h2 className="text-xl font-extrabold text-slate-900">
-            Hiring Companies ({filtered.length})
-          </h2>
-        </div>
+      {/* Main Content Area */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 flex-1 w-full space-y-12">
+        <Suspense fallback={<div className="py-12 text-center text-slate-400 text-xs">Loading employer directory...</div>}>
+          <CompaniesDirectoryClient initialCompanies={companies} />
+        </Suspense>
 
-        {loading ? (
-          <div className="py-12 text-center text-slate-400 text-xs">Loading employer directory...</div>
-        ) : filtered.length === 0 ? (
-          <div className="bg-white rounded-3xl p-12 text-center space-y-3 border border-slate-200">
-            <Building2 className="w-10 h-10 text-slate-300 mx-auto" />
-            <h3 className="font-bold text-slate-800 text-base">No hiring companies match your search</h3>
-            <p className="text-xs text-slate-500">Try broadening your city or industry filter.</p>
+        {/* In-Depth Editorial & Corporate Employer Standards Guide (350+ words of real content) */}
+        <section className="bg-white rounded-3xl border border-slate-200/90 p-8 sm:p-12 shadow-sm space-y-8">
+          <div className="max-w-3xl">
+            <span className="text-xs font-bold uppercase tracking-wider text-blue-600">Employer Ecosystem Guide</span>
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1">
+              Evaluating Corporate Employers, Growth Startups &amp; Enterprise Teams
+            </h2>
+            <p className="text-sm text-slate-600 mt-2 leading-relaxed">
+              When evaluating potential employers in the United States, prospective candidates and business partners look for established track records of organizational stability, competitive benefits, diversity commitments, and transparent corporate governance. BizNestUSA provides a verified index of employers operating across key commercial sectors, from enterprise software and engineering to healthcare delivery and manufacturing.
+            </p>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filtered.map((comp) => (
-              <div key={comp.slug} className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs hover:shadow-xl transition-all space-y-4 flex flex-col justify-between group">
-                <div className="space-y-4">
-                  <div className="flex items-start gap-4">
-                    <Image src={comp.logo || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=200&q=80'} alt={comp.name} width={56} height={56} loading="lazy" sizes="56px" className="w-14 h-14 rounded-2xl object-cover border border-slate-100 shadow-xs shrink-0" />
-                    <div className="space-y-1 min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <Link href={`/companies/${comp.slug}`} className="font-extrabold text-slate-900 text-base group-hover:text-blue-600 transition-colors truncate">
-                          {comp.name}
-                        </Link>
-                        {comp.verified && <ShieldCheck className="w-4.5 h-4.5 text-emerald-500 shrink-0" />}
-                      </div>
-                      <p className="text-xs font-bold text-blue-600">{comp.industry || 'Company'}</p>
-                      <div className="flex items-center gap-2 text-[11px] text-slate-500">
-                        <span>📍 {comp.city}</span>
-                        <span>•</span>
-                        <span>{comp.companySize}</span>
-                      </div>
-                    </div>
-                  </div>
 
-                  <p className="text-xs text-slate-600 line-clamp-3 leading-relaxed">
-                    {comp.description}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
+            <div className="p-6 bg-slate-50 rounded-2xl border border-slate-200/70 space-y-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold">
+                01
+              </div>
+              <h3 className="text-base font-bold text-slate-900">Equal Opportunity (EEO)</h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Reputable American enterprises strictly adhere to federal Equal Employment Opportunity Commission (EEOC) standards, ensuring non-discriminatory hiring, equitable compensation scales, and inclusive promotion pathways regardless of race, age, religion, or gender.
+              </p>
+            </div>
+
+            <div className="p-6 bg-slate-50 rounded-2xl border border-slate-200/70 space-y-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+                02
+              </div>
+              <h3 className="text-base font-bold text-slate-900">Total Rewards &amp; Benefits</h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Competitive employers offer robust benefits programs that typically feature ACA-compliant health insurance, dental and vision care, defined-contribution retirement plans with company match, parental leave, mental health assistance, and professional education subsidies.
+              </p>
+            </div>
+
+            <div className="p-6 bg-slate-50 rounded-2xl border border-slate-200/70 space-y-3">
+              <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
+                03
+              </div>
+              <h3 className="text-base font-bold text-slate-900">Career Mobility &amp; Training</h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                High-retention employers invest continuously in workforce upskilling, mentorship cohorts, leadership pipelines, and lateral departmental mobility, fostering long-term career growth in rapidly shifting economic sectors.
+              </p>
+            </div>
+          </div>
+
+          <div className="p-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border border-blue-200/80 space-y-3">
+            <div className="flex items-center gap-2 text-blue-800 font-bold text-sm">
+              <ShieldCheck className="w-5 h-5 text-blue-600" />
+              <span>BizNestUSA Corporate Entity Validation Standard</span>
+            </div>
+            <p className="text-xs text-blue-950/80 leading-relaxed">
+              Every employer registered on BizNestUSA undergoes review to confirm valid commercial incorporation, active state filings, and legitimate hiring practices. This standard prevents phantom listings, ensures accurate employee headcounts, and protects candidates during their career search.
+            </p>
+          </div>
+
+          {/* Frequently Asked Questions */}
+          <div className="space-y-4 pt-4 border-t border-slate-200">
+            <h3 className="text-xl font-extrabold text-slate-900">
+              Frequently Asked Questions About US Corporate Employers
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {faqItems.map((item, idx) => (
+                <div key={idx} className="p-5 bg-slate-50 rounded-2xl border border-slate-200/60 space-y-2">
+                  <h4 className="text-xs sm:text-sm font-bold text-slate-900 flex items-start gap-2">
+                    <HelpCircle className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                    <span>{item.q}</span>
+                  </h4>
+                  <p className="text-xs text-slate-600 leading-relaxed pl-6">
+                    {item.a}
                   </p>
                 </div>
-
-                <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    {comp.linkedin && (
-                      <a href={comp.linkedin} target="_blank" title="LinkedIn Page" className="p-2 rounded-xl bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-600 hover:text-white transition-all">
-                        <Linkedin className="w-3.5 h-3.5" />
-                      </a>
-                    )}
-                    <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
-                      {comp.activeJobsCount || 0} Active Job(s)
-                    </span>
-                  </div>
-
-                  <Link
-                    href={`/companies/${comp.slug}`}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-colors inline-flex items-center gap-1"
-                  >
-                    <span>View Employer Page</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </Link>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        )}
+        </section>
       </main>
 
       <Footer />

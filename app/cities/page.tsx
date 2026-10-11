@@ -6,13 +6,13 @@ import { MapPin, Building2, ChevronRight } from 'lucide-react'
 import { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'USA Locations & Cities Directory | BizNestUSA',
-  description: 'Explore business listings, professionals, and jobs across all 50 US states and major metropolitan cities on BizNestUSA.',
-  alternates: { canonical: 'https://biznestusa.com/cities/' },
+  title: 'USA Cities & Local Business Directory | BizNestUSA',
+  description: 'Explore business listings, verified professionals, and jobs across all 50 US states and major metropolitan areas on the BizNestUSA location directory.',
+  alternates: { canonical: 'https://www.biznestusa.com/cities/' },
   openGraph: {
-    title: 'USA Locations & Cities Directory | BizNestUSA',
-    description: 'Explore business listings, professionals, and jobs across all 50 US states and major metropolitan cities on BizNestUSA.',
-    url: 'https://biznestusa.com/cities/',
+    title: 'USA Cities & Local Business Directory | BizNestUSA',
+    description: 'Explore business listings, verified professionals, and jobs across all 50 US states and major metropolitan areas on the BizNestUSA location directory.',
+    url: 'https://www.biznestusa.com/cities/',
     type: 'website',
   },
 }

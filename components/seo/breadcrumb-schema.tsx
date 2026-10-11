@@ -8,7 +8,7 @@ interface BreadcrumbItem {
 }
 
 export function generateBreadcrumbs(pathname: string): BreadcrumbItem[] {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://biznestusa.com'
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.biznestusa.com'
   const breadcrumbs: BreadcrumbItem[] = [
     { name: 'Home', url: `${baseUrl}/` }
   ]

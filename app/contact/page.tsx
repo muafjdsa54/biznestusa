@@ -81,7 +81,7 @@ export default function ContactPage() {
     '@type': 'ContactPage',
     name: 'Contact Directory Administration | BizNestUSA',
     description: 'Contact platform support for business listings, professional profiles, job postings, and technical inquiries.',
-    url: 'https://biznestusa.com/contact/',
+    url: 'https://www.biznestusa.com/contact/',
     mainEntity: {
       '@type': 'Organization',
       name: 'BizNestUSA',

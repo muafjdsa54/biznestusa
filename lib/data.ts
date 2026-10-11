@@ -96,7 +96,7 @@ export const BUSINESS_CATEGORIES: CategoryDefinition[] = [
     desc: 'Licensed local contractors, plumbers, electricians, HVAC experts, and home remodelers',
     color: '#0284c7',
     subcategories: [
-      'Plumber', 'Roofer', 'Electrician', 'HVAC Contractor', 'General Contractor',
+      'Plumber', 'Roofer', 'Electrician', 'HVAC Contractor',
       'Handyman', 'Landscaper', 'Pest Control', 'Cleaning Service', 'Moving Company',
       'Locksmith', 'Appliance Repair', 'Garage Door Service', 'Flooring Contractor',
       'Painting Contractor', 'Roofing Contractor', 'Remodeling Contractor'
@@ -106,10 +106,10 @@ export const BUSINESS_CATEGORIES: CategoryDefinition[] = [
     id: 'professional-services',
     name: 'Professional Services',
     icon: 'briefcase',
-    desc: 'Certified accountants, attorneys, real estate agencies, and consulting firms',
+    desc: 'Certified accountants, attorneys, management consultants, and advisory firms',
     color: '#4f46e5',
     subcategories: [
-      'Accountant', 'Attorney', 'Insurance Agency', 'Real Estate Agency', 'Financial Advisor',
+      'Accountant', 'Attorney', 'Financial Advisor',
       'Tax Consultant', 'Marketing Agency', 'SEO Agency', 'Web Development Agency',
       'IT Services', 'Consulting Firm'
     ]
@@ -234,7 +234,7 @@ export const BUSINESS_CATEGORIES: CategoryDefinition[] = [
     desc: 'Event planning, photography, storage solutions, security, and travel services',
     color: '#64748b',
     subcategories: [
-      'Photography', 'Event Planner', 'Wedding Services', 'Printing', 'Storage',
+      'Photography', 'Wedding Services', 'Printing', 'Storage',
       'Security Services', 'Travel Agency', 'Funeral Services'
     ]
   },
@@ -292,7 +292,7 @@ export const BUSINESS_CATEGORIES: CategoryDefinition[] = [
     desc: 'Certified accountants, bookkeepers, financial analysts, consultants, and project leaders',
     color: '#059669',
     subcategories: [
-      'Accountant', 'Bookkeeper', 'Business Analyst', 'Business Consultant',
+      'Bookkeeper', 'Business Analyst', 'Business Consultant',
       'Financial Analyst', 'HR Specialist', 'Project Manager', 'Recruiter'
     ]
   },
@@ -325,8 +325,7 @@ export const BUSINESS_CATEGORIES: CategoryDefinition[] = [
     desc: 'Licensed physicians, registered nurses, dentists, therapists, and medical specialists',
     color: '#dc2626',
     subcategories: [
-      'Dentist', 'Doctor', 'Medical Assistant', 'Nurse', 'Pharmacist',
-      'Physical Therapist', 'Therapist'
+      'Medical Assistant', 'Nurse', 'Pharmacist'
     ]
   },
   {
@@ -336,7 +335,7 @@ export const BUSINESS_CATEGORIES: CategoryDefinition[] = [
     desc: 'Licensed attorneys, trial lawyers, certified paralegals, and legal consultants',
     color: '#4f46e5',
     subcategories: [
-      'Attorney', 'Lawyer', 'Legal Consultant', 'Paralegal'
+      'Lawyer', 'Legal Consultant', 'Paralegal'
     ]
   },
   {
@@ -357,8 +356,8 @@ export const BUSINESS_CATEGORIES: CategoryDefinition[] = [
     desc: 'Licensed electricians, master plumbers, HVAC technicians, carpenters, and roofers',
     color: '#d97706',
     subcategories: [
-      'Carpenter', 'Construction Worker', 'Electrician', 'HVAC Technician',
-      'Mason', 'Mechanic', 'Painter', 'Plumber', 'Roofer', 'Welder'
+      'Carpenter', 'Construction Worker', 'HVAC Technician',
+      'Mason', 'Mechanic', 'Painter', 'Welder'
     ]
   },
   {

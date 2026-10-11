@@ -2,7 +2,7 @@ import React from 'react'
 import { Metadata } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { Phone, Mail, MapPin, MessageCircle, ShieldCheck, ShieldAlert, Info, Star, Clock, CheckCircle2, Building2, Briefcase, Award, Sparkles, Globe, ExternalLink, ArrowRight, BookOpen } from 'lucide-react'
 import Navbar from '@/components/navbar'
 import Footer from '@/components/footer'
@@ -17,7 +17,8 @@ import {
   normalizeCitySlug,
   normalizeSubcategorySlug,
   getSubcategoryDefinition,
-  VERIFICATION_DISCLAIMER
+  VERIFICATION_DISCLAIMER,
+  isPakistaniEntity,
 } from '@/lib/directory-helpers'
 
 export const dynamicParams = true
@@ -25,9 +26,11 @@ export const revalidate = 0
 
 export async function generateStaticParams() {
   const businesses = await getAllBusinesses()
-  return businesses.map((biz) => ({
-    slug: biz.slug,
-  }))
+  return businesses
+    .filter(b => b.slug && b.slug !== 'verified-business' && b.hasSinglePage !== false && (b.plan !== 'review_1' || b.source_type === 'seed_research') && !isPakistaniEntity(b))
+    .map((biz) => ({
+      slug: biz.slug,
+    }))
 }
 
 function formatBusinessTitle(biz: any, fallbackName: string): string {
@@ -178,6 +181,12 @@ function getLocalBusinessSubtype(biz: any): string {
 export async function generateMetadata(props: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const params = await props.params
   const slug = params.slug
+  if (slug === 'verified-business') {
+    return {
+      title: 'Business Not Found | BizNestUSA',
+      robots: { index: false, follow: false },
+    }
+  }
 
   const biz = await getBusinessBySlug(slug)
   const businessName = biz ? biz.name : slug
@@ -219,6 +228,10 @@ export async function generateMetadata(props: { params: Promise<{ slug: string }
 export default async function BusinessPage(props: { params: Promise<{ slug: string }> }) {
   const params = await props.params
   const slug = params.slug
+
+  if (slug === 'verified-business') {
+    redirect('/business-directory/')
+  }
 
   const biz = await getBusinessBySlug(slug)
 

@@ -8,22 +8,22 @@ import {
 } from 'lucide-react'
 
 export const metadata: Metadata = {
-  title: "About Us | BizNestUSA Business & Professional Directory Platform",
+  title: "About BizNestUSA | Verified USA Business Directory",
   description: "Learn about BizNestUSA, our mission to connect local businesses, skilled independent professionals, and career opportunities across all 50 US states.",
   alternates: {
-    canonical: 'https://biznestusa.com/about/',
+    canonical: 'https://www.biznestusa.com/about/',
   },
   openGraph: {
-    title: "About Us | BizNestUSA Platform",
-    description: "Discover the mission and values behind BizNestUSA: connecting local businesses, skilled professionals, and career opportunities across the United States.",
-    url: 'https://biznestusa.com/about/',
+    title: "About BizNestUSA | Verified USA Business Directory",
+    description: "Learn about BizNestUSA, our mission to connect local businesses, skilled independent professionals, and career opportunities across all 50 US states.",
+    url: 'https://www.biznestusa.com/about/',
     siteName: 'BizNestUSA',
     locale: 'en_US',
     type: 'website',
   },
   twitter: {
     card: 'summary_large_image',
-    title: "About Us | BizNestUSA Platform",
+    title: "About BizNestUSA | Verified USA Business Directory",
     description: "Connecting local businesses, skilled professionals, and career opportunities across all 50 US states.",
   },
 }

@@ -4,10 +4,16 @@ import { Metadata } from 'next'
 import React from 'react'
 
 export const metadata: Metadata = {
-  title: 'Terms of Service | BizNest USA Directory Platform',
-  description: 'Read the BizNest USA terms of service. Learn the rules and guidelines for listing, verifying, and discovering businesses on our platform.',
+  title: 'Terms of Service & User Agreement | BizNestUSA Hub',
+  description: 'Read the BizNestUSA terms of service. Review terms, user responsibilities, and guidelines for listing, verifying, and discovering businesses on our platform.',
   alternates: {
-    canonical: 'https://biznestusa.com/terms/',
+    canonical: 'https://www.biznestusa.com/terms/',
+  },
+  openGraph: {
+    title: 'Terms of Service & User Agreement | BizNestUSA Hub',
+    description: 'Read the BizNestUSA terms of service. Review terms, user responsibilities, and guidelines for listing, verifying, and discovering businesses on our platform.',
+    url: 'https://www.biznestusa.com/terms/',
+    type: 'website',
   },
   robots: { index: true, follow: true },
 }
@@ -23,7 +29,7 @@ export default function TermsPage() {
         <div className="space-y-6 text-sm text-slate-700 leading-relaxed">
           <h2 className="text-xl font-bold text-slate-900 pt-2">1. Agreement to Terms</h2>
           <p>
-            These Terms of Service constitute a legally binding agreement made between you, whether personally or on behalf of an entity (&quot;you&quot;) and <strong>BizNest USA</strong> (&quot;we,&quot; &quot;us,&quot; or &quot;our&quot;), concerning your access to and use of <a href="https://biznestusa.com/" className="text-blue-600 underline">https://biznestusa.com/</a> and related directory services (the &quot;Site&quot;).
+            These Terms of Service constitute a legally binding agreement made between you, whether personally or on behalf of an entity (&quot;you&quot;) and <strong>BizNest USA</strong> (&quot;we,&quot; &quot;us,&quot; or &quot;our&quot;), concerning your access to and use of <a href="https://www.biznestusa.com/" className="text-blue-600 underline">https://www.biznestusa.com/</a> and related directory services (the &quot;Site&quot;).
           </p>
           <p>
             By accessing the Site, you represent that you have read, understood, and agree to be bound by all of these Terms of Service. If you do not agree with all of these terms, you are expressly prohibited from using the Site.

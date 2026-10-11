@@ -1,11 +1,11 @@
 import { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Post a Job in the USA | Employer Hiring & Vacancy Portal | BizNestUSA',
+  title: 'Post a Job in USA: Hire Qualified Talent | BizNest',
   description: 'Post job openings across the United States. Connect with qualified professionals, engineers, designers, healthcare experts, and skilled talent on BizNestUSA.',
   alternates: { canonical: 'https://www.biznestusa.com/post-job/' },
   openGraph: {
-    title: 'Post a Job in the USA | Employer Hiring & Vacancy Portal | BizNestUSA',
+    title: 'Post a Job in USA: Hire Qualified Talent | BizNest',
     description: 'Post job openings across the United States. Connect with qualified professionals, engineers, designers, healthcare experts, and skilled talent on BizNestUSA.',
     url: 'https://www.biznestusa.com/post-job/',
     type: 'website',

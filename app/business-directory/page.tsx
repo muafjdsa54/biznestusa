@@ -6,14 +6,14 @@ import { BUSINESS_CATEGORIES, US_STATES, TOP_CITIES } from '@/lib/data'
 import { Building2, MapPin, CheckCircle2, ShieldCheck, Search, Plus, ArrowRight, Grid } from 'lucide-react'
 
 export const metadata: Metadata = {
-  title: 'USA Business Directory | Discover Verified Local Businesses & Services',
-  description: 'Search America\'s verified business directory across all 50 states. Discover local home service contractors, healthcare clinics, automotive shops, and professional firms.',
+  title: 'USA Business Directory: Verified Companies | BizNest',
+  description: "Search America's verified local business directory. Discover licensed contractors, services, reviews, and direct contact details across all 50 US states.",
   alternates: {
     canonical: 'https://www.biznestusa.com/business-directory/',
   },
   openGraph: {
-    title: 'USA Business Directory | Discover Verified Local Businesses & Services',
-    description: 'Explore verified US businesses by category and metropolitan area. Free self-service business listing profiles.',
+    title: 'USA Business Directory: Verified Companies | BizNest',
+    description: "Search America's verified local business directory. Discover licensed contractors, services, reviews, and direct contact details across all 50 US states.",
     url: 'https://www.biznestusa.com/business-directory/',
     type: 'website',
   },

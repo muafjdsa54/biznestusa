@@ -11,10 +11,16 @@ import { POPULAR_SERVICES, getSubcategoryHref } from '@/lib/services-data'
 export const revalidate = 3600
 
 export const metadata: Metadata = {
-  title: 'HTML Sitemap | BizNest USA Directory Structure',
+  title: 'HTML Sitemap: Full Site Structure Index | BizNestUSA',
   description: 'Complete directory index of verified business listings, industry categories, major US cities, job portals, and documentation on BizNest USA.',
   alternates: {
-    canonical: 'https://biznestusa.com/html-sitemap/',
+    canonical: 'https://www.biznestusa.com/html-sitemap/',
+  },
+  openGraph: {
+    title: 'HTML Sitemap: Full Site Structure Index | BizNestUSA',
+    description: 'Complete directory index of verified business listings, industry categories, major US cities, job portals, and documentation on BizNest USA.',
+    url: 'https://www.biznestusa.com/html-sitemap/',
+    type: 'website',
   },
 }
 

@@ -96,15 +96,15 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
       author: {
         '@type': 'Organization',
         name: editorialPost.authorName,
-        url: 'https://biznestusa.com/about',
+        url: 'https://www.biznestusa.com/about',
       },
       publisher: {
         '@type': 'Organization',
         name: 'BizNest USA',
-        url: 'https://biznestusa.com',
+        url: 'https://www.biznestusa.com',
         logo: {
           '@type': 'ImageObject',
-          url: 'https://biznestusa.com/logo.png',
+          url: 'https://www.biznestusa.com/logo.png',
         },
       },
       datePublished: editorialPost.date,
@@ -123,7 +123,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
           '@type': 'ListItem',
           position: 1,
           name: 'Home',
-          item: 'https://biznestusa.com/',
+          item: 'https://www.biznestusa.com/',
         },
         {
           '@type': 'ListItem',
@@ -308,15 +308,15 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
     author: {
       '@type': 'Organization',
       name: userPost.businessName,
-      url: `https://biznestusa.com/business/${userPost.businessSlug}`,
+      url: `https://www.biznestusa.com/business/${userPost.businessSlug}`,
     },
     publisher: {
       '@type': 'Organization',
       name: 'BizNest USA',
-      url: 'https://biznestusa.com',
+      url: 'https://www.biznestusa.com',
       logo: {
         '@type': 'ImageObject',
-        url: 'https://biznestusa.com/logo.png',
+        url: 'https://www.biznestusa.com/logo.png',
       },
     },
     datePublished: userPost.publishedAt || userPost.createdAt,
@@ -335,7 +335,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
         '@type': 'ListItem',
         position: 1,
         name: 'Home',
-        item: 'https://biznestusa.com/',
+        item: 'https://www.biznestusa.com/',
       },
       {
         '@type': 'ListItem',

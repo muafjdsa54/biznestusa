@@ -17,7 +17,12 @@ import {
   Building2,
   Briefcase,
   Users,
-  Phone
+  Phone,
+  HelpCircle,
+  CheckCircle2,
+  DollarSign,
+  FileText,
+  BadgeCheck
 } from 'lucide-react'
 import { Metadata } from 'next'
 import { notFound } from 'next/navigation'
@@ -64,6 +69,55 @@ export async function generateStaticParams() {
   return Array.from(activeCitySlugs).map((slug) => ({ slug }))
 }
 
+function formatCityTitle(cityName: string): string {
+  const candidates = [
+    `Top Businesses in ${cityName}, USA | BizNestUSA`,
+    `Businesses in ${cityName}, USA | BizNestUSA Directory`,
+    `Local Businesses in ${cityName}, USA | BizNestUSA`,
+    `Verified Businesses in ${cityName}, USA | BizNestUSA`,
+    `${cityName}, USA Business Directory | BizNestUSA`,
+    `Explore Businesses in ${cityName}, USA | BizNestUSA`
+  ]
+
+  for (const c of candidates) {
+    if (c.length >= 50 && c.length <= 60) return c
+  }
+
+  for (const c of candidates) {
+    if (c.length > 60) {
+      const trimmed = `Businesses in ${cityName}, USA`.slice(0, 46).trim() + ' | BizNestUSA'
+      if (trimmed.length >= 50 && trimmed.length <= 60) return trimmed
+    }
+  }
+
+  const padded = `Verified Top Businesses in ${cityName}, USA | BizNestUSA`
+  if (padded.length >= 50 && padded.length <= 60) return padded
+
+  return `Businesses in ${cityName}, USA | BizNestUSA Directory`.slice(0, 60)
+}
+
+function formatCityDescription(cityName: string): string {
+  const templates = [
+    `Explore verified local businesses, licensed trade contractors, active jobs, and skilled professionals in ${cityName}, USA on BizNestUSA.`,
+    `Find verified local businesses, licensed contractors, open career vacancies, and independent professionals in ${cityName}, USA on BizNestUSA.`,
+    `Discover verified local businesses, licensed trade specialists, jobs, and commercial services in ${cityName}, USA on the BizNestUSA directory.`
+  ]
+
+  for (const t of templates) {
+    if (t.length >= 140 && t.length <= 160) return t
+  }
+
+  for (const t of templates) {
+    if (t.length > 160) {
+      const trimmed = t.slice(0, 156)
+      const lastSpace = trimmed.lastIndexOf(' ')
+      return trimmed.slice(0, lastSpace) + ' on BizNest.'
+    }
+  }
+
+  return templates[0].padEnd(142, '.')
+}
+
 export async function generateMetadata(props: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const params = await props.params
   const citySlug = params.slug.toLowerCase()
@@ -90,8 +144,8 @@ export async function generateMetadata(props: { params: Promise<{ slug: string }
 
   const hasData = cityBusinesses.length > 0 || cityJobs.length > 0 || cityPros.length > 0
 
-  const title = `Businesses in ${cityName}, USA | BizNestUSA`
-  const description = `Explore verified local businesses, services, jobs and professionals in ${cityName}, USA. Browse city directory on BizNestUSA.`
+  const title = formatCityTitle(cityName)
+  const description = formatCityDescription(cityName)
   const canonicalUrl = toCanonicalUrl(`city/${citySlug}`)
 
   return {
@@ -150,7 +204,7 @@ export default async function CityDetailPage(props: { params: Promise<{ slug: st
     name: `Businesses in ${cityName}, USA`,
     description: `Explore businesses, services, jobs and professionals in ${cityName}, USA.`,
     url: canonicalUrl,
-    isPartOf: { '@type': 'WebSite', name: 'BizNestUSA', url: 'https://biznestusa.com/' },
+    isPartOf: { '@type': 'WebSite', name: 'BizNestUSA', url: 'https://www.biznestusa.com/' },
     mainEntity: {
       '@type': 'ItemList',
       itemListElement: cityBusinesses.map((biz, idx) => ({
@@ -170,13 +224,13 @@ export default async function CityDetailPage(props: { params: Promise<{ slug: st
         '@type': 'ListItem',
         position: 1,
         name: 'Home',
-        item: 'https://biznestusa.com/'
+        item: 'https://www.biznestusa.com/'
       },
       {
         '@type': 'ListItem',
         position: 2,
         name: 'Locations',
-        item: 'https://biznestusa.com/cities/'
+        item: 'https://www.biznestusa.com/cities/'
       },
       {
         '@type': 'ListItem',
@@ -252,7 +306,7 @@ export default async function CityDetailPage(props: { params: Promise<{ slug: st
           </section>
         )}
 
-        {/* Popular Categories in this City (Only displaying categories that have real listings) */}
+        {/* Popular Categories in this City */}
         {activeCategories.length > 0 && (
           <section className="bg-white rounded-2xl border border-slate-200/80 p-6 space-y-4 shadow-xs">
             <div className="flex justify-between items-center">
@@ -415,6 +469,97 @@ export default async function CityDetailPage(props: { params: Promise<{ slug: st
             </div>
           </div>
         )}
+
+        {/* Local Economic & Business Ecosystem Overview */}
+        <section className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-8 space-y-6 shadow-xs">
+          <div className="space-y-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-blue-600 bg-blue-50 px-3 py-1 rounded-full border border-blue-200 inline-block">
+              City Business Ecosystem
+            </span>
+            <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">
+              Commercial Directory &amp; Economic Guide for {cityName}, USA
+            </h2>
+            <p className="text-slate-600 text-sm leading-relaxed">
+              {cityName} represents a key regional economic hub supporting diverse industries including residential contracting, skilled trade services, healthcare practices, legal firms, and commercial retail. Sourcing local service providers in {cityName} ensures faster response times, accountability, and adherence to municipal safety standards.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 pt-2">
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+              <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
+                <BadgeCheck className="w-4 h-4" />
+              </div>
+              <h3 className="text-sm font-bold text-slate-900">Local Licensing Boards</h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Operating businesses in {cityName} are subject to state registration and local city licensing requirements. Always verify trade licenses with state regulatory boards before contracting major work.
+              </p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+              <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                <FileText className="w-4 h-4" />
+              </div>
+              <h3 className="text-sm font-bold text-slate-900">Permits &amp; Building Codes</h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Home renovations and commercial developments in {cityName} require official permits from the municipal building department to maintain structural integrity and property insurability.
+              </p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+              <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
+                <DollarSign className="w-4 h-4" />
+              </div>
+              <h3 className="text-sm font-bold text-slate-900">Transparent Pricing</h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Compare multiple written bids from {cityName} service providers. Clear contracts protect consumers by specifying labor rates, equipment costs, warranty periods, and payment milestones.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* Local FAQ Section */}
+        <section className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-8 space-y-5 shadow-xs">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <HelpCircle className="w-5 h-5 text-blue-600" />
+              <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
+                Frequently Asked Questions about {cityName} Businesses
+              </h2>
+            </div>
+            <p className="text-xs sm:text-sm text-slate-500">
+              Guidance for consumers and business owners in {cityName}, USA:
+            </p>
+          </div>
+
+          <div className="space-y-3 pt-2">
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5">
+              <h3 className="text-sm font-bold text-slate-900">
+                How do I verify a local business or contractor license in {cityName}?
+              </h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                You can verify credentials through state licensing portals and the {cityName} municipal clerk or department of regulatory agencies. On BizNestUSA, verified badges highlight businesses that have completed documentary review.
+              </p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5">
+              <h3 className="text-sm font-bold text-slate-900">
+                What are the benefits of hiring local {cityName} service providers?
+              </h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Local providers possess direct familiarity with regional building codes, climate considerations, and municipal permit protocols in {cityName}, enabling timely project completion and accessible follow-up warranty service.
+              </p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5">
+              <h3 className="text-sm font-bold text-slate-900">
+                How can {cityName} business owners register or claim their company listing?
+              </h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Business owners in {cityName} can add their company profile or claim an existing directory entry for free using the &apos;Add Your Business&apos; portal on BizNestUSA to reach local customers across the metropolitan area.
+              </p>
+            </div>
+          </div>
+        </section>
 
         {/* Quick Links Back to Hubs */}
         <div className="flex flex-wrap gap-3 pt-4 justify-center text-xs">

@@ -8,12 +8,13 @@ import { Metadata } from 'next'
 import {
   POPULAR_SERVICES,
   getServiceBySlug,
+  getSubcategoryHref,
   ServiceDefinition
 } from '@/lib/services-data'
 import { getAllBusinesses } from '@/lib/db-service'
 import { getAllProfessionals } from '@/lib/professional-service'
 import { toCanonicalUrl, VERIFICATION_DISCLAIMER } from '@/lib/directory-helpers'
-import { TOP_CITIES } from '@/lib/data'
+import { TOP_CITIES, BUSINESS_CATEGORIES } from '@/lib/data'
 import {
   ShieldCheck,
   Star,
@@ -39,9 +40,103 @@ export const revalidate = 86400 // 24-hour ISR revalidation
 export const dynamicParams = true
 
 export async function generateStaticParams() {
-  return POPULAR_SERVICES.map((srv) => ({
-    slug: srv.slug,
+  const allServiceSlugs = new Set<string>()
+  POPULAR_SERVICES.forEach((srv) => allServiceSlugs.add(srv.slug))
+  BUSINESS_CATEGORIES.forEach((cat) => {
+    cat.subcategories.forEach((sub) => {
+      const href = getSubcategoryHref(sub, cat.id)
+      const slug = href.replace(/^\/services\//, '').replace(/\/$/, '')
+      if (slug) allServiceSlugs.add(slug)
+    })
+  })
+  return Array.from(allServiceSlugs).map((slug) => ({
+    slug,
   }))
+}
+
+function formatServiceMetaTitle(service: ServiceDefinition): string {
+  const name = service.title
+  const candidates = [
+    `${name} in USA: Hiring, Costs & Licensing Guide`,
+    `${name} in USA: Costs, Licensing & Hiring Guide`,
+    `${name} in USA: Complete Cost & Hiring Guide`,
+    `${name} in USA: Cost Breakdown & Hiring Guide`,
+    `${name} in USA: Guide to Costs & Licensing`,
+    `${name} in the USA: Hiring & Licensing Guide`,
+    `${name} in USA: Hiring & Licensing Guide`,
+    `${name} in USA: Verified Hiring & Cost Guide`,
+    `${name} in USA: Costs & Hiring Guide | BizNest`,
+    `${name} in USA: Licensing & Cost Guide | BizNest`,
+    `${name} in USA: Hiring Guide | BizNestUSA`,
+    `${name} in the USA: Hiring Guide | BizNestUSA`,
+  ]
+
+  for (const c of candidates) {
+    if (c.length >= 50 && c.length <= 60) return c
+  }
+
+  if (candidates[0].length > 60) {
+    const prefix = `${name} in USA: Hiring Guide`
+    if (prefix.length <= 48) {
+      const withBrand = `${prefix} | BizNestUSA`
+      if (withBrand.length >= 50 && withBrand.length <= 60) return withBrand
+    }
+    const trimmed = candidates[0].slice(0, 60)
+    const lastSpace = trimmed.lastIndexOf(' ')
+    const res = (lastSpace >= 50 ? trimmed.slice(0, lastSpace) : trimmed.slice(0, 60))
+    if (res.length >= 50 && res.length <= 60) return res
+  }
+
+  const padded = `${name} in USA: Verified Contractor Guide | BizNest`
+  if (padded.length >= 50 && padded.length <= 60) return padded
+
+  const padded2 = `Verified ${name} in the United States | BizNestUSA`
+  if (padded2.length >= 50 && padded2.length <= 60) return padded2
+
+  const shortPadded = `${name} in USA: Guide & Directory | BizNestUSA`
+  if (shortPadded.length >= 50 && shortPadded.length <= 60) return shortPadded
+
+  return `${name} in USA: Directory, Costs & Hiring Guide | BizNest`.slice(0, 60)
+}
+
+function formatServiceMetaDescription(service: ServiceDefinition): string {
+  const name = service.title.toLowerCase()
+
+  const candidates = [
+    `Complete USA guide for ${name}. Compare average service costs, state licensing regulations, project scopes, and hiring tips on BizNestUSA.`,
+    `Comprehensive USA guide for ${name}. Review average service costs, state licensing standards, common project scopes, and tips on BizNestUSA.`,
+    `Essential USA guide for ${name}. Explore average hourly costs, state licensing credentials, common repair scopes, and hiring tips on BizNestUSA.`,
+    `Explore USA hiring standards for ${name}. Review estimated costs, state licensing boards, common service offerings, and tips on BizNestUSA.`,
+    `Complete guide to ${name} in the USA. Review pricing, licensing rules, and verified contractor ratings on the BizNestUSA business network.`,
+    `Comprehensive directory and hiring guide for ${name} across all 50 US states. Compare local rates, verified credentials, and quotes on BizNestUSA.`,
+    `Complete USA guide for ${name}. Compare average service costs, state licensing regulations, project scopes, and verified contractor ratings on BizNestUSA.`,
+    `Guide to hiring ${name} across the USA. Compare average costs, state licensing requirements, project scopes, and quotes on BizNestUSA.`,
+  ]
+
+  for (const c of candidates) {
+    if (c.length >= 140 && c.length <= 160) return c
+  }
+
+  for (const c of candidates) {
+    if (c.length > 160) {
+      const targetSuffix = ' on BizNestUSA.'
+      const maxPrefixLen = 160 - targetSuffix.length
+      const cut = c.slice(0, maxPrefixLen)
+      const lastComma = cut.lastIndexOf(',')
+      const lastSpace = cut.lastIndexOf(' ')
+      const breakPoint = (lastComma >= 125) ? lastComma : (lastSpace >= 125 ? lastSpace : maxPrefixLen)
+      const res = cut.slice(0, breakPoint).replace(/[,.\s]+$/, '') + targetSuffix
+      if (res.length >= 140 && res.length <= 160) return res
+    }
+  }
+
+  const shortIntro = `USA guide for ${name}. Review average service costs, licensing rules, verified provider credentials, and hiring advice. Find top pros on BizNestUSA.`
+  if (shortIntro.length >= 140 && shortIntro.length <= 160) return shortIntro
+
+  const paddedShort = `Guide to hiring ${name} across all 50 states. Compare average costs, licensing requirements, and verified customer reviews on BizNestUSA directory.`
+  if (paddedShort.length >= 140 && paddedShort.length <= 160) return paddedShort
+
+  return candidates[0].slice(0, 160)
 }
 
 export async function generateMetadata(props: { params: Promise<{ slug: string }> }): Promise<Metadata> {
@@ -54,16 +149,18 @@ export async function generateMetadata(props: { params: Promise<{ slug: string }
     }
   }
 
+  const title = formatServiceMetaTitle(service)
+  const description = formatServiceMetaDescription(service)
   const canonicalUrl = toCanonicalUrl(`services/${service.slug}`)
   return {
-    title: service.metaTitle,
-    description: service.metaDescription,
+    title,
+    description,
     alternates: {
       canonical: canonicalUrl,
     },
     openGraph: {
-      title: service.metaTitle,
-      description: service.metaDescription,
+      title,
+      description,
       url: canonicalUrl,
       siteName: 'BizNestUSA',
       locale: 'en_US',
@@ -71,8 +168,8 @@ export async function generateMetadata(props: { params: Promise<{ slug: string }
     },
     twitter: {
       card: 'summary_large_image',
-      title: service.metaTitle,
-      description: service.metaDescription,
+      title,
+      description,
     },
     robots: {
       index: true,
@@ -126,7 +223,7 @@ export default async function ServiceDetailPage(props: { params: Promise<{ slug:
         '@type': 'ListItem',
         position: 1,
         name: 'Home',
-        item: 'https://biznestusa.com/'
+        item: 'https://www.biznestusa.com/'
       },
       {
         '@type': 'ListItem',
@@ -157,7 +254,7 @@ export default async function ServiceDetailPage(props: { params: Promise<{ slug:
     provider: {
       '@type': 'Organization',
       name: 'BizNestUSA Verified Directory',
-      url: 'https://biznestusa.com/'
+      url: 'https://www.biznestusa.com/'
     },
     offers: {
       '@type': 'AggregateOffer',

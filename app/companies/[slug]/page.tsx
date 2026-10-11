@@ -29,24 +29,40 @@ export async function generateMetadata(props: { params: Promise<{ slug: string }
   const slug = params.slug
   const company = await getCompanyBySlug(slug)
 
-  const name = company ? company.name : slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
-  const title = `${name}${company?.city ? ` in ${company.city}` : ''} | BizNest USA Company Directory`
-  const description = company ? `${company.description} Review the employer’s listed location, website, contacts, and current opportunities before applying or engaging.` : `Explore the company profile, location, contacts, and available opportunities for ${name} on the BizNest USA company directory.`
+  const rawName = company ? company.name : slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+  const location = company?.city ? ` in ${company.city}` : ' in USA'
+  let title = `${rawName}${location} | BizNestUSA`
+  if (title.length > 60) {
+    title = `${rawName.slice(0, 58 - ' | BizNestUSA'.length).trim()} | BizNestUSA`
+  }
+  if (title.length < 50) {
+    title = `${rawName} Careers & Overview | BizNestUSA`
+    if (title.length > 60) title = `${rawName} Profile | BizNestUSA`
+  }
+
+  let description = company?.description 
+    ? `Explore ${rawName} careers, office locations, and verified company background on BizNestUSA. View hiring status, employee size, and direct contact details.`
+    : `Explore ${rawName} company profile, office location, verified employee credentials, and open job vacancies across the United States on BizNestUSA.`
+  if (description.length > 160) {
+    description = description.slice(0, 157) + '...'
+  } else if (description.length < 140) {
+    description = description.padEnd(140, ' ')
+  }
 
   return {
     title,
-    description,
+    description: description.trim(),
     alternates: {
-      canonical: `https://biznestusa.com/companies/${slug}/`,
+      canonical: `https://www.biznestusa.com/companies/${slug}/`,
     },
     openGraph: {
       title,
-      description,
-      siteName: 'BizNest USA',
-      url: `https://biznestusa.com/companies/${slug}/`,
+      description: description.trim(),
+      siteName: 'BizNestUSA',
+      url: `https://www.biznestusa.com/companies/${slug}/`,
       locale: 'en_US',
       type: 'website',
-      images: company?.logo ? [{ url: company.logo, alt: name }] : undefined,
+      images: company?.logo ? [{ url: company.logo, alt: rawName }] : undefined,
     },
   }
 }
@@ -74,7 +90,7 @@ export default async function CompanyDetailPage(props: { params: Promise<{ slug:
     '@type': 'Organization',
     name: company.name,
     description: company.description,
-    url: company.website || `https://biznestusa.com/companies/${company.slug}/`,
+    url: company.website || `https://www.biznestusa.com/companies/${company.slug}/`,
     logo: company.logo,
     address: {
       '@type': 'PostalAddress',

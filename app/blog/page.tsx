@@ -15,12 +15,12 @@ export const metadata: Metadata = {
   title: 'Editorial Guides & Industry Resources | BizNest USA',
   description: 'Expert research, local SEO strategies, contractor licensing guides, and hiring benchmarks for American businesses, independent professionals, and employers.',
   alternates: {
-    canonical: 'https://biznestusa.com/blog',
+    canonical: 'https://www.biznestusa.com/blog/',
   },
   openGraph: {
     title: 'Editorial Guides & Industry Resources | BizNest USA',
     description: 'Expert research, local SEO strategies, contractor licensing guides, and hiring benchmarks across the United States.',
-    url: 'https://biznestusa.com/blog',
+    url: 'https://www.biznestusa.com/blog/',
     type: 'website',
   },
 }

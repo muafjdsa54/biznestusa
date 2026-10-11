@@ -12,7 +12,7 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 })
 
 export const metadata: Metadata = {
-  title: "BizNestUSA | Find Trusted Local Businesses Across America",
+  title: "Trusted Local Businesses in USA | BizNestUSA Directory",
   description: "Find trusted local businesses, home services, professionals, and jobs across the United States. Discover your neighborhood on BizNestUSA.",
   metadataBase: new URL('https://www.biznestusa.com'),
   keywords: [

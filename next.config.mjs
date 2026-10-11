@@ -126,6 +126,78 @@ const nextConfig = {
         destination: '/services/roofers/',
         permanent: true,
       },
+      // Issue 1: Canonical 301 redirects for duplicate subcategories
+      {
+        source: '/category/home-services/general-contractor/:path*',
+        destination: '/category/construction/general-contractor/',
+        permanent: true,
+      },
+      {
+        source: '/category/professional-services/insurance-agency/:path*',
+        destination: '/category/finance/insurance-agency/',
+        permanent: true,
+      },
+      {
+        source: '/category/professional-services/real-estate-agency/:path*',
+        destination: '/category/real-estate/real-estate-agency/',
+        permanent: true,
+      },
+      {
+        source: '/category/healthcare-professionals/physical-therapist/:path*',
+        destination: '/category/health-wellness/physical-therapist/',
+        permanent: true,
+      },
+      {
+        source: '/category/local-services/event-planner/:path*',
+        destination: '/category/events-weddings/event-planner/',
+        permanent: true,
+      },
+      {
+        source: '/category/skilled-trades/plumber/:path*',
+        destination: '/category/home-services/plumber/',
+        permanent: true,
+      },
+      {
+        source: '/category/skilled-trades/roofer/:path*',
+        destination: '/category/home-services/roofer/',
+        permanent: true,
+      },
+      {
+        source: '/category/skilled-trades/electrician/:path*',
+        destination: '/category/home-services/electrician/',
+        permanent: true,
+      },
+      {
+        source: '/category/business-finance-professionals/accountant/:path*',
+        destination: '/category/professional-services/accountant/',
+        permanent: true,
+      },
+      {
+        source: '/category/legal-professionals/attorney/:path*',
+        destination: '/category/professional-services/attorney/',
+        permanent: true,
+      },
+      {
+        source: '/category/healthcare-professionals/dentist/:path*',
+        destination: '/category/health-wellness/dentist/',
+        permanent: true,
+      },
+      {
+        source: '/category/healthcare-professionals/doctor/:path*',
+        destination: '/category/health-wellness/doctor/',
+        permanent: true,
+      },
+      {
+        source: '/category/healthcare-professionals/therapist/:path*',
+        destination: '/category/health-wellness/therapist/',
+        permanent: true,
+      },
+      // Issue 7: Dead URL redirection
+      {
+        source: '/business/verified-business/:path*',
+        destination: '/business-directory/',
+        permanent: true,
+      },
     ]
   },
 

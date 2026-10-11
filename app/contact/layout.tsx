@@ -1,13 +1,13 @@
 import { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Contact BizNest USA | US Directory & Support Desk',
-  description: 'Contact BizNest USA for business listing support, verification requests, directory assistance, and advertising inquiries.',
-  alternates: { canonical: 'https://biznestusa.com/contact/' },
+  title: 'Contact BizNestUSA | Directory Support & Inquiries',
+  description: 'Contact BizNestUSA for business listing support, verification requests, directory assistance, employer hiring inquiries, and customer service assistance.',
+  alternates: { canonical: 'https://www.biznestusa.com/contact/' },
   openGraph: {
-    title: 'Contact BizNest USA | US Directory & Support Desk',
-    description: 'Contact BizNest USA for business listing support, verification requests, directory assistance, and advertising inquiries.',
-    url: 'https://biznestusa.com/contact/',
+    title: 'Contact BizNestUSA | Directory Support & Inquiries',
+    description: 'Contact BizNestUSA for business listing support, verification requests, directory assistance, employer hiring inquiries, and customer service assistance.',
+    url: 'https://www.biznestusa.com/contact/',
     type: 'website',
   },
 }

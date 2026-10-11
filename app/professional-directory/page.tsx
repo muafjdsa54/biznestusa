@@ -6,14 +6,14 @@ import { PROFESSIONAL_CATEGORIES, TOP_CITIES } from '@/lib/data'
 import { Users, CheckCircle2, ShieldCheck, Search, UserPlus, ArrowRight, Sparkles, Briefcase, Award } from 'lucide-react'
 
 export const metadata: Metadata = {
-  title: 'USA Professional Directory | Discover Verified Experts & Freelancers',
-  description: 'Search America\'s verified professional directory. Connect with independent software engineers, UX designers, marketing consultants, licensed attorneys, and certified trades specialists.',
+  title: 'USA Professional Directory: Verified Experts | BizNest',
+  description: 'Find verified professionals, licensed specialists, and independent consultants across the United States. Review credentials, ratings, and portfolios.',
   alternates: {
     canonical: 'https://www.biznestusa.com/professional-directory/',
   },
   openGraph: {
-    title: 'USA Professional Directory | Discover Verified Experts & Freelancers',
-    description: 'Find verified American professionals by specialization and location. Dedicated portfolio profiles for independent specialists.',
+    title: 'USA Professional Directory: Verified Experts | BizNest',
+    description: 'Find verified professionals, licensed specialists, and independent consultants across the United States. Review credentials, ratings, and portfolios.',
     url: 'https://www.biznestusa.com/professional-directory/',
     type: 'website',
   },
