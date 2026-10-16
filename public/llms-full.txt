@@ -1,0 +1,54 @@
+# BizNest USA - Full AI Knowledge & Agent Specification
+
+> BizNest USA is the nationwide United States business directory, verified professional network, and jobs ecosystem covering all 50 states and Washington, D.C.
+
+## Identity & Canonical URLs
+- **Platform Name**: BizNest USA
+- **Website URL**: https://biznestusa.com/
+- **Support Email**: support@biznestusa.com
+- **Headquarters**: 100 Wall Street, Suite 500, New York, NY 10005, United States
+- **Target Geographic Region**: United States (US, USA)
+- **Primary Language**: en-US
+
+## Core Directory Taxonomy
+BizNest USA organizes American commercial and professional services across 16 primary industry categories:
+1. **Home Services**: Plumbers, Electricians, HVAC, Roofers, Landscaping, Pest Control, Painters, General Contractors.
+2. **Professional Services**: Certified Public Accountants (CPA), Business Consultants, Notaries, Architects, Translators.
+3. **Health & Wellness**: Dental Clinics, Chiropractors, Physical Therapy, Optometrists, Mental Health Counselors, Fitness Studios.
+4. **Restaurants & Food**: American Dining, Cafes, Bakeries, Catering, Food Trucks, Pizzerias.
+5. **Automotive**: Auto Repair, Tire Shops, Collision Centers, Car Detailing, Towing Services.
+6. **Beauty & Personal Care**: Salons, Barbershops, Day Spas, Nail Salons, Skincare Specialists.
+7. **Education**: Tutoring, Driving Schools, Language Academies, Early Learning Centers.
+8. **Technology & IT**: Software Development, Managed IT Services, Cybersecurity, Cloud Infrastructure, Web Design.
+9. **Real Estate**: Residential Brokers, Commercial Leasing, Property Management, Appraisers.
+10. **Construction & Trades**: Masonry, Framing, Concrete, Steel Fabrication, Demolition.
+11. **Retail & Shopping**: Local Boutiques, Specialty Hardware, Gift Stores, Bookshops.
+12. **Finance & Insurance**: Insurance Brokers, Wealth Managers, Mortgage Brokers, Credit Unions.
+13. **Pets & Animals**: Veterinary Clinics, Pet Grooming, Boarding Facilities, Dog Training.
+14. **Legal Services**: Personal Injury, Corporate Law, Real Estate Law, Immigration Law, Family Law.
+15. **Cleaning & Maintenance**: Commercial Janitorial, Carpet Cleaning, Window Washing, Pressure Washing.
+16. **Events & Entertainment**: Event Venues, Wedding Photographers, Event Planners, Audio/Visual Production.
+
+## Geographical Hierarchy
+The directory spans all 50 United States and primary metropolitan statistical areas (MSAs):
+- New York (New York City, Buffalo, Rochester)
+- California (Los Angeles, San Francisco, San Diego, San Jose)
+- Texas (Houston, Dallas, Austin, San Antonio)
+- Florida (Miami, Orlando, Tampa, Jacksonville)
+- Illinois (Chicago, Naperville, Aurora)
+- Washington (Seattle, Bellevue, Tacoma)
+- Georgia (Atlanta, Savannah)
+- Massachusetts (Boston, Cambridge)
+
+## Standard Data Entities
+BizNestUSA exposes rich semantic markup compliant with Schema.org:
+- `Organization` & `WebSite`: High-level corporate and search endpoint metadata.
+- `LocalBusiness`: Name, postalAddress (streetAddress, addressLocality, addressRegion, postalCode, addressCountry), telephone, openingHoursSpecification, geoCoordinates, aggregateRating.
+- `Person`: Professional name, jobTitle, knowsAbout, alumniOf, address, hasOccupation.
+- `JobPosting`: title, description, hiringOrganization, jobLocation, baseSalary, employmentType, datePosted, validThrough.
+
+## Machine-Actionable Search Endpoints
+- Search businesses: `https://biznestusa.com/search?q={term}&location={city_or_state}`
+- Search categories: `https://biznestusa.com/category/{category_slug}`
+- Search professionals: `https://biznestusa.com/professionals?profession={title}&location={location}`
+- Search jobs: `https://biznestusa.com/jobs?q={role}&location={location}`

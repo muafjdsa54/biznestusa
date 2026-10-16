@@ -15,7 +15,7 @@ export default function Footer() {
           <div className="flex flex-col gap-3">
             <Link href="/" aria-label="BizNestUSA Home Page" className="inline-block group bg-white px-4 py-2 rounded-2xl shadow-md self-start transition-transform duration-200 group-hover:scale-105">
               <Image
-                src="/logo.png"
+                src="/logo.svg"
                 alt="BizNestUSA - United States Business Directory"
                 width={220}
                 height={60}
@@ -23,7 +23,7 @@ export default function Footer() {
                 className="h-11 sm:h-13 w-auto object-contain"
               />
             </Link>
-            <p className="text-xs text-slate-400 max-w-md leading-relaxed">
+            <p className="text-xs text-slate-300 max-w-md leading-relaxed">
               United States-focused business discovery connecting companies, employers, professionals, job seekers, and customers through category and city pages.
             </p>
             
@@ -153,11 +153,11 @@ export default function Footer() {
         </div>
 
         {/* Footer Bottom */}
-        <div className="pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-slate-400">
+        <div className="pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-slate-300">
           <p className="text-center md:text-left">
             © 2026 BizNestUSA. A USA directory for businesses, professionals, and jobs. All rights reserved.
           </p>
-          <div className="flex items-center gap-3 text-slate-400 flex-wrap justify-center">
+          <div className="flex items-center gap-3 text-slate-300 flex-wrap justify-center">
             <Link href="/privacy" className="hover:text-white">Privacy</Link>
             <span>•</span>
             <Link href="/terms" className="hover:text-white">Terms</Link>

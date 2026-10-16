@@ -26,7 +26,7 @@ export default function Navbar() {
           {/* Brand Logo */}
           <Link href="/" aria-label="BizNestUSA Home Page" className="flex items-center gap-2 group py-1">
             <Image
-              src="/logo.png"
+              src="/logo.svg"
               alt="BizNestUSA - USA Directory"
               width={240}
               height={64}
@@ -103,6 +103,7 @@ export default function Navbar() {
           <div className="flex items-center lg:hidden">
             <button
               id="mobile-hamburger-btn"
+              type="button"
               className="text-slate-700 p-2 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
               aria-label={open ? 'Close navigation sidebar' : 'Open navigation sidebar'}
               aria-expanded={open}

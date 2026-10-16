@@ -293,12 +293,15 @@ function updateStoredCustomBusiness(idOrSlug: string, updates: Partial<BusinessI
 /**
  * Fetch all businesses. If includePending is false (default), returns ONLY approved businesses.
  */
-export async function getAllBusinesses(includePending: boolean = false): Promise<BusinessItem[]> {
+export const getAllBusinesses = cache(async function getAllBusinesses(includePending: boolean = false): Promise<BusinessItem[]> {
   const localItems = getStoredCustomBusinesses()
 
   try {
-    const querySnapshot = await getDocs(collection(db, 'businesses'))
-    if (!querySnapshot.empty) {
+    const queryPromise = getDocs(collection(db, 'businesses'))
+    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500))
+    const querySnapshot = await Promise.race([queryPromise, timeoutPromise])
+
+    if (querySnapshot && !querySnapshot.empty) {
       const firestoreItems: BusinessItem[] = []
       querySnapshot.forEach((docSnap) => {
         firestoreItems.push(normalizeBusinessDoc(docSnap.id, docSnap.data()))
@@ -348,7 +351,7 @@ export async function getAllBusinesses(includePending: boolean = false): Promise
   
   // Public filter: only return approved items
   return validBusinesses.filter(b => b.status === 'approved')
-}
+})
 
 export async function getPendingBusinesses(): Promise<BusinessItem[]> {
   const all = await getAllBusinesses(true)

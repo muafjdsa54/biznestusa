@@ -170,25 +170,27 @@ export default async function HomePage() {
 
             {/* Global Hero Search */}
             <div className="max-w-3xl mx-auto bg-white rounded-2xl p-2.5 sm:p-3 shadow-sm border border-slate-200 text-left mt-8">
-              <form action="/search" method="GET" className="grid grid-cols-1 md:grid-cols-12 gap-2">
+              <form action="/search" method="GET" role="search" aria-label="Search directory" className="grid grid-cols-1 md:grid-cols-12 gap-2">
                 <div className="md:col-span-6 flex items-center gap-3 px-3.5 py-2.5 bg-slate-50 rounded-xl border border-slate-200">
-                  <Search className="w-4 h-4 text-slate-400 shrink-0" />
+                  <Search className="w-4 h-4 text-slate-400 shrink-0" aria-hidden="true" />
                   <label htmlFor="hero-search-q" className="sr-only">Keywords, business, skill or title</label>
                   <input
                     id="hero-search-q"
                     type="text"
                     name="q"
+                    aria-label="Keywords, business, skill or title"
                     placeholder="e.g. Plumber, Web Developer, Dental Clinic..."
                     className="w-full bg-transparent text-slate-900 placeholder:text-slate-400 text-sm focus:outline-none"
                   />
                 </div>
 
                 <div className="md:col-span-4 flex items-center gap-2 px-3.5 py-2.5 bg-slate-50 rounded-xl border border-slate-200">
-                  <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
+                  <MapPin className="w-4 h-4 text-slate-400 shrink-0" aria-hidden="true" />
                   <label htmlFor="hero-location-select" className="sr-only">City or State</label>
                   <select
                     id="hero-location-select"
                     name="location"
+                    aria-label="Filter by City or State"
                     className="w-full bg-transparent text-slate-900 text-xs sm:text-sm focus:outline-none cursor-pointer"
                   >
                     <option value="">All States & Cities</option>
@@ -208,18 +210,18 @@ export default async function HomePage() {
                 <div className="md:col-span-2">
                   <button
                     type="submit"
-                    aria-label="Search Platform"
+                    aria-label="Search Directory"
                     className="w-full h-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    <Search className="w-4 h-4" />
+                    <Search className="w-4 h-4" aria-hidden="true" />
                     <span>Search</span>
                   </button>
                 </div>
               </form>
 
               {/* Quick Search Chips */}
-              <div className="pt-3 px-2 flex items-center gap-2 flex-wrap text-xs text-slate-500">
-                <span className="font-semibold text-slate-400">Popular:</span>
+              <div className="pt-3 px-2 flex items-center gap-2 flex-wrap text-xs text-slate-600">
+                <span className="font-semibold text-slate-600">Popular:</span>
                 {POPULAR_SEARCH_TERMS.slice(0, 5).map((term, i) => (
                   <span key={term.label} className="inline-flex items-center gap-1.5">
                     <Link
@@ -228,7 +230,7 @@ export default async function HomePage() {
                     >
                       {term.label}
                     </Link>
-                    {i < 4 && <span className="text-slate-300">•</span>}
+                    {i < 4 && <span className="text-slate-400">•</span>}
                   </span>
                 ))}
               </div>
@@ -245,7 +247,7 @@ export default async function HomePage() {
                 </div>
                 <div>
                   <h3 className="text-xs font-bold text-slate-900 group-hover:text-blue-600">List Your Business</h3>
-                  <p className="text-[11px] text-slate-500">Publish your company listing</p>
+                  <p className="text-xs text-slate-600 font-medium">Publish your company listing</p>
                 </div>
               </Link>
 
@@ -258,7 +260,7 @@ export default async function HomePage() {
                 </div>
                 <div>
                   <h3 className="text-xs font-bold text-slate-900 group-hover:text-blue-600">Create Profile</h3>
-                  <p className="text-[11px] text-slate-500">Showcase your skills & portfolio</p>
+                  <p className="text-xs text-slate-600 font-medium">Showcase your skills & portfolio</p>
                 </div>
               </Link>
 
@@ -271,7 +273,7 @@ export default async function HomePage() {
                 </div>
                 <div>
                   <h3 className="text-xs font-bold text-slate-900 group-hover:text-blue-600">Post a Job</h3>
-                  <p className="text-[11px] text-slate-500">Recruit qualified talent</p>
+                  <p className="text-xs text-slate-600 font-medium">Recruit qualified talent</p>
                 </div>
               </Link>
             </div>
@@ -521,7 +523,7 @@ export default async function HomePage() {
                   <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">{biz.description}</p>
                   <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
                     <span className="text-slate-500">{biz.phone || 'Contact via profile'}</span>
-                    <Link href={`/business/${biz.slug}`} className="text-blue-600 font-semibold hover:underline">
+                    <Link href={`/business/${biz.slug}`} aria-label={`View profile for ${biz.name}`} className="text-blue-600 font-semibold hover:underline">
                       View Profile &rarr;
                     </Link>
                   </div>
@@ -590,7 +592,7 @@ export default async function HomePage() {
                   <p className="text-xs text-slate-600 line-clamp-2">{job.description}</p>
                   <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
                     <span className="font-semibold text-slate-900">{job.salary}</span>
-                    <Link href={getPublicJobPath(job)} className="text-blue-600 font-semibold hover:underline">
+                    <Link href={getPublicJobPath(job)} aria-label={`Apply for ${job.title} at ${job.company}`} className="text-blue-600 font-semibold hover:underline">
                       Apply Now &rarr;
                     </Link>
                   </div>
@@ -656,7 +658,7 @@ export default async function HomePage() {
                   <p className="text-xs text-slate-600 line-clamp-2">{pro.bio}</p>
                   <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
                     <span className="text-slate-500">{pro.city}, {pro.state || 'USA'}</span>
-                    <Link href={`/professionals/${pro.username}`} className="text-indigo-600 font-semibold hover:underline">
+                    <Link href={`/professionals/${pro.username}`} aria-label={`View profile for ${pro.name}`} className="text-indigo-600 font-semibold hover:underline">
                       View Profile &rarr;
                     </Link>
                   </div>

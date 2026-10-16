@@ -1,44 +1,28 @@
-# BizNest USA (formerly ListPak)
+# BizNest USA
 
-BizNest USA is a nationwide United States business directory, verified professional directory, and employment platform designed for discovering local businesses, certified independent professionals, and active jobs across all 50 states.
+> BizNest USA is the nationwide American business directory, verified professional network, and job platform connecting consumers, businesses, and employers across all 50 US states.
 
-## Official Identity
-- **Name**: BizNest USA
-- **Legacy / Transition Brand**: ListPak USA
-- **Website**: https://biznestusa.com/
-- **Type**: United States Business Directory, Professional Portfolio Directory & Job Board
-- **Phone**: +1 (212) 555-0147
-- **Email**: support@biznestusa.com
-- **Headquarters Address**: 100 Wall Street, Suite 500, New York, NY 10005, United States
-- **Country**: United States (USA)
-- **Primary language**: English (en-US)
-- **Core purpose**: Connect American consumers, businesses, and employers with verified local businesses, licensed trade and creative professionals, and active employment opportunities.
+## Overview
+BizNest USA offers comprehensive discovery and verified listings for American local businesses, licensed trade and creative professionals, and verified employment opportunities.
 
-## What BizNest USA Offers
-- **Business Directory**: Verified company profiles across all 50 US states with services, operational hours, verified physical addresses, phone numbers, and direct contact options.
-- **Professional Directory**: Dedicated public portfolio profiles for US developers, designers, consultants, healthcare practitioners, and licensed trade specialists.
-- **Jobs Board**: Searchable employment vacancies across technology, healthcare, trades, finance, and marketing with remote, hybrid, and on-site filters.
-- **User-Generated Content (UGC)**: Genuine self-service business listings and professional profile builder.
-- **Topical Authority**: Comprehensive editorial guides on business compliance, state contractor licensing boards, local SEO, and hiring frameworks.
+## Main Directories
+- [Business Directory](https://www.biznestusa.com/search/): Search and discover verified businesses across 16 core industries.
+- [Categories](https://www.biznestusa.com/categories/): Complete directory categorization covering trades, medical, legal, tech, and retail.
+- [US States & Metros](https://www.biznestusa.com/cities/): Localized directory hubs for all 50 US states and major metropolitan areas.
+- [Professional Directory](https://www.biznestusa.com/professionals/): Verified portfolios and contact profiles for independent specialists and contractors.
+- [Jobs Marketplace](https://www.biznestusa.com/jobs/): Searchable career vacancies with salary, remote/on-site filters, and employer profiles.
 
-## Coverage
-Nationwide coverage across all 50 United States and the District of Columbia, including major metropolitan areas such as New York, Los Angeles, Chicago, Houston, Phoenix, Philadelphia, San Antonio, San Diego, Dallas, Austin, Seattle, Denver, Atlanta, Miami, and Boston.
+## Core Workflows
+- [List Your Business](https://www.biznestusa.com/add-business/): Register and publish your company listing.
+- [Create Professional Profile](https://www.biznestusa.com/add-professional/): Create an individual professional portfolio.
+- [Post a Job](https://www.biznestusa.com/post-job/): Post hiring requirements and reach qualified candidates.
 
-## Key URLs
-- **Homepage**: https://biznestusa.com/
-- **Search & Discovery**: https://biznestusa.com/search/
-- **Business Categories**: https://biznestusa.com/categories/
-- **States & Metros**: https://biznestusa.com/cities/
-- **Professional Directory**: https://biznestusa.com/professionals/
-- **Jobs Marketplace**: https://biznestusa.com/jobs/
-- **List Your Business**: https://biznestusa.com/add-business/
-- **Create Professional Profile**: https://biznestusa.com/register/professional/
-- **Post a Job Vacancy**: https://biznestusa.com/post-job/
-- **About & Governance**: https://biznestusa.com/about/
-- **Verification Policy**: https://biznestusa.com/verification-policy/
-- **Editorial Policy**: https://biznestusa.com/editorial-policy/
+## Platform Governance & Trust
+- [About Us](https://www.biznestusa.com/about/): Mission, executive leadership, and platform standards.
+- [Verification Policy](https://www.biznestusa.com/verification-policy/): Rigorous vetting process for US business and professional authenticity.
+- [Editorial Policy](https://www.biznestusa.com/editorial-policy/): Guidelines governing reviews, updates, and content integrity.
+- [Terms & Conditions](https://www.biznestusa.com/terms/): User and merchant terms of service.
+- [Privacy Policy](https://www.biznestusa.com/privacy/): Comprehensive data privacy and CCPA/GDPR compliance.
 
-## Technical Specifications
-- Built on Next.js App Router with server-side rendering and static optimization.
-- Fully compliant with Schema.org standards (Organization, WebSite, LocalBusiness, Person, JobPosting, BreadcrumbList).
-- CMS-controlled directory taxonomy, category metadata, location hubs, and editorial guides.
+## Optional
+- [Full LLM Specification](https://www.biznestusa.com/llms-full.txt): Detailed directory taxonomy, API structures, and full schema guide.
