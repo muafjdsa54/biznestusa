@@ -70,14 +70,14 @@ export default function Footer() {
               <span>Directory</span>
             </h3>
             <ul className="space-y-2 text-xs text-slate-300">
-              <li><Link href="/business-directory" className="hover:text-blue-400 transition-colors">Business Directory Hub</Link></li>
-              <li><Link href="/professional-directory" className="hover:text-blue-400 transition-colors">Professional Directory Hub</Link></li>
-              <li><Link href="/categories" className="hover:text-blue-400 transition-colors">All Categories</Link></li>
-              <li><Link href="/search" className="hover:text-blue-400 transition-colors">Business Search</Link></li>
-              <li><Link href="/add-business" className="hover:text-blue-400 transition-colors">Add Business</Link></li>
-              <li><Link href="/professionals" className="hover:text-blue-400 transition-colors">Professional Profiles</Link></li>
-              <li><Link href="/jobs" className="hover:text-blue-400 transition-colors">Jobs across the USA</Link></li>
-              <li><Link href="/post-job" className="hover:text-blue-400 transition-colors">Post Job Opening</Link></li>
+              <li><Link href="/business-directory/" className="hover:text-blue-400 transition-colors">Business Directory Hub</Link></li>
+              <li><Link href="/professional-directory/" className="hover:text-blue-400 transition-colors">Professional Directory Hub</Link></li>
+              <li><Link href="/categories/" className="hover:text-blue-400 transition-colors">All Categories</Link></li>
+              <li><Link href="/business-directory/" className="hover:text-blue-400 transition-colors">Business Search</Link></li>
+              <li><Link href="/add-business/" className="hover:text-blue-400 transition-colors">Add Business</Link></li>
+              <li><Link href="/professionals/" className="hover:text-blue-400 transition-colors">Professional Profiles</Link></li>
+              <li><Link href="/jobs/" className="hover:text-blue-400 transition-colors">Jobs across the USA</Link></li>
+              <li><Link href="/post-job/" className="hover:text-blue-400 transition-colors">Post Job Opening</Link></li>
             </ul>
           </div>
 
@@ -88,14 +88,14 @@ export default function Footer() {
               <span>Locations &amp; Metros</span>
             </h3>
             <ul className="space-y-2 text-xs text-slate-300">
-              <li className="pb-1"><Link href="/cities" className="font-bold text-emerald-300 hover:text-white transition-colors flex items-center gap-1">All 50 States &amp; Cities &rarr;</Link></li>
-              <li><Link href="/city/new-york" className="hover:text-emerald-400 transition-colors">New York Directory</Link></li>
-              <li><Link href="/city/los-angeles" className="hover:text-emerald-400 transition-colors">Los Angeles Directory</Link></li>
-              <li><Link href="/city/chicago" className="hover:text-emerald-400 transition-colors">Chicago Directory</Link></li>
-              <li><Link href="/city/houston" className="hover:text-emerald-400 transition-colors">Houston Directory</Link></li>
-              <li><Link href="/city/phoenix" className="hover:text-emerald-400 transition-colors">Phoenix Directory</Link></li>
-              <li><Link href="/city/miami" className="hover:text-emerald-400 transition-colors">Miami Directory</Link></li>
-              <li><Link href="/city/seattle" className="hover:text-emerald-400 transition-colors">Seattle Directory</Link></li>
+              <li className="pb-1"><Link href="/cities/" className="font-bold text-emerald-300 hover:text-white transition-colors flex items-center gap-1">All 50 States &amp; Cities &rarr;</Link></li>
+              <li><Link href="/city/new-york-city/" className="hover:text-emerald-400 transition-colors">New York Directory</Link></li>
+              <li><Link href="/city/los-angeles/" className="hover:text-emerald-400 transition-colors">Los Angeles Directory</Link></li>
+              <li><Link href="/city/chicago/" className="hover:text-emerald-400 transition-colors">Chicago Directory</Link></li>
+              <li><Link href="/city/houston/" className="hover:text-emerald-400 transition-colors">Houston Directory</Link></li>
+              <li><Link href="/city/phoenix/" className="hover:text-emerald-400 transition-colors">Phoenix Directory</Link></li>
+              <li><Link href="/city/miami/" className="hover:text-emerald-400 transition-colors">Miami Directory</Link></li>
+              <li><Link href="/city/seattle/" className="hover:text-emerald-400 transition-colors">Seattle Directory</Link></li>
             </ul>
           </div>
 
@@ -106,12 +106,12 @@ export default function Footer() {
               <span>Guides &amp; Resources</span>
             </h3>
             <ul className="space-y-2 text-xs text-slate-300">
-              <li className="pb-1"><Link href="/blog" className="font-bold text-amber-300 hover:text-white transition-colors flex items-center gap-1">All Guides &amp; Research &rarr;</Link></li>
-              <li><Link href="/about" className="hover:text-amber-400 transition-colors">About Us</Link></li>
-              <li><Link href="/contact" className="hover:text-amber-400 transition-colors">Contact Us</Link></li>
-              <li><Link href="/careers" className="hover:text-amber-400 transition-colors">Careers</Link></li>
-              <li><Link href="/advertise-with-us" className="hover:text-amber-400 transition-colors">Advertise With Us</Link></li>
-              <li><Link href="/html-sitemap" className="hover:text-amber-400 transition-colors">HTML Sitemap</Link></li>
+              <li className="pb-1"><Link href="/blog/" className="font-bold text-amber-300 hover:text-white transition-colors flex items-center gap-1">All Guides &amp; Research &rarr;</Link></li>
+              <li><Link href="/about/" className="hover:text-amber-400 transition-colors">About Us</Link></li>
+              <li><Link href="/contact/" className="hover:text-amber-400 transition-colors">Contact Us</Link></li>
+              <li><Link href="/careers/" className="hover:text-amber-400 transition-colors">Careers</Link></li>
+              <li><Link href="/advertise-with-us/" className="hover:text-amber-400 transition-colors">Advertise With Us</Link></li>
+              <li><Link href="/html-sitemap/" className="hover:text-amber-400 transition-colors">HTML Sitemap</Link></li>
             </ul>
           </div>
 
@@ -122,12 +122,12 @@ export default function Footer() {
               <span>Help & Support</span>
             </h3>
             <ul className="space-y-2 text-xs text-slate-300">
-              <li><Link href="/help-center" className="hover:text-sky-400 transition-colors">Help Center</Link></li>
-              <li><Link href="/support" className="hover:text-sky-400 transition-colors">Customer Support</Link></li>
-              <li><Link href="/faqs" className="hover:text-sky-400 transition-colors">FAQs</Link></li>
-              <li><Link href="/report-listing" className="hover:text-sky-400 transition-colors">Report a Listing</Link></li>
-              <li><Link href="/report-abuse" className="hover:text-sky-400 transition-colors">Report Abuse</Link></li>
-              <li><Link href="/accessibility" className="hover:text-sky-400 transition-colors">Accessibility Statement</Link></li>
+              <li><Link href="/help-center/" className="hover:text-sky-400 transition-colors">Help Center</Link></li>
+              <li><Link href="/support/" className="hover:text-sky-400 transition-colors">Customer Support</Link></li>
+              <li><Link href="/faqs/" className="hover:text-sky-400 transition-colors">FAQs</Link></li>
+              <li><Link href="/report-listing/" className="hover:text-sky-400 transition-colors">Report a Listing</Link></li>
+              <li><Link href="/report-abuse/" className="hover:text-sky-400 transition-colors">Report Abuse</Link></li>
+              <li><Link href="/accessibility/" className="hover:text-sky-400 transition-colors">Accessibility Statement</Link></li>
             </ul>
           </div>
 
@@ -138,15 +138,15 @@ export default function Footer() {
               <span>Legal Policies</span>
             </h3>
             <ul className="space-y-2 text-xs text-slate-300">
-              <li><Link href="/privacy" className="hover:text-purple-400 transition-colors">Privacy Policy</Link></li>
-              <li><Link href="/terms" className="hover:text-purple-400 transition-colors">Terms & Conditions</Link></li>
-              <li><Link href="/cookie-policy" className="hover:text-purple-400 transition-colors">Cookie Policy</Link></li>
-              <li><Link href="/disclaimer" className="hover:text-purple-400 transition-colors">Disclaimer</Link></li>
-              <li><Link href="/editorial-policy" className="hover:text-purple-400 transition-colors">Editorial Policy</Link></li>
-              <li><Link href="/community-guidelines" className="hover:text-purple-400 transition-colors">Community Guidelines</Link></li>
-              <li><Link href="/business-listing-guidelines" className="hover:text-purple-400 transition-colors">Listing Guidelines</Link></li>
-              <li><Link href="/verification-policy" className="hover:text-purple-400 transition-colors">Verification Policy</Link></li>
-              <li><Link href="/refund-policy" className="hover:text-purple-400 transition-colors">Refund Policy</Link></li>
+              <li><Link href="/privacy/" className="hover:text-purple-400 transition-colors">Privacy Policy</Link></li>
+              <li><Link href="/terms/" className="hover:text-purple-400 transition-colors">Terms & Conditions</Link></li>
+              <li><Link href="/cookie-policy/" className="hover:text-purple-400 transition-colors">Cookie Policy</Link></li>
+              <li><Link href="/disclaimer/" className="hover:text-purple-400 transition-colors">Disclaimer</Link></li>
+              <li><Link href="/editorial-policy/" className="hover:text-purple-400 transition-colors">Editorial Policy</Link></li>
+              <li><Link href="/community-guidelines/" className="hover:text-purple-400 transition-colors">Community Guidelines</Link></li>
+              <li><Link href="/business-listing-guidelines/" className="hover:text-purple-400 transition-colors">Listing Guidelines</Link></li>
+              <li><Link href="/verification-policy/" className="hover:text-purple-400 transition-colors">Verification Policy</Link></li>
+              <li><Link href="/refund-policy/" className="hover:text-purple-400 transition-colors">Refund Policy</Link></li>
             </ul>
           </div>
 
@@ -158,15 +158,15 @@ export default function Footer() {
             © 2026 BizNestUSA. A USA directory for businesses, professionals, and jobs. All rights reserved.
           </p>
           <div className="flex items-center gap-3 text-slate-300 flex-wrap justify-center">
-            <Link href="/privacy" className="hover:text-white">Privacy</Link>
+            <Link href="/privacy/" className="hover:text-white">Privacy</Link>
             <span>•</span>
-            <Link href="/terms" className="hover:text-white">Terms</Link>
+            <Link href="/terms/" className="hover:text-white">Terms</Link>
             <span>•</span>
-            <Link href="/cookie-policy" className="hover:text-white">Cookies</Link>
+            <Link href="/cookie-policy/" className="hover:text-white">Cookies</Link>
             <span>•</span>
-            <Link href="/disclaimer" className="hover:text-white">Disclaimer</Link>
+            <Link href="/disclaimer/" className="hover:text-white">Disclaimer</Link>
             <span>•</span>
-            <Link href="/contact" className="hover:text-white">Contact</Link>
+            <Link href="/contact/" className="hover:text-white">Contact</Link>
           </div>
         </div>
 

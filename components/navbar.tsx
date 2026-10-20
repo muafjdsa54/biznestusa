@@ -8,10 +8,10 @@ import { Menu, X, Plus, Building2, Search, Briefcase, Users, MapPin, Grid, UserP
 
 const navLinks = [
   { href: '/', label: 'Home' },
-  { href: '/search', label: 'Businesses', icon: Building2 },
-  { href: '/professionals', label: 'Professionals', icon: Users },
-  { href: '/jobs', label: 'Jobs', icon: Briefcase },
-  { href: '/categories', label: 'Categories', icon: Grid },
+  { href: '/business-directory/', label: 'Businesses', icon: Building2 },
+  { href: '/professionals/', label: 'Professionals', icon: Users },
+  { href: '/jobs/', label: 'Jobs', icon: Briefcase },
+  { href: '/categories/', label: 'Categories', icon: Grid },
 ]
 
 export default function Navbar() {
@@ -60,7 +60,7 @@ export default function Navbar() {
           {/* Desktop Right Actions */}
           <div className="hidden sm:flex items-center gap-2">
             <Link
-              href="/search"
+              href="/business-directory/"
               className="p-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
               title="Search Directory"
               aria-label="Search"
@@ -69,21 +69,21 @@ export default function Navbar() {
             </Link>
 
             <Link
-              href="/dashboard"
+              href="/dashboard/"
               className="text-xs md:text-sm font-medium text-slate-600 hover:text-slate-900 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 transition-colors"
             >
               Dashboard
             </Link>
 
             <Link
-              href="/post-job"
+              href="/post-job/"
               className="text-xs md:text-sm font-medium text-slate-700 hover:text-slate-900 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 transition-colors hidden xl:inline-block"
             >
               Post a Job
             </Link>
 
             <Link
-              href="/add-professional"
+              href="/add-professional/"
               className="text-xs md:text-sm font-medium border border-slate-300 text-slate-700 hover:text-slate-900 hover:bg-slate-50 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5"
             >
               <UserPlus className="w-3.5 h-3.5 text-slate-500" />
@@ -91,7 +91,7 @@ export default function Navbar() {
             </Link>
 
             <Link
-              href="/add-business"
+              href="/add-business/"
               className="text-xs md:text-sm font-bold bg-[#DC2626] hover:bg-[#B91C1C] text-white px-3.5 py-2 rounded-lg shadow-sm hover:shadow transition-all inline-flex items-center gap-1.5"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -146,7 +146,7 @@ export default function Navbar() {
           
           <div className="pt-3 mt-2 border-t border-slate-100 flex flex-col gap-2">
             <Link
-              href="/dashboard"
+              href="/dashboard/"
               onClick={() => setOpen(false)}
               className="text-sm font-medium py-2.5 px-3 rounded-lg text-slate-700 hover:bg-slate-50 flex items-center gap-2.5"
             >
@@ -155,7 +155,7 @@ export default function Navbar() {
             </Link>
 
             <Link
-              href="/post-job"
+              href="/post-job/"
               onClick={() => setOpen(false)}
               className="text-sm font-medium py-2.5 px-3 rounded-lg text-slate-700 hover:bg-slate-50 flex items-center gap-2.5"
             >
@@ -164,7 +164,7 @@ export default function Navbar() {
             </Link>
 
             <Link
-              href="/add-professional"
+              href="/add-professional/"
               onClick={() => setOpen(false)}
               className="text-sm font-medium py-2.5 px-3 rounded-lg border border-slate-200 text-slate-800 hover:bg-slate-50 flex items-center justify-center gap-2"
             >
@@ -173,7 +173,7 @@ export default function Navbar() {
             </Link>
 
             <Link
-              href="/add-business"
+              href="/add-business/"
               onClick={() => setOpen(false)}
               className="mt-1 px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold text-center shadow-xs flex items-center justify-center gap-2"
             >

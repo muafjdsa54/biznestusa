@@ -99,7 +99,7 @@ export async function generateMetadata(props: { params: Promise<{ slug: string }
       title,
       description,
       url: canonicalUrl,
-      siteName: 'BizNest USA',
+      siteName: 'BizNestUSA',
       locale: 'en_US',
       type: 'website',
     },

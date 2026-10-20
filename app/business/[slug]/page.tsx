@@ -211,7 +211,7 @@ export async function generateMetadata(props: { params: Promise<{ slug: string }
     openGraph: {
       title,
       description,
-      siteName: 'BizNest USA',
+      siteName: 'BizNestUSA',
       url: canonicalUrl,
       locale: 'en_US',
       type: 'website',
