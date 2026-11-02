@@ -15,7 +15,7 @@ import {
 import { toCanonicalUrl } from '@/lib/directory-helpers'
 
 export const dynamicParams = true
-export const revalidate = 3600
+export const revalidate = 604800
 
 interface BlogPostPageProps {
   params: Promise<{ slug: string }>
