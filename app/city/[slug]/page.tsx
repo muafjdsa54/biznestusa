@@ -39,7 +39,7 @@ import {
   isPakistaniCity
 } from '@/lib/directory-helpers'
 
-export const revalidate = 86400 // 24-hour ISR revalidation
+export const revalidate = 604800 // 7-day ISR revalidation
 export const dynamicParams = true
 
 export async function generateStaticParams() {

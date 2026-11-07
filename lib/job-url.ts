@@ -1,7 +1,7 @@
 import type { JobItem } from './data'
 
 /** Shared recipient for job applications sent through WhatsApp. */
-export const JOB_APPLICATION_WHATSAPP = '923345636230'
+export const JOB_APPLICATION_WHATSAPP = ''
 
 /**
  * Short public aliases for selected long legacy job slugs. Existing URLs remain

@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 
 export const dynamicParams = true
-export const revalidate = 86400
+export const revalidate = 604800
 
 export async function generateStaticParams() {
   const companies = await getAllCompanies()

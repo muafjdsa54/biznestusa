@@ -25,7 +25,7 @@ import { getServicesByCategory } from '@/lib/services-data'
 import { Wrench } from 'lucide-react'
 import CategoryListingsView from '@/components/business/category-listings-view'
 
-export const revalidate = 86400 // 24-hour ISR revalidation
+export const revalidate = 604800 // 7-day ISR revalidation
 export const dynamicParams = false
 
 export async function generateStaticParams() {

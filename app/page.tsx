@@ -24,7 +24,7 @@ import { getAllProfessionals } from '@/lib/professional-service'
 import { getPublicJobPath } from '@/lib/job-url'
 import { getSubcategoryHref } from '@/lib/services-data'
 
-export const revalidate = 3600
+export const revalidate = 604800
 
 export const metadata: Metadata = {
   title: "BizNestUSA | USA Business, Professional & Jobs Directory Platform",

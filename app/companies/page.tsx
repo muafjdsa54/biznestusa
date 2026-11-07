@@ -6,7 +6,7 @@ import { getAllCompanies } from '@/lib/company-service'
 import CompaniesDirectoryClient from '@/components/companies/companies-directory-client'
 import { Building2, Plus, ShieldCheck, HelpCircle } from 'lucide-react'
 
-export const revalidate = 3600
+export const revalidate = 604800
 
 export default async function CompaniesPage() {
   const companies = await getAllCompanies(false)

@@ -43,7 +43,7 @@ import {
   BadgeCheck
 } from 'lucide-react'
 
-export const revalidate = 86400
+export const revalidate = 604800
 export const dynamicParams = true
 
 const SUBCATEGORY_CANONICAL_REDIRECTS: Record<string, string> = {

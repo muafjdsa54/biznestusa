@@ -21,7 +21,7 @@ import {
   DollarSign
 } from 'lucide-react'
 
-export const revalidate = 86400
+export const revalidate = 604800
 
 export const metadata: Metadata = {
   title: 'Professional & Home Services in USA | BizNestUSA Guide',

@@ -9,7 +9,7 @@ import {
   ChevronRight, Building2, Users, Briefcase, Calendar, FileText 
 } from 'lucide-react'
 
-export const revalidate = 3600 // Revalidate hourly
+export const revalidate = 604800 // Revalidate every 7 days
 
 export const metadata: Metadata = {
   title: 'Editorial Guides & Industry Resources | BizNest USA',

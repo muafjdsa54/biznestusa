@@ -17,7 +17,7 @@ import { getPublicJobPath, getPublicJobSlug } from '@/lib/job-url'
 import { toCanonicalUrl, normalizeCitySlug, VERIFICATION_DISCLAIMER } from '@/lib/directory-helpers'
 
 export const dynamicParams = true
-export const revalidate = 86400
+export const revalidate = 604800
 
 export async function generateStaticParams() {
   const jobs = await getAllJobs()

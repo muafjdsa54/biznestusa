@@ -6,7 +6,7 @@ import { getAllProfessionals } from '@/lib/professional-service'
 import ProfessionalsDirectoryClient from '@/components/professionals/professionals-directory-client'
 import { Users, UserPlus, LogIn, ShieldCheck, HelpCircle } from 'lucide-react'
 
-export const revalidate = 3600
+export const revalidate = 604800
 
 export default async function ProfessionalsPage() {
   const professionals = await getAllProfessionals(false)
