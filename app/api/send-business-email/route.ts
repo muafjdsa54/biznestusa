@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic'
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'BizNest USA <onboarding@resend.dev>'
-const WHATSAPP_NUMBER = (process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || process.env.WHATSAPP_BUSINESS_NUMBER || '18005550199').replace(/[^0-9]/g, '')
+const WHATSAPP_NUMBER = (process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || process.env.WHATSAPP_BUSINESS_NUMBER || '').replace(/[^0-9]/g, '')
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://biznestusa.com'
 
 interface SubmissionEmailPayload {
@@ -22,7 +22,7 @@ interface SubmissionEmailPayload {
 function buildHtml(data: SubmissionEmailPayload) {
   const businessUrl = `${SITE_URL}/${data.slug}`
   const waMessage = encodeURIComponent('Hi, I want to feature my business listing')
-  const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${waMessage}`
+  const whatsappUrl = WHATSAPP_NUMBER ? `https://wa.me/${WHATSAPP_NUMBER}?text=${waMessage}` : ''
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -93,9 +93,9 @@ function buildHtml(data: SubmissionEmailPayload) {
                     <p style="margin:0 0 14px;font-size:14px;line-height:1.5;color:#15803d;">
                       Get listed at the top of search results and attract 5x more leads with a Featured Listing.
                     </p>
-                    <a href="${whatsappUrl}" style="display:inline-block;padding:10px 20px;background:#16a34a;color:#ffffff;font-size:13px;font-weight:600;text-decoration:none;border-radius:8px;">
+                    ${whatsappUrl ? `<a href="${whatsappUrl}" style="display:inline-block;padding:10px 20px;background:#16a34a;color:#ffffff;font-size:13px;font-weight:600;text-decoration:none;border-radius:8px;">
                       Feature on WhatsApp
-                    </a>
+                    </a>` : ''}
                   </td>
                 </tr>
               </table>
@@ -128,7 +128,7 @@ function buildHtml(data: SubmissionEmailPayload) {
 function buildText(data: SubmissionEmailPayload) {
   const businessUrl = `${SITE_URL}/${data.slug}`
   const waMessage = encodeURIComponent('Hi, I want to feature my business listing')
-  const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${waMessage}`
+  const whatsappUrl = WHATSAPP_NUMBER ? `https://wa.me/${WHATSAPP_NUMBER}?text=${waMessage}` : ''
 
   return `Your Business Listing is Live!
 
@@ -145,7 +145,7 @@ Your business is now live at:
 ${businessUrl}
 
 Want to feature your business for more visibility?
-Contact us on WhatsApp: ${whatsappUrl}
+${whatsappUrl ? `Contact us on WhatsApp: ${whatsappUrl}` : ''}
 
 Best regards,
 The BizNest USA Team`

@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Navbar from '@/components/navbar'
 import Footer from '@/components/footer'
-import Image from 'next/image'
+import { ListingLogo } from '@/components/listing-logo'
 import SearchFilters from '@/components/search/search-filters'
 import { BusinessItem, JobItem, ProfessionalItem } from '@/lib/data'
 import { getAllBusinesses } from '@/lib/db-service'
@@ -407,11 +407,10 @@ function SearchContent() {
                     >
                       <div className="space-y-2">
                         <div className="flex items-center gap-3">
-                          <Image
-                            src={biz.logo || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=200&q=80'}
-                            alt={biz.name}
-                            width={40}
-                            height={40}
+                          <ListingLogo
+                            name={biz.name}
+                            src={biz.logo}
+                            size={40}
                             className="w-10 h-10 rounded-lg object-cover border border-slate-200 shrink-0"
                           />
                           <div className="truncate">
@@ -465,11 +464,10 @@ function SearchContent() {
                     >
                       <div className="space-y-2">
                         <div className="flex items-center gap-3">
-                          <Image
-                            src={pro.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80'}
-                            alt={pro.name}
-                            width={40}
-                            height={40}
+                          <ListingLogo
+                            name={pro.name}
+                            src={pro.avatar}
+                            size={40}
                             className="w-10 h-10 rounded-full object-cover border border-slate-200 shrink-0"
                           />
                           <div className="truncate">
@@ -532,11 +530,10 @@ function SearchContent() {
                       className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs hover:border-slate-300 transition-colors flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
                     >
                       <div className="flex items-center gap-3">
-                        <Image
-                          src={job.companyLogo || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=200&q=80'}
-                          alt={job.company}
-                          width={40}
-                          height={40}
+                        <ListingLogo
+                          name={job.company}
+                          src={job.companyLogo}
+                          size={40}
                           className="w-10 h-10 rounded-lg object-cover border border-slate-200 shrink-0"
                         />
                         <div>

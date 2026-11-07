@@ -6,7 +6,7 @@ import { getAllJobs } from '@/lib/job-service'
 import JobsDirectoryClient from '@/components/jobs/jobs-directory-client'
 import { Briefcase, Plus, ShieldCheck, CheckCircle2, HelpCircle } from 'lucide-react'
 
-export const revalidate = 60
+export const revalidate = 3600
 
 export default async function JobsPage() {
   const jobs = await getAllJobs(false)

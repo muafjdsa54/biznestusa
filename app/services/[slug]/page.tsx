@@ -2,7 +2,7 @@ import React from 'react'
 import Navbar from '@/components/navbar'
 import Footer from '@/components/footer'
 import Link from 'next/link'
-import Image from 'next/image'
+import { ListingLogo } from '@/components/listing-logo'
 import { notFound } from 'next/navigation'
 import { Metadata } from 'next'
 import {
@@ -458,12 +458,11 @@ export default async function ServiceDetailPage(props: { params: Promise<{ slug:
                         <div className="flex gap-4 items-start flex-1 min-w-0">
                           {/* Business Logo / Thumbnail */}
                           <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 shrink-0">
-                            <Image
-                              src={biz.logo || biz.coverImage || 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=200&q=80'}
-                              alt={biz.name}
-                              fill
-                              sizes="80px"
-                              className="object-cover group-hover:scale-105 transition-transform duration-300"
+                            <ListingLogo
+                              name={biz.name}
+                              src={biz.logo || biz.coverImage}
+                              size={80}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                             />
                           </div>
 
@@ -563,12 +562,11 @@ export default async function ServiceDetailPage(props: { params: Promise<{ slug:
                     >
                       <div className="flex items-center gap-3">
                         <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-slate-200 shrink-0">
-                          <Image
-                            src={pro.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80'}
-                            alt={pro.name}
-                            fill
-                            sizes="48px"
-                            className="object-cover"
+                          <ListingLogo
+                            name={pro.name}
+                            src={pro.avatar}
+                            size={48}
+                            className="w-full h-full object-cover"
                           />
                         </div>
                         <div className="min-w-0 flex-1">

@@ -80,7 +80,7 @@ export interface SiteSettings {
 const DEFAULT_SETTINGS: SiteSettings = {
   siteName: 'BizNest USA',
   supportEmail: 'support@biznestusa.com',
-  supportPhone: '+1 (800) 555-0199',
+  supportPhone: '',
   officeAddress: '100 Wall Street, Suite 1200, New York, NY 10005',
   announcementText: 'Welcome to America\'s verified directory platform. Free listings for all US businesses and professionals.',
   announcementEnabled: false,

@@ -26,6 +26,7 @@ import { getAllCompanies, approveCompany, rejectCompany } from '@/lib/company-se
 import { getAllJobs, approveJob, rejectJob } from '@/lib/job-service'
 import { getAllJobApplications, updateJobApplicationStatus, deleteJobApplication } from '@/lib/job-application-service'
 import { getPublicJobPath } from '@/lib/job-url'
+import { submitToIndexNow } from '@/lib/indexnow'
 import { toast } from 'sonner'
 
 export default function AdminPage() {
@@ -170,6 +171,12 @@ export default function AdminPage() {
       if (selectedPro && (selectedPro.id === id || selectedPro.username === id)) {
         setSelectedPro({ ...selectedPro, status: 'approved', profileStatus: 'APPROVED' })
       }
+      // IndexNow: notify Bing the public profile page is live (fire-and-forget — never fails the approval)
+      const pro = allProfessionals.find(p => p.id === id || p.username === id)
+      const proSlug = pro?.username || pro?.slug
+      if (proSlug) {
+        submitToIndexNow(`/professionals/${proSlug}`).catch(err => console.error('[IndexNow] professional approve submission failed:', err))
+      }
       toast.success(`Professional "${name}" approved & published!`)
     } catch (err) {
       toast.error('Failed to approve professional.')
@@ -286,6 +293,11 @@ export default function AdminPage() {
     try {
       await approveCompany(id, adminUid)
       setAllCompanies(prev => prev.map(c => (c.id === id || c.slug === id) ? { ...c, status: 'approved' } : c))
+      // IndexNow: notify Bing the public company page is live (fire-and-forget — never fails the approval)
+      const comp = allCompanies.find(c => c.id === id || c.slug === id)
+      if (comp?.slug) {
+        submitToIndexNow(`/companies/${comp.slug}`).catch(err => console.error('[IndexNow] company approve submission failed:', err))
+      }
       toast.success(`Hiring Company "${name}" approved & verified!`)
     } catch (err) {
       toast.error('Failed to approve company.')
@@ -315,6 +327,11 @@ export default function AdminPage() {
     try {
       await approveJob(id, adminUid)
       setAllJobs(prev => prev.map(j => (j.id === id || j.slug === id) ? { ...j, status: 'approved' } : j))
+      // IndexNow: notify Bing the public job page is live (fire-and-forget — never fails the approval)
+      const job = allJobs.find(j => j.id === id || j.slug === id)
+      if (job) {
+        submitToIndexNow(getPublicJobPath(job)).catch(err => console.error('[IndexNow] job approve submission failed:', err))
+      }
       toast.success(`Job Opening "${title}" approved!`)
     } catch (err) {
       toast.error('Failed to approve job opening.')
@@ -394,6 +411,11 @@ export default function AdminPage() {
       setAllBusinesses(prev => prev.map(b => b.id === id ? { ...b, status: 'approved' } : b))
       if (selectedBiz?.id === id) {
         setSelectedBiz({ ...selectedBiz, status: 'approved' })
+      }
+      // IndexNow: notify Bing the public business page is live (fire-and-forget — never fails the approval)
+      const biz = allBusinesses.find(b => b.id === id)
+      if (biz?.slug) {
+        submitToIndexNow(`/business/${biz.slug}`).catch(err => console.error('[IndexNow] business approve submission failed:', err))
       }
       toast.success(`"${name}" is officially approved and live on BizNest USA!`)
     } catch (err) {

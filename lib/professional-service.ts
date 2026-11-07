@@ -114,7 +114,7 @@ export function normalizeProfessionalDoc(docId: string, data: Partial<Profession
     hourlyRate: data.hourlyRate || 'Contact for Pricing',
     availability: data.availability || 'Available',
     gender: data.gender || '',
-    avatar: data.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80',
+    avatar: data.avatar || '',
     coverImage: data.coverImage || 'https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=1200&q=80',
     bio: data.bio || data.about || 'Verified professional profile on BizNestUSA.',
     about: data.about || data.bio || '',

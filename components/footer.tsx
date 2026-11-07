@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import Image from 'next/image'
-import { ShieldCheck, MapPin, Briefcase, Sparkles, Phone, Mail, HelpCircle, FileText, Globe } from 'lucide-react'
+import { ShieldCheck, MapPin, Briefcase, Sparkles, Mail, HelpCircle, FileText, Globe } from 'lucide-react'
 import UniversalHelpBanner from '@/components/universal-help-banner'
 
 export default function Footer() {
@@ -32,10 +32,6 @@ export default function Footer() {
               <div className="flex items-center gap-2">
                 <MapPin className="w-3.5 h-3.5 text-blue-400 shrink-0" />
                 <span><strong>Serving:</strong> Businesses, professionals, and job seekers across the United States</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Phone className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                <span><strong>Phone:</strong> <a href="tel:+12125550147" className="hover:text-blue-300 transition-colors">+1 (212) 555-0147</a></span>
               </div>
               <div className="flex items-center gap-2">
                 <Globe className="w-3.5 h-3.5 text-emerald-400 shrink-0" />

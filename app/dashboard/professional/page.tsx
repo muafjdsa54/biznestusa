@@ -1272,17 +1272,6 @@ export default function ProfessionalDashboardPage() {
           </div>
 
           <div className="mt-3.5 flex items-center gap-2">
-            <a
-              href="https://wa.me/923345636230"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-1 py-2 px-3 bg-[#25D366] hover:bg-[#1EBE5D] text-slate-950 text-xs font-extrabold rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-all hover:scale-[1.02] cursor-pointer"
-            >
-              <MessageCircle className="w-3.5 h-3.5 fill-slate-950 text-slate-950" />
-              <span>WhatsApp Chat</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </a>
-
             {!isVerified && (
               <Link
                 href="/dashboard/professional/verify"

@@ -4,7 +4,7 @@
  */
 
 export const INDEXNOW_API_KEY = '2878f52e4b6c4b1fb29b59d471a9ee17'
-export const INDEXNOW_HOST = process.env.NEXT_PUBLIC_SITE_DOMAIN || 'biznestusa.com'
+export const INDEXNOW_HOST = process.env.NEXT_PUBLIC_SITE_DOMAIN || 'www.biznestusa.com'
 export const INDEXNOW_KEY_LOCATION = `https://${INDEXNOW_HOST}/${INDEXNOW_API_KEY}.txt`
 
 export async function submitToIndexNow(urls: string | string[]): Promise<{ success: boolean; status: number; message: string }> {

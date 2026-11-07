@@ -2,7 +2,7 @@ import { Metadata } from 'next'
 import Link from 'next/link'
 import Navbar from '@/components/navbar'
 import Footer from '@/components/footer'
-import { Headphones, Mail, Phone, Clock, ArrowRight, ShieldCheck, HelpCircle, FileText } from 'lucide-react'
+import { Headphones, Mail, Clock, ArrowRight, ShieldCheck, HelpCircle, FileText } from 'lucide-react'
 
 export const metadata: Metadata = {
   title: 'Customer Support Desk & Inquiries | BizNestUSA Team',
@@ -53,16 +53,7 @@ export default function SupportPage() {
 
         <section className="max-w-5xl mx-auto px-4 py-12 space-y-10">
           {/* Direct Communication Channels */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-            <div className="p-6 bg-white rounded-3xl border border-slate-200/90 shadow-sm text-center space-y-2">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-2">
-                <Phone className="w-6 h-6" />
-              </div>
-              <h3 className="font-bold text-slate-900 text-sm">Direct Telephone Support</h3>
-              <p className="text-sm text-slate-700 font-bold">(800) 555-0199</p>
-              <p className="text-xs text-slate-500">Toll-free across all 50 US states</p>
-            </div>
-
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div className="p-6 bg-white rounded-3xl border border-slate-200/90 shadow-sm text-center space-y-2">
               <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-2">
                 <Mail className="w-6 h-6" />

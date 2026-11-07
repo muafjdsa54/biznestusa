@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import Image from 'next/image'
+import { ListingLogo } from '@/components/listing-logo'
 import Link from 'next/link'
 import { 
   Briefcase, MapPin, Building2, ChevronDown, ChevronUp, Check, 
@@ -98,13 +98,10 @@ export default function JobCardExpandable({ job }: JobCardExpandableProps) {
         
         {/* Company & Role Header */}
         <div className="flex items-start gap-4">
-          <Image
-            src={job.companyLogo || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=200&q=80'}
-            alt={job.company}
-            width={52}
-            height={52}
-            loading="lazy"
-            sizes="52px"
+          <ListingLogo
+            name={job.company}
+            src={job.companyLogo}
+            size={52}
             className="w-13 h-13 rounded-2xl object-cover border border-slate-100 shadow-xs shrink-0"
           />
           <div className="space-y-1 min-w-0 flex-1">

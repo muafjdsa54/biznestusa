@@ -1,6 +1,6 @@
 import React from 'react'
 import { Metadata } from 'next'
-import Image from 'next/image'
+import { ListingLogo } from '@/components/listing-logo'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { BreadcrumbSchema } from '@/components/seo/breadcrumb-schema'
@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 
 export const dynamicParams = true
-export const revalidate = 0
+export const revalidate = 86400
 
 export async function generateStaticParams() {
   const companies = await getAllCompanies()
@@ -125,13 +125,11 @@ export default async function CompanyDetailPage(props: { params: Promise<{ slug:
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
             <div className="flex items-center gap-5">
               <div className="relative w-20 h-20 rounded-3xl overflow-hidden border-4 border-white/20 shadow-2xl bg-white shrink-0">
-                <Image
-                  src={company.logo || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=200&q=80'}
-                  alt={company.name}
-                  width={80}
-                  height={80}
+                <ListingLogo
+                  name={company.name}
+                  src={company.logo}
+                  size={80}
                   priority
-                  sizes="80px"
                   className="w-full h-full object-cover"
                 />
               </div>
@@ -253,7 +251,7 @@ export default async function CompanyDetailPage(props: { params: Promise<{ slug:
                   className="p-4 bg-white rounded-2xl border border-slate-200 hover:border-blue-300 transition-all hover:shadow-md group space-y-2 block"
                 >
                   <div className="flex items-center gap-3">
-                    <Image src={sim.logo || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=200&q=80'} alt={sim.name} width={40} height={40} loading="lazy" sizes="40px" className="w-10 h-10 rounded-xl object-cover" />
+                    <ListingLogo name={sim.name} src={sim.logo} size={40} className="w-10 h-10 rounded-xl object-cover" />
                     <div>
                       <p className="font-bold text-xs text-slate-900 group-hover:text-blue-600">{sim.name}</p>
                       <p className="text-[11px] text-slate-500 truncate">{sim.industry}</p>

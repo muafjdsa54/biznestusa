@@ -22,7 +22,7 @@ import {
 } from '@/lib/directory-helpers'
 
 export const dynamicParams = true
-export const revalidate = 0
+export const revalidate = 86400
 
 export async function generateStaticParams() {
   const businesses = await getAllBusinesses()

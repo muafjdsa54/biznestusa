@@ -1,13 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Navbar from '@/components/navbar'
 import Footer from '@/components/footer'
 import { Briefcase, Building2, MapPin, CheckCircle2, Plus, Globe, Mail, AlertCircle, Info, ShieldCheck, ArrowRight, Sparkles, Trash2 } from 'lucide-react'
 import { saveJobToDatabase } from '@/lib/job-service'
 import { toast } from 'sonner'
 import Link from 'next/link'
-import { CITIES } from '@/lib/data'
+import { CITIES, STATE_CITIES, US_STATES } from '@/lib/data'
+import { loadStates, loadCities, stateCodeForName, type GeoState, type GeoCity } from '@/lib/geo-data'
 
 export default function PostJobPage() {
   const [submitted, setSubmitted] = useState(false)
@@ -19,6 +20,47 @@ export default function PostJobPage() {
   const [company, setCompany] = useState('')
   const [selectedCities, setSelectedCities] = useState<string[]>(['New York'])
   const [citySelectInput, setCitySelectInput] = useState('')
+  // State filter for the city picker (Census Gazetteer JSON in /public/data).
+  // Narrows the city <select> to the chosen state's cities; with no state
+  // chosen the picker behaves exactly as before (full CITIES list). The state
+  // itself is NOT stored on the job doc — city / cities[] are unchanged.
+  const [jobState, setJobState] = useState('')
+  const [geoStates, setGeoStates] = useState<GeoState[] | null>(null)
+  const [geoCities, setGeoCities] = useState<GeoCity[]>([])
+  const [citiesLoading, setCitiesLoading] = useState(false)
+
+  const stateCityNames = jobState
+    ? (geoCities.length > 0 ? geoCities.map(c => c.name) : (STATE_CITIES[jobState] || []))
+    : CITIES
+
+  useEffect(() => {
+    let cancelled = false
+    loadStates()
+      .then(list => { if (!cancelled) setGeoStates(list) })
+      .catch(() => { /* fallback: US_STATES options + STATE_CITIES */ })
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    if (!jobState) {
+      setGeoCities([])
+      setCitiesLoading(false)
+      return
+    }
+    if (!geoStates) return // states still loading (or failed) — fallback list stays in use
+    const code = stateCodeForName(jobState, geoStates)
+    if (!code) {
+      setGeoCities([])
+      return
+    }
+    let cancelled = false
+    setCitiesLoading(true)
+    setGeoCities([])
+    loadCities(code)
+      .then(list => { if (!cancelled) { setGeoCities(list); setCitiesLoading(false) } })
+      .catch(() => { if (!cancelled) setCitiesLoading(false) /* fallback list stays in use */ })
+    return () => { cancelled = true }
+  }, [jobState, geoStates])
   const [category, setCategory] = useState('Technology & IT')
   const [type, setType] = useState('Full-time')
   const [salary, setSalary] = useState('$75,000 - $125,000 / year')
@@ -330,8 +372,18 @@ export default function PostJobPage() {
                   </div>
                 </div>
 
-                {/* Dropdown to pick any US city */}
+                {/* State filter + dropdown to pick any US city */}
                 <div className="pt-2 flex gap-2">
+                  <select
+                    value={jobState}
+                    onChange={(e) => setJobState(e.target.value)}
+                    className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 text-slate-800"
+                  >
+                    <option value="">-- All states --</option>
+                    {(geoStates ? geoStates.map(s => s.name) : US_STATES).map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
                   <select
                     value={citySelectInput}
                     onChange={(e) => {
@@ -339,12 +391,15 @@ export default function PostJobPage() {
                     }}
                     className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 text-slate-800"
                   >
-                    <option value="">-- Add another city in the USA --</option>
-                    {CITIES.filter(c => !selectedCities.includes(c)).map(c => (
+                    <option value="">{jobState ? `-- Add a city in ${jobState} --` : '-- Add another city in the USA --'}</option>
+                    {stateCityNames.filter(c => !selectedCities.includes(c)).map(c => (
                       <option key={c} value={c}>{c}</option>
                     ))}
                   </select>
                 </div>
+                {citiesLoading && jobState && (
+                  <p className="text-[11px] text-slate-400 pt-1">Loading cities…</p>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

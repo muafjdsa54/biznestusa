@@ -13,6 +13,7 @@ import {
 import Navbar from '@/components/navbar'
 import Footer from '@/components/footer'
 import { CITIES, CATEGORIES, STATE_CITIES, US_STATES } from '@/lib/data'
+import { loadStates, loadCities, stateCodeForName, searchCities, type GeoState, type GeoCity } from '@/lib/geo-data'
 import { saveProfessionalToDatabase, generateProfessionalSlug } from '@/lib/professional-service'
 import { toast } from 'sonner'
 import { auth } from '@/lib/firebase'
@@ -83,6 +84,12 @@ export default function AddProfessionalClient() {
   // Searchable City state
   const [citySearch, setCitySearch] = useState('')
   const [isCityDropdownOpen, setIsCityDropdownOpen] = useState(false)
+  // Geo dataset (Census Gazetteer JSON in /public/data). States load once;
+  // the selected state's cities load on demand. Any fetch failure falls back
+  // to the hardcoded STATE_CITIES / US_STATES lists in lib/data.ts.
+  const [geoStates, setGeoStates] = useState<GeoState[] | null>(null)
+  const [geoCities, setGeoCities] = useState<GeoCity[]>([])
+  const [citiesLoading, setCitiesLoading] = useState(false)
   // Skills input state
   const [skillInput, setSkillInput] = useState('')
   const [customSocialName, setCustomSocialName] = useState('')
@@ -157,8 +164,41 @@ export default function AddProfessionalClient() {
   dynamicFields: {} as Record<string, string>
   })
 
-  const availableCities = formData.province ? (STATE_CITIES[formData.province] || []) : []
-  const filteredCities = availableCities.filter(c => c.toLowerCase().includes(citySearch.toLowerCase().trim()))
+  const fallbackCities = formData.province ? (STATE_CITIES[formData.province] || []) : []
+  const usingGeoCities = geoCities.length > 0
+  const availableCities = usingGeoCities ? geoCities.map(c => c.name) : fallbackCities
+  const filteredCities = usingGeoCities
+    ? searchCities(geoCities, citySearch).map(c => c.name)
+    : availableCities.filter(c => c.toLowerCase().includes(citySearch.toLowerCase().trim()))
+
+  useEffect(() => {
+    let cancelled = false
+    loadStates()
+      .then(list => { if (!cancelled) setGeoStates(list) })
+      .catch(() => { /* fallback: US_STATES options + STATE_CITIES */ })
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    if (!formData.province) {
+      setGeoCities([])
+      setCitiesLoading(false)
+      return
+    }
+    if (!geoStates) return // states still loading (or failed) — fallback list stays in use
+    const code = stateCodeForName(formData.province, geoStates)
+    if (!code) {
+      setGeoCities([])
+      return
+    }
+    let cancelled = false
+    setCitiesLoading(true)
+    setGeoCities([])
+    loadCities(code)
+      .then(list => { if (!cancelled) { setGeoCities(list); setCitiesLoading(false) } })
+      .catch(() => { if (!cancelled) setCitiesLoading(false) /* fallback list stays in use */ })
+    return () => { cancelled = true }
+  }, [formData.province, geoStates])
   
   // Avatar Link & Upload Handlers
   const handleAvatarLinkChange = (rawUrl: string) => {
@@ -1404,9 +1444,15 @@ export default function AddProfessionalClient() {
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                       />
                       {errors.city && <p className="text-red-500 text-[11px] mt-1">{errors.city}</p>}
+                      {citiesLoading && formData.province && (
+                        <p className="text-slate-400 text-[11px] mt-1">Loading cities…</p>
+                      )}
 
                       {isCityDropdownOpen && formData.province && (
                         <div className="absolute z-30 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto">
+                          {citiesLoading && (
+                            <div className="px-3 py-2 text-xs text-slate-400">Loading cities…</div>
+                          )}
                           {filteredCities.map(c => (
                             <div
                               key={c}
@@ -1431,7 +1477,7 @@ export default function AddProfessionalClient() {
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                       >
                         <option value="">Select a state</option>
-                        {US_STATES.map(state => <option key={state} value={state}>{state}</option>)}
+                        {(geoStates ? geoStates.map(s => s.name) : US_STATES).map(state => <option key={state} value={state}>{state}</option>)}
                       </select>
                     </div>
 

@@ -42,7 +42,7 @@ export function normalizeCompanyDoc(docId: string, data: any): CompanyItem {
     id: docId || data.id || 'comp-' + Date.now(),
     slug: cSlug,
     name: cName,
-    logo: data.logo || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=200&q=80',
+    logo: data.logo || '',
     coverImage: data.coverImage || 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=1200&q=80',
     description: data.description || 'Verified hiring company profile on BizNestUSA.',
     industry: data.industry || 'Technology & IT',

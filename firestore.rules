@@ -12,8 +12,6 @@ service cloud.firestore {
       return signedIn()
         && (
           request.auth.uid == '0LM7RVOwGIMVK4rwVD6muuzPYij1' ||
-          request.auth.token.email == 'admin@biznestusa.com' ||
-          request.auth.token.email == 'contact@biznestusa.com' ||
           request.auth.token.admin == true
         );
     }

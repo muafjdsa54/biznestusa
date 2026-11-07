@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import Image from 'next/image'
+import { ListingLogo } from '@/components/listing-logo'
 import Link from 'next/link'
 import { CompanyItem, TOP_CITIES } from '@/lib/data'
 import { Building2, MapPin, Search, ShieldCheck, ArrowRight, Linkedin, Filter } from 'lucide-react'
@@ -94,7 +94,7 @@ export default function CompaniesDirectoryClient({ initialCompanies }: Companies
             <div key={comp.slug} className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs hover:shadow-xl transition-all space-y-4 flex flex-col justify-between group">
               <div className="space-y-4">
                 <div className="flex items-start gap-4">
-                  <Image src={comp.logo || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=200&q=80'} alt={comp.name} width={56} height={56} loading="lazy" sizes="56px" className="w-14 h-14 rounded-2xl object-cover border border-slate-100 shadow-xs shrink-0" />
+                  <ListingLogo name={comp.name} src={comp.logo} size={56} className="w-14 h-14 rounded-2xl object-cover border border-slate-100 shadow-xs shrink-0" />
                   <div className="space-y-1 min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
                       <Link href={`/companies/${comp.slug}`} className="font-extrabold text-slate-900 text-base group-hover:text-blue-600 transition-colors truncate">

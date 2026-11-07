@@ -17,7 +17,7 @@ import { getPublicJobPath, getPublicJobSlug } from '@/lib/job-url'
 import { toCanonicalUrl, normalizeCitySlug, VERIFICATION_DISCLAIMER } from '@/lib/directory-helpers'
 
 export const dynamicParams = true
-export const revalidate = 0
+export const revalidate = 86400
 
 export async function generateStaticParams() {
   const jobs = await getAllJobs()
@@ -235,7 +235,9 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
                       {job.cities.length} Branch Cities
                     </span>
                   )}
-                  <span className="text-xs text-slate-400">Posted {job.postedDate}</span>
+                  {datePosted ? (
+                    <span className="text-xs text-slate-400">Posted {datePosted}</span>
+                  ) : null}
                 </div>
                 <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">{job.title}</h1>
                 <div className="flex items-center gap-3 text-xs text-slate-300 flex-wrap">

@@ -58,8 +58,29 @@ export const PAKISTANI_KEYWORDS = [
   'f-10 markaz', 'f-11 markaz', 'punjab, pakistan', 'sindh, pakistan', 'kpk'
 ]
 
+/**
+ * City-name aliases: common spellings / short forms that must resolve to the
+ * canonical city slug used by STATE_CITIES. Seed data and user submissions
+ * use e.g. "New York" while the canonical city is "New York City"; without
+ * this mapping those listings are orphaned (isUsCity returns false, no city
+ * page, no sitemap entry). Keep this map to genuine variants of canonical
+ * cities only — real cities that are missing from STATE_CITIES belong there.
+ */
+export const CITY_SLUG_ALIASES: Record<string, string> = {
+  'new-york': 'new-york-city',
+  'nyc': 'new-york-city',
+  'the-bronx': 'new-york-city',
+  'st-louis': 'st.-louis',
+  'washington-dc': 'washington',
+  'washington-d-c': 'washington',
+  'ft-lauderdale': 'fort-lauderdale',
+  'ft-worth': 'fort-worth',
+  'ft-wayne': 'fort-wayne',
+}
+
 export function normalizeCitySlug(city: string): string {
-  return (city || '').trim().toLowerCase().replace(/\s+/g, '-')
+  const raw = (city || '').trim().toLowerCase().replace(/\s+/g, '-')
+  return CITY_SLUG_ALIASES[raw] ?? raw
 }
 
 export function isPakistaniCity(cityOrSlug?: string | null): boolean {

@@ -2,7 +2,7 @@ import Navbar from '@/components/navbar'
 import Footer from '@/components/footer'
 import { Metadata } from 'next'
 import Link from 'next/link'
-import Image from 'next/image'
+import ListingLogo from '@/components/listing-logo'
 import { 
   Search, MapPin, Building2, Briefcase, Users, ShieldCheck, ArrowRight, 
   Sparkles, CheckCircle2, ChevronRight, UserPlus, Plus, ExternalLink,
@@ -506,11 +506,10 @@ export default async function HomePage() {
               {approvedBusinesses.map((biz) => (
                 <div key={biz.id} className="bg-white rounded-xl border border-slate-200 p-5 space-y-3 shadow-xs hover:border-slate-300 transition-colors">
                   <div className="flex items-center gap-3">
-                    <Image
-                      src={biz.logo || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=200&q=80'}
-                      alt={biz.name}
-                      width={44}
-                      height={44}
+                    <ListingLogo
+                      name={biz.name}
+                      src={biz.logo}
+                      size={44}
                       className="w-11 h-11 rounded-lg object-cover border border-slate-200 shrink-0"
                     />
                     <div className="truncate">
@@ -573,11 +572,10 @@ export default async function HomePage() {
                 <div key={job.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between gap-3 hover:border-slate-300 transition-colors">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <Image
-                        src={job.companyLogo || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=200&q=80'}
-                        alt={job.company}
-                        width={40}
-                        height={40}
+                      <ListingLogo
+                        name={job.company}
+                        src={job.companyLogo}
+                        size={40}
                         className="w-10 h-10 rounded-lg object-cover border border-slate-200 shrink-0"
                       />
                       <div>
@@ -641,11 +639,10 @@ export default async function HomePage() {
               {approvedProfessionals.map((pro) => (
                 <div key={pro.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-3 hover:border-slate-300 transition-colors">
                   <div className="flex items-center gap-3">
-                    <Image
-                      src={pro.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80'}
-                      alt={pro.name}
-                      width={44}
-                      height={44}
+                    <ListingLogo
+                      name={pro.name}
+                      src={pro.avatar}
+                      size={44}
                       className="w-11 h-11 rounded-full object-cover border border-slate-200 shrink-0"
                     />
                     <div className="truncate">

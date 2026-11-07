@@ -13,6 +13,7 @@ import {
 import Navbar from '@/components/navbar'
 import Footer from '@/components/footer'
 import { BUSINESS_CATEGORIES, CATEGORIES, STATE_CITIES, US_STATES, BusinessItem, BUSINESS_PLANS, BusinessPlan } from '@/lib/data'
+import { loadStates, loadCities, stateCodeForName, searchCities, type GeoState, type GeoCity } from '@/lib/geo-data'
 import { saveBusinessToDatabase, getUserBusinesses, updateBusinessPaymentProof, normalizeSlug } from '@/lib/db-service'
 import StickyWebsiteBanner from '@/components/business/sticky-website-banner'
 import { auth } from '@/lib/firebase'
@@ -284,7 +285,47 @@ export default function AddBusinessClient() {
   // Errors State
   const [errors, setErrors] = useState<Record<string, string>>({})
 
-  // Category & Subcategory Custom Input State
+  // Geo dataset (Census Gazetteer JSON in /public/data), shared across locations.
+  // States load once; each selected state's cities file loads on demand and is
+  // cached by state code. Any fetch failure falls back to the hardcoded
+  // STATE_CITIES / US_STATES lists in lib/data.ts — the form never breaks.
+  const [geoStates, setGeoStates] = useState<GeoState[] | null>(null)
+  const [geoCitiesByCode, setGeoCitiesByCode] = useState<Record<string, GeoCity[]>>({})
+  const [geoLoadingCodes, setGeoLoadingCodes] = useState<Record<string, boolean>>({})
+  const [geoFailedCodes, setGeoFailedCodes] = useState<Record<string, boolean>>({})
+
+  useEffect(() => {
+    let cancelled = false
+    loadStates()
+      .then(list => { if (!cancelled) setGeoStates(list) })
+      .catch(() => { /* fallback: US_STATES options + STATE_CITIES */ })
+    return () => { cancelled = true }
+  }, [])
+
+  const ensureStateCities = (stateName: string) => {
+    if (!geoStates || !stateName) return
+    const code = stateCodeForName(stateName, geoStates)
+    if (!code) return
+    if (geoCitiesByCode[code] || geoLoadingCodes[code] || geoFailedCodes[code]) return
+    setGeoLoadingCodes(prev => ({ ...prev, [code]: true }))
+    loadCities(code)
+      .then(list => {
+        setGeoCitiesByCode(prev => ({ ...prev, [code]: list }))
+        setGeoLoadingCodes(prev => ({ ...prev, [code]: false }))
+      })
+      .catch(() => {
+        setGeoFailedCodes(prev => ({ ...prev, [code]: true }))
+        setGeoLoadingCodes(prev => ({ ...prev, [code]: false }))
+      })
+  }
+
+  // If a state was picked while states.json was still loading, load its cities now.
+  useEffect(() => {
+    if (!geoStates) return
+    const names = Array.from(new Set(formData.locations.map(l => l.state).filter(Boolean)))
+    names.forEach(ensureStateCities)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [geoStates])
   const [isCustomCategory, setIsCustomCategory] = useState(false)
   const [customCategoryText, setCustomCategoryText] = useState('')
   const [isCustomSubcategory, setIsCustomSubcategory] = useState(false)
@@ -1005,6 +1046,9 @@ export default function AddBusinessClient() {
 
       const primaryLoc = formData.locations.find(l => l.isPrimary) || formData.locations[0] || { city: 'New York', address: 'the United States' }
       const resolvedPrimaryCity = (primaryLoc.isCustomCity ? primaryLoc.customCityName || primaryLoc.city : primaryLoc.city).trim() || 'New York'
+      // Top-level state/province must come from the primary location — otherwise
+      // lib/db-service.ts defaults EVERY new business to 'New York'.
+      const resolvedPrimaryState = (('state' in primaryLoc ? primaryLoc.state : '') || '').trim() || 'New York'
       const resolvedLocations = formData.locations.map(l => ({
         city: (l.isCustomCity ? l.customCityName || l.city : l.city).trim(),
         state: l.state,
@@ -1041,6 +1085,8 @@ export default function AddBusinessClient() {
         secondaryCategories: formData.subcategory ? [formData.subcategory] : [],
         logo: formData.logo || logoPreview || undefined,
         city: resolvedPrimaryCity,
+        state: resolvedPrimaryState,
+        province: resolvedPrimaryState,
         address: primaryLoc.address || 'the United States',
         locations: resolvedLocations,
         cities: resolvedCities,
@@ -2463,10 +2509,17 @@ export default function AddBusinessClient() {
                             </div>
 
                             {formData.locations.map((loc, index) => {
-const availableCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
-                                      const filteredCities = availableCities.filter(c =>
-                                        c.toLowerCase().includes((loc.citySearchQuery || '').toLowerCase().trim())
-                                      )
+                              const stateCode = loc.state && geoStates ? stateCodeForName(loc.state, geoStates) : null
+                              const geoList = stateCode ? geoCitiesByCode[stateCode] : undefined
+                              const geoLoading = stateCode ? !!geoLoadingCodes[stateCode] : false
+                              const fallbackCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
+                              const usingGeoCities = !!geoList && geoList.length > 0
+                              const availableCities = usingGeoCities ? geoList.map(c => c.name) : fallbackCities
+                              const filteredCities = usingGeoCities
+                                ? searchCities(geoList, loc.citySearchQuery || '').map(c => c.name)
+                                : availableCities.filter(c =>
+                                    c.toLowerCase().includes((loc.citySearchQuery || '').toLowerCase().trim())
+                                  )
 
                               return (
                                 <div 
@@ -2518,6 +2571,7 @@ const availableCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
                                         id={`field-location-${index}-state`}
                                         value={loc.state}
                                         onChange={(e) => {
+                                          ensureStateCities(e.target.value)
                                           setFormData(prev => ({
                                             ...prev,
                                             locations: prev.locations.map((item, i) => i === index ? {
@@ -2541,7 +2595,7 @@ const availableCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
                                         }`}
                                       >
                                         <option value="">Search or select a state</option>
-                                        {US_STATES.map((state) => <option key={state} value={state}>{state}</option>)}
+                                        {(geoStates ? geoStates.map(s => s.name) : US_STATES).map((state) => <option key={state} value={state}>{state}</option>)}
                                       </select>
                                       {errors[`location_${index}_state`] && (
                                         <span className="text-[11px] font-semibold text-red-500 mt-1 block">
@@ -2575,6 +2629,9 @@ const availableCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
 
                                         {loc.isCityDropdownOpen && (
                                           <div className="absolute z-50 mt-2 w-full bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden animate-in fade-in-50 duration-150">
+                                            {geoLoading && (
+                                              <div className="px-3 py-1.5 text-[11px] text-slate-400 bg-slate-50/80 border-b border-slate-100">Loading cities…</div>
+                                            )}
                                             <div className="p-2.5 border-b border-slate-100 bg-slate-50/80 sticky top-0">
                                               <input
                                                 type="text"
@@ -3852,7 +3909,7 @@ const availableCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
                               {formData.locations[0]?.city || 'the United States'}
                               {formData.locations.length > 1 && ` (+${formData.locations.length - 1} branches)`}
                             </span>
-                            <span className="font-bold text-blue-600">{formData.phone || '(555) 234-5678'}</span>
+                            <span className="font-bold text-blue-600">{formData.phone || 'Your phone number'}</span>
                           </div>
                         </div>
 

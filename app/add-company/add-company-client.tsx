@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { 
@@ -9,7 +9,8 @@ import {
 } from 'lucide-react'
 import Navbar from '@/components/navbar'
 import Footer from '@/components/footer'
-import { CITIES } from '@/lib/data'
+import { STATE_CITIES, US_STATES } from '@/lib/data'
+import { loadStates, loadCities, stateCodeForName, searchCities, type GeoState, type GeoCity } from '@/lib/geo-data'
 import { saveCompanyToDatabase } from '@/lib/company-service'
 import StickyWebsiteBanner from '@/components/business/sticky-website-banner'
 import { isValidPersonName, validatePersonName, filterPersonNameInput, isValidUsPhone, validateUsPhone, formatUsPhone, isValidEmail } from '@/lib/validation'
@@ -83,11 +84,57 @@ export default function AddCompanyClient() {
     
     // Description & Images
     description: '',
-    logo: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=200&q=80',
+    logo: '',
     coverImage: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=1200&q=80'
   })
 
   const [errors, setErrors] = useState<Record<string, string>>({})
+
+  // Geo dataset (Census Gazetteer JSON in /public/data). States load once;
+  // the selected state's cities load on demand. Any fetch failure falls back
+  // to the hardcoded STATE_CITIES / US_STATES lists in lib/data.ts.
+  // Stored values stay unchanged: city = plain name, province = state name.
+  const [geoStates, setGeoStates] = useState<GeoState[] | null>(null)
+  const [geoCities, setGeoCities] = useState<GeoCity[]>([])
+  const [citiesLoading, setCitiesLoading] = useState(false)
+  const [citySearch, setCitySearch] = useState('')
+  const [isCityDropdownOpen, setIsCityDropdownOpen] = useState(false)
+
+  const fallbackCities = formData.province ? (STATE_CITIES[formData.province] || []) : []
+  const usingGeoCities = geoCities.length > 0
+  const availableCities = usingGeoCities ? geoCities.map(c => c.name) : fallbackCities
+  const filteredCities = usingGeoCities
+    ? searchCities(geoCities, citySearch).map(c => c.name)
+    : availableCities.filter(c => c.toLowerCase().includes(citySearch.toLowerCase().trim()))
+
+  useEffect(() => {
+    let cancelled = false
+    loadStates()
+      .then(list => { if (!cancelled) setGeoStates(list) })
+      .catch(() => { /* fallback: US_STATES options + STATE_CITIES */ })
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    if (!formData.province) {
+      setGeoCities([])
+      setCitiesLoading(false)
+      return
+    }
+    if (!geoStates) return // states still loading (or failed) — fallback list stays in use
+    const code = stateCodeForName(formData.province, geoStates)
+    if (!code) {
+      setGeoCities([])
+      return
+    }
+    let cancelled = false
+    setCitiesLoading(true)
+    setGeoCities([])
+    loadCities(code)
+      .then(list => { if (!cancelled) { setGeoCities(list); setCitiesLoading(false) } })
+      .catch(() => { if (!cancelled) setCitiesLoading(false) /* fallback list stays in use */ })
+    return () => { cancelled = true }
+  }, [formData.province, geoStates])
 
   const validateStep = (step: number) => {
     const errs: Record<string, string> = {}
@@ -352,18 +399,63 @@ export default function AddCompanyClient() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">City *</label>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">State *</label>
                       <select
-                        value={formData.city}
-                        onChange={(e) => setFormData(p => ({ ...p, city: e.target.value }))}
+                        value={formData.province}
+                        onChange={(e) => setFormData(p => ({ ...p, province: e.target.value, city: '' }))}
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                       >
-                        {CITIES.map(c => (
-                          <option key={c} value={c}>{c}</option>
+                        <option value="">Select a state</option>
+                        {(geoStates ? geoStates.map(s => s.name) : US_STATES).map(state => (
+                          <option key={state} value={state}>{state}</option>
                         ))}
                       </select>
                     </div>
 
+                    {/* Searchable City (narrowed to the selected state) */}
+                    <div className="relative">
+                      <label className="block text-xs font-bold text-slate-700 mb-1">City *</label>
+                      <input
+                        type="text"
+                        value={formData.city}
+                        onClick={() => setIsCityDropdownOpen(true)}
+                        onChange={(e) => {
+                          setFormData(p => ({ ...p, city: e.target.value }))
+                          setCitySearch(e.target.value)
+                          setIsCityDropdownOpen(true)
+                        }}
+                        placeholder={formData.province ? 'Search city in selected state...' : 'Select a state first'}
+                        disabled={!formData.province}
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
+                      />
+                      {errors.city && <p className="text-red-500 text-[11px] mt-1">{errors.city}</p>}
+                      {citiesLoading && formData.province && (
+                        <p className="text-slate-400 text-[11px] mt-1">Loading cities…</p>
+                      )}
+
+                      {isCityDropdownOpen && formData.province && (
+                        <div className="absolute z-30 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto">
+                          {citiesLoading && (
+                            <div className="px-3 py-2 text-xs text-slate-400">Loading cities…</div>
+                          )}
+                          {filteredCities.map(c => (
+                            <div
+                              key={c}
+                              onClick={() => {
+                                setFormData(p => ({ ...p, city: c }))
+                                setIsCityDropdownOpen(false)
+                              }}
+                              className="px-3 py-2 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-600 cursor-pointer"
+                            >
+                              {c}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">Full Office Address</label>
                       <input
