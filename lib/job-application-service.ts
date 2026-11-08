@@ -123,11 +123,22 @@ export async function submitJobApplication(params: {
   memoryJobApplicationsCache = [newApplication, ...memoryJobApplicationsCache.filter(a => a.id !== appId)]
 
   // Persist to Firestore
+  // P1-5 / hardened rules: the write requires a verified email and
+  // applicantEmail matching the caller's token email. The doc carries
+  // applicantEmail (the verified professional's email) for that match.
   try {
     const docRef = doc(db, 'job_applications', appId)
     await setDoc(docRef, newApplication)
   } catch (err) {
+    // P1-5: surface the persistence failure instead of returning
+    // success while nothing was saved server-side.
     console.warn('Firestore submitJobApplication error:', err)
+    memoryJobApplicationsCache = memoryJobApplicationsCache.filter(a => a.id !== appId)
+    return {
+      success: false,
+      code: 'ERROR',
+      message: 'Your application could not be saved. Please try again.'
+    }
   }
 
   return {
@@ -174,6 +185,7 @@ export async function updateJobApplicationStatus(
   status: 'new' | 'reviewed' | 'shortlisted' | 'rejected'
 ): Promise<boolean> {
   const item = memoryJobApplicationsCache.find(a => a.id === id)
+  const previousStatus = item?.status
   if (item) {
     item.status = status
   }
@@ -182,7 +194,10 @@ export async function updateJobApplicationStatus(
     const docRef = doc(db, 'job_applications', id)
     await updateDoc(docRef, { status })
   } catch (err) {
+    // P1-5: surface the persistence failure instead of reporting success.
+    if (item && previousStatus) item.status = previousStatus
     console.warn('Firestore updateJobApplicationStatus error:', err)
+    return false
   }
 
   return true
@@ -192,13 +207,17 @@ export async function updateJobApplicationStatus(
  * Delete a job application
  */
 export async function deleteJobApplication(id: string): Promise<boolean> {
+  const removed = memoryJobApplicationsCache.find(a => a.id === id)
   memoryJobApplicationsCache = memoryJobApplicationsCache.filter(a => a.id !== id)
 
   try {
     const docRef = doc(db, 'job_applications', id)
     await deleteDoc(docRef)
   } catch (err) {
+    // P1-5: surface the persistence failure instead of reporting success.
+    if (removed) memoryJobApplicationsCache = [removed, ...memoryJobApplicationsCache]
     console.warn('Firestore deleteJobApplication error:', err)
+    return false
   }
 
   return true

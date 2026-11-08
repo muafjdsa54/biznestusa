@@ -5,19 +5,21 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { 
   User, Briefcase, MapPin, Phone, Mail, Globe, Upload, CheckCircle2, ShieldCheck, 
-  Sparkles, ArrowRight, ArrowLeft, Star, ChevronDown, ChevronUp, Lock, Award, 
+  Sparkles, ArrowRight, ArrowLeft, Star, ChevronDown, ChevronUp, Award, 
   Linkedin, Github, Facebook, Instagram, Twitter, Youtube, Plus, Trash2, Check,
   FileText, ExternalLink, MessageCircle, AlertCircle, Building2, Stethoscope,
-  Code, Palette, GraduationCap, Wrench, Scale, Calculator, Eye, EyeOff
+  Code, Palette, GraduationCap, Wrench, Scale, Calculator, Eye
 } from 'lucide-react'
 import Navbar from '@/components/navbar'
 import Footer from '@/components/footer'
 import { CITIES, CATEGORIES, STATE_CITIES, US_STATES } from '@/lib/data'
 import { loadStates, loadCities, stateCodeForName, searchCities, type GeoState, type GeoCity } from '@/lib/geo-data'
 import { saveProfessionalToDatabase, generateProfessionalSlug } from '@/lib/professional-service'
+import TurnstileWidget from '@/components/turnstile-widget'
+import { isTurnstileWidgetEnabled, verifyTurnstileTokenClient } from '@/lib/turnstile'
 import { toast } from 'sonner'
 import { auth } from '@/lib/firebase'
-import { createUserWithEmailAndPassword, updateProfile, signInWithEmailAndPassword } from 'firebase/auth'
+import { onAuthStateChanged, sendEmailVerification } from 'firebase/auth'
 import { isValidPersonName, validatePersonName, filterPersonNameInput, isValidUsPhone, validateUsPhone, formatUsPhone, isValidEmail } from '@/lib/validation'
 
 // Professions list
@@ -74,12 +76,53 @@ export default function AddProfessionalClient() {
   const router = useRouter()
   const [currentStep, setCurrentStep] = useState(1)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
   const [submittedUsername, setSubmittedUsername] = useState<string | null>(null)
 
-  // Auth & Account State
-  const [isUserLoggedIn, setIsUserLoggedIn] = useState(false)
-  const [accountPassword, setAccountPassword] = useState('')
-  const [showAccountPassword, setShowAccountPassword] = useState(false)
+  // Auth gate: submitting requires a signed-in account with a verified
+  // email (hardened firestore.rules: creates need verified email + the
+  // caller's own identity). No account is created here, nobody is signed in
+  // silently, and no fake user id is ever invented. Identity comes from
+  // Firebase Auth only — never from sessionStorage (unsigned, forgeable).
+  const [authUser, setAuthUser] = useState<{ uid: string; email: string | null; emailVerified: boolean } | null>(null)
+  const [authChecking, setAuthChecking] = useState(true)
+  const [resendingVerification, setResendingVerification] = useState(false)
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (fbUser) => {
+      setAuthUser(fbUser ? { uid: fbUser.uid, email: fbUser.email, emailVerified: fbUser.emailVerified } : null)
+      setAuthChecking(false)
+    })
+    return () => unsubscribe()
+  }, [])
+
+  const requireVerifiedAuth = async (): Promise<{ uid: string; email: string } | null> => {
+    const user = auth.currentUser
+    if (!user) {
+      toast.error('Please sign in to submit your profile. Log in or create an account first.')
+      return null
+    }
+    try { await user.reload() } catch { /* fall through with the cached token state */ }
+    if (!user.emailVerified) {
+      toast.error('Please verify your email before submitting — check your inbox for the verification link.')
+      return null
+    }
+    return { uid: user.uid, email: user.email || '' }
+  }
+
+  const handleResendVerification = async () => {
+    const user = auth.currentUser
+    if (!user) return
+    setResendingVerification(true)
+    try {
+      await sendEmailVerification(user)
+      toast.success('Verification email sent — please check your inbox.')
+    } catch {
+      toast.error('Could not send the verification email. Please try again in a few minutes.')
+    } finally {
+      setResendingVerification(false)
+    }
+  }
 
   // Searchable City state
   const [citySearch, setCitySearch] = useState('')
@@ -104,20 +147,20 @@ export default function AddProfessionalClient() {
   const [formData, setFormData] = useState({
     fullName: '',
     title: '',
-    gender: 'Male',
-    profession: 'Software Developer',
+    gender: '',
+    profession: '',
     category: 'Professional / Job Seeker',
     specialization: '',
     shortBio: '',
     about: '',
-    experienceYears: '3',
-    availability: 'Open to Work (Full-time)',
+    experienceYears: '',
+    availability: '',
     currentCompany: '',
     hourlyRate: '',
     
     // Skills & Arrays
-    skills: ['Communication', 'Problem Solving'] as string[],
-    languages: ['Urdu', 'English'] as string[],
+    skills: [] as string[],
+    languages: [] as string[],
     servicesOffered: [] as string[],
     
     // Education & Work
@@ -138,7 +181,7 @@ export default function AddProfessionalClient() {
     portfolio: '',
     resumeUrl: '',
     avatar: '',
-    coverImage: 'https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=1200&q=80',
+    coverImage: '',
 
     // Social Links (Highlighted LinkedIn + 16 platforms)
     linkedin: '',
@@ -236,7 +279,7 @@ export default function AddProfessionalClient() {
     const maxBytes = 200 * 1024
     if (file.size > maxBytes) {
       const sizeKb = (file.size / 1024).toFixed(0)
-      const err = `Your image size is ${sizeKb} KB (exceeds 200 KB limit). Please compress/reduce your image size for free at https://mb2kb.com/ and re-upload.`
+      const err = `Your image size is ${sizeKb} KB (exceeds 200 KB limit). Please compress/reduce your image size at https://mb2kb.com/ and re-upload.`
       setAvatarError(err)
       toast.error(`Image is ${sizeKb} KB. Please reduce image size at mb2kb.com to under 200 KB.`)
       return
@@ -251,35 +294,17 @@ export default function AddProfessionalClient() {
     reader.readAsDataURL(file)
   }
 
-  // Prefill from session, Firebase Auth, or URL params
+  // Prefill name/email from URL params or the signed-in Firebase account.
   useEffect(() => {
     try {
       const urlParams = new URLSearchParams(window.location.search)
       const nameParam = urlParams.get('name')
       const emailParam = urlParams.get('email')
-
-      let sessionName = ''
-      let sessionEmail = ''
-      const savedSession = sessionStorage.getItem('biznestusa_user_session') || localStorage.getItem('biznestusa_user_session') || sessionStorage.getItem('listpak_user_session') || localStorage.getItem('listpak_user_session')
-      if (savedSession) {
-        const parsed = JSON.parse(savedSession)
-        sessionName = parsed.name || ''
-        sessionEmail = parsed.email || ''
-        if (parsed.email) {
-          setIsUserLoggedIn(true)
-        }
-      }
-
-      if (auth.currentUser?.email) {
-        setIsUserLoggedIn(true)
-        sessionEmail = sessionEmail || auth.currentUser.email
-        sessionName = sessionName || auth.currentUser.displayName || ''
-      }
-
+      const fbUser = auth.currentUser
       setFormData(prev => ({
         ...prev,
-        fullName: nameParam || sessionName || prev.fullName,
-        email: emailParam || sessionEmail || prev.email
+        fullName: nameParam || fbUser?.displayName || prev.fullName,
+        email: emailParam || fbUser?.email || prev.email
       }))
     } catch (e) {
       // ignore
@@ -407,9 +432,6 @@ export default function AddProfessionalClient() {
           errs.whatsapp = wVal.error || 'Please enter a valid 10-digit US phone number: +1 (XXX) XXX-XXXX for WhatsApp'
         }
       }
-      if (!isUserLoggedIn && (!accountPassword || accountPassword.length < 6)) {
-        errs.password = 'Password (at least 6 characters) is required to create your dashboard account'
-      }
     }
     setErrors(errs)
     return Object.keys(errs).length === 0
@@ -441,68 +463,52 @@ export default function AddProfessionalClient() {
       return
     }
 
+    // Submit requires a signed-in, email-verified account (see the auth gate
+    // above). No account is created here and no fake id is ever assigned.
+    const authed = await requireVerifiedAuth()
+    if (!authed) return
+
+    // Cloudflare Turnstile: when keys are set (user's job), a completed
+    // check is required and verified server-side via /api/turnstile/verify.
+    // With no keys configured the check is skipped and submit proceeds.
+    if (isTurnstileWidgetEnabled()) {
+      if (!turnstileToken) {
+        toast.error('Please complete the security check before submitting.')
+        return
+      }
+      const check = await verifyTurnstileTokenClient(turnstileToken)
+      if (!check.success) {
+        toast.error('Security check failed. Please try again.')
+        return
+      }
+    }
+
     setIsSubmitting(true)
     try {
-      let activeUserId = auth.currentUser?.uid || ''
-
-      // If user is not yet logged in, create Firebase Auth account
-      if (!isUserLoggedIn && accountPassword) {
-        try {
-          const cred = await createUserWithEmailAndPassword(auth, formData.email.trim(), accountPassword)
-          if (cred.user) {
-            activeUserId = cred.user.uid
-            await updateProfile(cred.user, { displayName: formData.fullName.trim() })
-            setIsUserLoggedIn(true)
-          }
-        } catch (authErr: any) {
-          console.warn('Firebase Auth notice during profile creation:', authErr?.code)
-          if (authErr?.code === 'auth/email-already-in-use') {
-            try {
-              const signCred = await signInWithEmailAndPassword(auth, formData.email.trim(), accountPassword)
-              if (signCred.user) {
-                activeUserId = signCred.user.uid
-                setIsUserLoggedIn(true)
-              }
-            } catch (_) {}
-          }
-        }
-      }
-
-      if (!activeUserId) {
-        activeUserId = 'usr-pro-' + Date.now()
-      }
-
       const createdPro = await saveProfessionalToDatabase({
         ...formData,
-        userId: activeUserId,
+        userId: authed.uid,
+        email: authed.email,
+        ownerEmail: authed.email,
         certifications: formData.certifications
           .map((cert) => [cert.title, cert.issuer, cert.year].filter(Boolean).join(' — '))
           .filter(Boolean),
         customSocialLinks: formData.customSocialLinks.map((link) => ({ platform: link.name, url: link.url })),
         experienceYears: Number(formData.experienceYears) || 0,
-        status: 'approved',
-        profileStatus: 'APPROVED',
+        // NOTE: lib/professional-service.ts currently overrides these with
+        // status 'approved' / profileStatus 'APPROVED' (+ approvedAt/approvedBy
+        // 'system_auto_approved'). The service must be fixed to honour
+        // 'pending' — the form passes pending so it no longer asks for
+        // auto-approval. Until then the saved doc is still approved.
+        status: 'pending',
+        profileStatus: 'PENDING',
         verified: false,
         verificationStatus: 'UNVERIFIED',
         verificationRequestStatus: 'NOT_REQUESTED'
       })
       setSubmittedUsername(createdPro.username)
-      
-      // Update and persist session in both storages
-      const sessionData = {
-        name: formData.fullName,
-        email: formData.email.trim(),
-        role: 'professional',
-        hasProfile: true,
-        username: createdPro.username,
-        userId: activeUserId
-      }
-      try {
-        sessionStorage.setItem('biznestusa_user_session', JSON.stringify(sessionData))
-        localStorage.setItem('biznestusa_user_session', JSON.stringify(sessionData))
-      } catch (e) {}
 
-      toast.success('Your professional profile has been submitted successfully!')
+      toast.success('Your professional profile has been submitted for review!')
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (err) {
       toast.error('Failed to submit profile. Please try again.')
@@ -524,7 +530,7 @@ export default function AddProfessionalClient() {
               <span>Personal Professional Profile</span>
             </span>
             <div className="text-xs text-slate-400 font-medium">
-              Free • Indexable on Google • Green Verified Badge Available
+              Indexable on Google • Green Verified Badge Available
             </div>
           </div>
           
@@ -557,13 +563,13 @@ export default function AddProfessionalClient() {
             <div className="space-y-3">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                <span>Profile Auto-Approved &amp; Publicly Live!</span>
+                <span>Profile Submitted — Pending Review</span>
               </span>
               <h2 className="text-2xl font-extrabold text-slate-900">
-                Your professional profile is now live across the United States!
+                Your professional profile has been submitted for review!
               </h2>
               <p className="text-slate-600 text-sm max-w-lg mx-auto leading-relaxed">
-                Your profile has been automatically approved and published. Anyone can now view your public portfolio, credentials, and skills on BizNest USA.
+                Our team will review your profile before it appears publicly. It is not live yet — you can track its approval from your Professional Dashboard.
               </p>
             </div>
 
@@ -585,9 +591,8 @@ export default function AddProfessionalClient() {
               </div>
               <div className="flex justify-between text-slate-600">
                 <span>Profile Status:</span>
-                <span className="text-emerald-600 font-extrabold flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>APPROVED &amp; LIVE</span>
+                <span className="text-amber-600 font-extrabold flex items-center gap-1">
+                  <span>PENDING REVIEW</span>
                 </span>
               </div>
               <div className="flex justify-between text-slate-600">
@@ -598,39 +603,13 @@ export default function AddProfessionalClient() {
               </div>
             </div>
 
-            {/* Verification Promotion Card */}
-            <div className="p-5 bg-gradient-to-br from-amber-50 via-orange-50 to-emerald-50 rounded-2xl border-2 border-amber-200 text-left space-y-3 max-w-md mx-auto">
-              <div className="flex items-start gap-3">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                  <ShieldCheck className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="font-extrabold text-slate-900 text-xs sm:text-sm">Remove Red Flag: Verify Your Profile (Rs. 50)</h4>
-                  <p className="text-[11px] text-slate-600 leading-relaxed mt-0.5">
-                    Your public page currently displays an <strong>Unverified red flag</strong>. Verify for Rs. 50 to earn the official <strong>Green Verified Badge</strong>, gain client trust, and unlock profile editing.
-                  </p>
-                </div>
-              </div>
-
-              <Link
-                href={`/dashboard/professional/verify?username=${encodeURIComponent(submittedUsername)}`}
-                className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-extrabold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <ShieldCheck className="w-4 h-4" />
-                <span>Pay for Verification (Rs. 50)</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-
             <div className="pt-2 flex flex-col sm:flex-row gap-3 justify-center">
               <Link
-                href={`/professionals/${submittedUsername}`}
-                target="_blank"
+                href="/professionals"
                 className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold rounded-xl shadow-md transition-colors flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Eye className="w-4 h-4" />
-                <span>View Live Public Page</span>
-                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Browse Professional Directory</span>
               </Link>
               <Link
                 href="/dashboard/professional"
@@ -644,6 +623,25 @@ export default function AddProfessionalClient() {
         ) : (
           /* Multi-step Form */
           <div className="space-y-8">
+            {!authChecking && !authUser && (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs text-amber-900 space-y-1">
+                <p className="font-extrabold">Sign in to submit your profile</p>
+                <p className="text-amber-800 leading-relaxed">Submitting requires a signed-in account with a verified email. Your profile is reviewed before it goes public.</p>
+                <p className="pt-1">
+                  <Link href="/login?role=professional" className="font-bold text-blue-700 underline mr-3">Log in</Link>
+                  <Link href="/register" className="font-bold text-blue-700 underline">Create an account</Link>
+                </p>
+              </div>
+            )}
+            {!authChecking && authUser && !authUser.emailVerified && (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs text-amber-900 space-y-1">
+                <p className="font-extrabold">Verify your email to submit</p>
+                <p className="text-amber-800 leading-relaxed">We sent a verification link to {authUser.email}. Your profile can only be submitted after you verify.</p>
+                <button type="button" onClick={handleResendVerification} disabled={resendingVerification} className="font-bold text-blue-700 underline disabled:opacity-50 cursor-pointer">
+                  {resendingVerification ? 'Sending…' : 'Resend verification email'}
+                </button>
+              </div>
+            )}
             {/* Step Progress Bar */}
             <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs grid grid-cols-5 gap-2 text-center text-xs">
               {[
@@ -656,7 +654,7 @@ export default function AddProfessionalClient() {
                 <div
                   key={s.num}
                   onClick={() => s.num < currentStep && setCurrentStep(s.num)}
-                  className={`py-2 px-1 rounded-xl transition-all font-bold ${
+                  className={`py-3 px-1 min-h-[44px] rounded-xl transition-all font-bold ${
                     currentStep === s.num
                       ? 'bg-blue-600 text-white shadow-md'
                       : currentStep > s.num
@@ -665,7 +663,7 @@ export default function AddProfessionalClient() {
                   }`}
                 >
                   <span>Step {s.num}</span>
-                  <span className="hidden sm:inline block text-[11px] font-normal">{s.label}</span>
+                  <span className="hidden sm:inline block text-xs font-normal">{s.label}</span>
                 </div>
               ))}
             </div>
@@ -704,9 +702,9 @@ export default function AddProfessionalClient() {
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                       />
                       {errors.fullName ? (
-                        <p className="text-red-500 text-[11px] mt-1">{errors.fullName}</p>
+                        <p className="text-red-500 text-xs mt-1">{errors.fullName}</p>
                       ) : (
-                        <p className="text-[10px] text-slate-400 mt-0.5">Real person name (letters only, no numbers like &quot;232&quot;).</p>
+                        <p className="text-xs text-slate-400 mt-0.5">Real person name (letters only, no numbers like &quot;232&quot;).</p>
                       )}
                     </div>
 
@@ -720,7 +718,7 @@ export default function AddProfessionalClient() {
                         placeholder="e.g. Frontend Developer, Consultant Dermatologist, Electrician"
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                       />
-                      {errors.title && <p className="text-red-500 text-[11px] mt-1">{errors.title}</p>}
+                      {errors.title && <p className="text-red-500 text-xs mt-1">{errors.title}</p>}
                     </div>
                   </div>
 
@@ -738,7 +736,7 @@ export default function AddProfessionalClient() {
                             key={g.val}
                             type="button"
                             onClick={() => setFormData(p => ({ ...p, gender: g.val }))}
-                            className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                            className={`py-3 px-3 min-h-[44px] rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
                               formData.gender === g.val
                                 ? 'bg-blue-50 border-blue-500 text-blue-700 ring-2 ring-blue-500/20 shadow-xs'
                                 : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
@@ -749,7 +747,7 @@ export default function AddProfessionalClient() {
                           </button>
                         ))}
                       </div>
-                      {errors.gender && <p className="text-red-500 text-[11px] mt-1">{errors.gender}</p>}
+                      {errors.gender && <p className="text-red-500 text-xs mt-1">{errors.gender}</p>}
                     </div>
 
                     {/* Years of Experience */}
@@ -774,11 +772,11 @@ export default function AddProfessionalClient() {
                           <label className="text-xs font-extrabold text-slate-900">
                             Professional Profile Picture *
                           </label>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
                             Mandatory for Hiring
                           </span>
                         </div>
-                        <p className="text-[11px] text-slate-500 mt-0.5">
+                        <p className="text-xs text-slate-500 mt-0.5">
                           Upload a clear headshot or paste your Google Drive photo link.
                         </p>
                       </div>
@@ -788,7 +786,7 @@ export default function AddProfessionalClient() {
                         <button
                           type="button"
                           onClick={() => setAvatarMode('link')}
-                          className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                          className={`px-3 py-2.5 rounded-lg transition-all cursor-pointer ${
                             avatarMode === 'link' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
                           }`}
                         >
@@ -797,7 +795,7 @@ export default function AddProfessionalClient() {
                         <button
                           type="button"
                           onClick={() => setAvatarMode('upload')}
-                          className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                          className={`px-3 py-2.5 rounded-lg transition-all cursor-pointer ${
                             avatarMode === 'upload' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
                           }`}
                         >
@@ -834,7 +832,7 @@ export default function AddProfessionalClient() {
                         ) : (
                           <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-slate-200/80 border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400">
                             <User className="w-8 h-8" />
-                            <span className="text-[10px] mt-1 font-bold text-slate-500">No Photo</span>
+                            <span className="text-xs mt-1 font-bold text-slate-500">No Photo</span>
                           </div>
                         )}
                       </div>
@@ -850,7 +848,7 @@ export default function AddProfessionalClient() {
                               placeholder="Paste Google Drive link or direct Image URL (e.g. https://drive.google.com/file/d/...)"
                               className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                             />
-                            <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                            <div className="flex items-center gap-1.5 text-xs text-slate-500">
                               <Sparkles className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                               <span>
                                 <strong>Recommended:</strong> Google Drive link (make sure file sharing is set to <em>&quot;Anyone with the link can view&quot;</em>).
@@ -871,7 +869,7 @@ export default function AddProfessionalClient() {
                                 />
                               </label>
                             </div>
-                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1.5 text-[11px] text-slate-500 pt-1">
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1.5 text-xs text-slate-500 pt-1">
                               <span>Accepted: JPG, PNG, WebP (Max 200 KB)</span>
                               <a
                                 href="https://mb2kb.com/"
@@ -892,12 +890,12 @@ export default function AddProfessionalClient() {
                               <span>{avatarError}</span>
                             </div>
                             <div className="flex items-center justify-between pt-1 border-t border-amber-200/60">
-                              <span className="text-[11px] text-amber-800">Need to compress image?</span>
+                              <span className="text-xs text-amber-800">Need to compress image?</span>
                               <a
                                 href="https://mb2kb.com/"
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] rounded-xl inline-flex items-center gap-1.5 shadow-xs transition-colors"
+                                className="px-3 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl inline-flex items-center gap-1.5 shadow-xs transition-colors"
                               >
                                 <span>Reduce Size at MB2KB.com</span>
                                 <ExternalLink className="w-3 h-3" />
@@ -905,15 +903,15 @@ export default function AddProfessionalClient() {
                             </div>
                           </div>
                         )}
-                        {errors.avatar && !avatarError && <p className="text-red-500 text-[11px] font-semibold">{errors.avatar}</p>}
+                        {errors.avatar && !avatarError && <p className="text-red-500 text-xs font-semibold">{errors.avatar}</p>}
                       </div>
                     </div>
 
                     {/* HR Recruiter Tip Banner */}
-                    <div className="p-2.5 rounded-xl bg-blue-50/70 border border-blue-200/60 flex items-start gap-2 text-[11px] text-slate-600">
+                    <div className="p-2.5 rounded-xl bg-blue-50/70 border border-blue-200/60 flex items-start gap-2 text-xs text-slate-600">
                       <Award className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
                       <span>
-                        <strong>HR &amp; Client Hiring Tip:</strong> Profiles with clear, well-lit professional headshots receive <strong>4x more interview calls &amp; project inquiries</strong> from companies across the United States.
+                        <strong>HR &amp; Client Hiring Tip:</strong> Profiles with clear, well-lit professional headshots make a stronger first impression on companies across the United States.
                       </span>
                     </div>
                   </div>
@@ -926,6 +924,7 @@ export default function AddProfessionalClient() {
                         onChange={(e) => setFormData(p => ({ ...p, profession: e.target.value }))}
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                       >
+                        <option value="">Select your profession</option>
                         {POPULAR_PROFESSIONS.map(prof => (
                           <option key={prof} value={prof}>{prof}</option>
                         ))}
@@ -963,6 +962,7 @@ export default function AddProfessionalClient() {
                         onChange={(e) => setFormData(p => ({ ...p, availability: e.target.value }))}
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                       >
+                        <option value="">Select your availability</option>
                         {AVAILABILITY_OPTIONS.map(opt => (
                           <option key={opt} value={opt}>{opt}</option>
                         ))}
@@ -980,7 +980,7 @@ export default function AddProfessionalClient() {
                       placeholder="Briefly describe your expertise, key skills, and what you offer to clients or employers..."
                       className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                     />
-                    {errors.shortBio && <p className="text-red-500 text-[11px] mt-1">{errors.shortBio}</p>}
+                    {errors.shortBio && <p className="text-red-500 text-xs mt-1">{errors.shortBio}</p>}
                   </div>
 
                   <div>
@@ -1021,8 +1021,8 @@ export default function AddProfessionalClient() {
                           <input
                             type="text"
                             placeholder="e.g. CA-MED-849201 or NPI-1092837465"
-                            value={formData.dynamicFields.pmdcNumber || ''}
-                            onChange={(e) => updateDynamicField('pmdcNumber', e.target.value)}
+                            value={formData.dynamicFields.licenseNumber || ''}
+                            onChange={(e) => updateDynamicField('licenseNumber', e.target.value)}
                             className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs"
                           />
                         </div>
@@ -1260,12 +1260,12 @@ export default function AddProfessionalClient() {
                       <button
                         type="button"
                         onClick={addSkill}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700"
+                        className="px-4 py-3 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700"
                       >
                         Add Skill
                       </button>
                     </div>
-                    {errors.skills && <p className="text-red-500 text-[11px] mb-2">{errors.skills}</p>}
+                    {errors.skills && <p className="text-red-500 text-xs mb-2">{errors.skills}</p>}
 
                     <div className="flex flex-wrap gap-2 pt-1">
                       {formData.skills.map((s) => (
@@ -1339,7 +1339,7 @@ export default function AddProfessionalClient() {
                             )}
                           </div>
                           {errors[`eduYear_${i}`] && (
-                            <p className="text-red-500 text-[10px] font-semibold mt-1">{errors[`eduYear_${i}`]}</p>
+                            <p className="text-red-500 text-xs font-semibold mt-1">{errors[`eduYear_${i}`]}</p>
                           )}
                         </div>
                       </div>
@@ -1408,7 +1408,7 @@ export default function AddProfessionalClient() {
                             )}
                           </div>
                           {errors[`certYear_${i}`] && (
-                            <p className="text-red-500 text-[10px] font-semibold mt-1">{errors[`certYear_${i}`]}</p>
+                            <p className="text-red-500 text-xs font-semibold mt-1">{errors[`certYear_${i}`]}</p>
                           )}
                         </div>
                       </div>
@@ -1443,9 +1443,9 @@ export default function AddProfessionalClient() {
                         disabled={!formData.province}
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                       />
-                      {errors.city && <p className="text-red-500 text-[11px] mt-1">{errors.city}</p>}
+                      {errors.city && <p className="text-red-500 text-xs mt-1">{errors.city}</p>}
                       {citiesLoading && formData.province && (
-                        <p className="text-slate-400 text-[11px] mt-1">Loading cities…</p>
+                        <p className="text-slate-400 text-xs mt-1">Loading cities…</p>
                       )}
 
                       {isCityDropdownOpen && formData.province && (
@@ -1503,7 +1503,7 @@ export default function AddProfessionalClient() {
                         placeholder="you@domain.com"
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                       />
-                      {errors.email && <p className="text-red-500 text-[11px] mt-1">{errors.email}</p>}
+                      {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
                     </div>
 
                     <div>
@@ -1518,9 +1518,9 @@ export default function AddProfessionalClient() {
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                       />
                       {errors.phone ? (
-                        <p className="text-red-500 text-[11px] mt-1">{errors.phone}</p>
+                        <p className="text-red-500 text-xs mt-1">{errors.phone}</p>
                       ) : (
-                        <p className="text-[10px] text-slate-400 mt-0.5">USA format: +1 (XXX) XXX-XXXX (10 digits).</p>
+                        <p className="text-xs text-slate-400 mt-0.5">USA format: +1 (XXX) XXX-XXXX (10 digits).</p>
                       )}
                     </div>
 
@@ -1535,46 +1535,37 @@ export default function AddProfessionalClient() {
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                       />
                       {errors.whatsapp ? (
-                        <p className="text-red-500 text-[11px] mt-1">{errors.whatsapp}</p>
+                        <p className="text-red-500 text-xs mt-1">{errors.whatsapp}</p>
                       ) : (
-                        <p className="text-[10px] text-slate-400 mt-0.5">USA format: +1 (XXX) XXX-XXXX (10 digits).</p>
+                        <p className="text-xs text-slate-400 mt-0.5">USA format: +1 (XXX) XXX-XXXX (10 digits).</p>
                       )}
                     </div>
                   </div>
 
-                  {/* ACCOUNT CREATION / PASSWORD SECTION FOR NEW USERS */}
-                  {!isUserLoggedIn && (
-                    <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Lock className="w-4 h-4 text-blue-600" />
-                          <span className="font-extrabold text-xs text-slate-900">Set Account Password *</span>
-                        </div>
-                        <Link href="/login?role=professional" className="text-[11px] text-blue-700 font-bold hover:underline">
-                          Already have an account? Log In
-                        </Link>
+                  {/* SIGN-IN REQUIRED — submit is gated behind a signed-in,
+                      email-verified account; no account is created here. */}
+                  {!authChecking && !authUser && (
+                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl space-y-2">
+                      <p className="font-extrabold text-xs text-amber-900">Sign in to submit your profile</p>
+                      <p className="text-xs text-amber-800 leading-relaxed">You need a signed-in account with a verified email to submit. Your profile will be reviewed before it goes public.</p>
+                      <div className="flex gap-3 pt-1">
+                        <Link href="/login?role=professional" className="text-xs font-bold text-blue-700 underline">Log in</Link>
+                        <Link href="/register" className="text-xs font-bold text-blue-700 underline">Create an account</Link>
                       </div>
-                      <p className="text-[11px] text-slate-600 leading-relaxed">
-                        Create a password for your account so you can log into your <strong>Professional Dashboard</strong> and track your profile approval in real time.
-                      </p>
-                      <div className="relative">
-                        <input
-                          type={showAccountPassword ? 'text' : 'password'}
-                          required
-                          value={accountPassword}
-                          onChange={(e) => setAccountPassword(e.target.value)}
-                          placeholder="Create a strong password (at least 6 characters)"
-                          className="w-full pl-4 pr-11 py-2.5 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowAccountPassword(!showAccountPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-1"
-                        >
-                          {showAccountPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                      {errors.password && <p className="text-red-500 text-[11px] font-bold">{errors.password}</p>}
+                    </div>
+                  )}
+                  {!authChecking && authUser && !authUser.emailVerified && (
+                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl space-y-2">
+                      <p className="font-extrabold text-xs text-amber-900">Verify your email to submit</p>
+                      <p className="text-xs text-amber-800 leading-relaxed">We sent a verification link to {authUser.email}. Your profile can only be submitted after you verify.</p>
+                      <button type="button" onClick={handleResendVerification} disabled={resendingVerification} className="text-xs font-bold text-blue-700 underline disabled:opacity-50 cursor-pointer">
+                        {resendingVerification ? 'Sending…' : 'Resend verification email'}
+                      </button>
+                    </div>
+                  )}
+                  {!authChecking && authUser?.emailVerified && (
+                    <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl">
+                      <p className="text-xs text-emerald-900">Submitting as <strong>{authUser.email}</strong> (verified).</p>
                     </div>
                   )}
 
@@ -1610,7 +1601,7 @@ export default function AddProfessionalClient() {
                   <div>
                     <div className="flex items-center gap-2">
                       <h2 className="text-xl font-extrabold text-slate-900">Social Media &amp; Public Links</h2>
-                      <span className="text-[10px] font-extrabold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200 uppercase">
+                      <span className="text-xs font-extrabold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200 uppercase">
                         100% Optional
                       </span>
                     </div>
@@ -1634,7 +1625,7 @@ export default function AddProfessionalClient() {
                         <Linkedin className="w-4 h-4 text-[#0A66C2] fill-[#0A66C2]" />
                         <span>LinkedIn Profile URL</span>
                       </div>
-                      <span className="text-[10px] font-semibold text-slate-400">Optional</span>
+                      <span className="text-xs font-semibold text-slate-400">Optional</span>
                     </label>
                     <input
                       type="url"
@@ -1650,7 +1641,7 @@ export default function AddProfessionalClient() {
                     <div>
                       <label className="flex justify-between items-center font-bold text-slate-700 mb-1">
                         <span>GitHub</span>
-                        <span className="text-[10px] font-normal text-slate-400">Optional</span>
+                        <span className="text-xs font-normal text-slate-400">Optional</span>
                       </label>
                       <input
                         type="url"
@@ -1664,7 +1655,7 @@ export default function AddProfessionalClient() {
                     <div>
                       <label className="flex justify-between items-center font-bold text-slate-700 mb-1">
                         <span>Upwork Profile</span>
-                        <span className="text-[10px] font-normal text-slate-400">Optional</span>
+                        <span className="text-xs font-normal text-slate-400">Optional</span>
                       </label>
                       <input
                         type="url"
@@ -1678,7 +1669,7 @@ export default function AddProfessionalClient() {
                     <div>
                       <label className="flex justify-between items-center font-bold text-slate-700 mb-1">
                         <span>Fiverr Profile</span>
-                        <span className="text-[10px] font-normal text-slate-400">Optional</span>
+                        <span className="text-xs font-normal text-slate-400">Optional</span>
                       </label>
                       <input
                         type="url"
@@ -1692,7 +1683,7 @@ export default function AddProfessionalClient() {
                     <div>
                       <label className="flex justify-between items-center font-bold text-slate-700 mb-1">
                         <span>Behance / Dribbble</span>
-                        <span className="text-[10px] font-normal text-slate-400">Optional</span>
+                        <span className="text-xs font-normal text-slate-400">Optional</span>
                       </label>
                       <input
                         type="url"
@@ -1706,7 +1697,7 @@ export default function AddProfessionalClient() {
                     <div>
                       <label className="flex justify-between items-center font-bold text-slate-700 mb-1">
                         <span>Twitter / X</span>
-                        <span className="text-[10px] font-normal text-slate-400">Optional</span>
+                        <span className="text-xs font-normal text-slate-400">Optional</span>
                       </label>
                       <input
                         type="url"
@@ -1720,7 +1711,7 @@ export default function AddProfessionalClient() {
                     <div>
                       <label className="flex justify-between items-center font-bold text-slate-700 mb-1">
                         <span>YouTube Channel</span>
-                        <span className="text-[10px] font-normal text-slate-400">Optional</span>
+                        <span className="text-xs font-normal text-slate-400">Optional</span>
                       </label>
                       <input
                         type="url"
@@ -1753,7 +1744,7 @@ export default function AddProfessionalClient() {
                       <button
                         type="button"
                         onClick={addCustomSocialLink}
-                        className="px-4 py-2 bg-slate-800 text-white rounded-xl text-xs font-bold hover:bg-slate-900"
+                        className="px-4 py-3 bg-slate-800 text-white rounded-xl text-xs font-bold hover:bg-slate-900"
                       >
                         Add Link
                       </button>
@@ -1779,7 +1770,7 @@ export default function AddProfessionalClient() {
                   <button
                     type="button"
                     onClick={handlePrevStep}
-                    className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer"
+                    className="px-5 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer"
                   >
                     <ArrowLeft className="w-4 h-4" />
                     <span>Back</span>
@@ -1788,11 +1779,12 @@ export default function AddProfessionalClient() {
                   <div />
                 )}
 
+                <TurnstileWidget onToken={setTurnstileToken} className="flex justify-center" />
                 {currentStep < 5 ? (
                   <button
                     type="button"
                     onClick={handleNextStep}
-                    className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-md shadow-blue-600/20 cursor-pointer"
+                    className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-md shadow-blue-600/20 cursor-pointer"
                   >
                     <span>Continue to Step {currentStep + 1}</span>
                     <ArrowRight className="w-4 h-4" />

@@ -60,7 +60,7 @@ export default function SupportPage() {
               </div>
               <h3 className="font-bold text-slate-900 text-sm">Email Helpdesk</h3>
               <p className="text-sm text-blue-600 font-bold">support@biznestusa.com</p>
-              <p className="text-xs text-slate-500">Guaranteed response within 24 hours</p>
+              <p className="text-xs text-slate-500">We aim to respond within 24 hours</p>
             </div>
 
             <div className="p-6 bg-white rounded-3xl border border-slate-200/90 shadow-sm text-center space-y-2">

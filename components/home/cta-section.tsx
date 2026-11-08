@@ -2,8 +2,8 @@ import Link from 'next/link'
 import { CheckCircle } from 'lucide-react'
 
 const perks = [
-  'Free to list – no credit card required',
-  'Reach thousands of local customers',
+  'Listings from $1 — no hidden fees',
+  'Reach local customers searching nearby',
   'Manage your business profile easily',
   'Get found on Google and other search engines',
 ]
@@ -16,11 +16,11 @@ export default function CTASection() {
           id="cta-heading"
           className="text-3xl md:text-4xl font-bold text-white text-balance"
         >
-          List Your Company <span className="text-[#60a5fa]">Free</span> Today
+          List Your Company Today
         </h2>
         <p className="mt-4 text-white/65 text-lg max-w-xl mx-auto text-pretty">
           Join local businesses and professionals growing with BizNestUSA, a modern directory built for American communities.
-          It&apos;s completely free and takes less than 2 minutes.
+          Listings start at $1.
         </p>
 
         <ul className="mt-8 flex flex-col sm:flex-row flex-wrap justify-center gap-4 text-sm text-white/80">
@@ -37,7 +37,7 @@ export default function CTASection() {
             href="/add-business"
             className="px-8 py-4 bg-[#60a5fa] hover:bg-blue-400 text-white font-bold rounded-xl transition-colors duration-200 text-base shadow-lg"
           >
-            Add Your Business – It&apos;s Free
+            Add Your Business — From $1
           </Link>
           <Link
             href="/categories"

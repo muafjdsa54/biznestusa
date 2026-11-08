@@ -6,14 +6,14 @@ import { PROFESSIONAL_CATEGORIES, TOP_CITIES } from '@/lib/data'
 import { Users, CheckCircle2, ShieldCheck, Search, UserPlus, ArrowRight, Sparkles, Briefcase, Award } from 'lucide-react'
 
 export const metadata: Metadata = {
-  title: 'USA Professional Directory: Verified Experts | BizNest',
-  description: 'Find verified professionals, licensed specialists, and independent consultants across the United States. Review credentials, ratings, and portfolios.',
+  title: 'USA Professional Directory: Skilled Experts | BizNest',
+  description: 'Find skilled professionals and independent consultants across the United States. Browse profiles by specialty, city, and experience — free to search.',
   alternates: {
     canonical: 'https://www.biznestusa.com/professional-directory/',
   },
   openGraph: {
-    title: 'USA Professional Directory: Verified Experts | BizNest',
-    description: 'Find verified professionals, licensed specialists, and independent consultants across the United States. Review credentials, ratings, and portfolios.',
+    title: 'USA Professional Directory: Skilled Experts | BizNest',
+    description: 'Find skilled professionals and independent consultants across the United States. Browse profiles by specialty, city, and experience — free to search.',
     url: 'https://www.biznestusa.com/professional-directory/',
     type: 'website',
   },
@@ -24,7 +24,7 @@ export default function ProfessionalDirectoryHub() {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
     name: 'USA Professional Directory',
-    description: 'Directory of verified independent professionals, engineers, consultants, and trade practitioners across the United States.',
+    description: 'Directory of independent professionals, engineers, consultants, and trade practitioners across the United States.',
     url: 'https://www.biznestusa.com/professional-directory/',
   }
 
@@ -67,13 +67,13 @@ export default function ProfessionalDirectoryHub() {
             <div className="max-w-3xl space-y-4">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-semibold">
                 <Users className="w-3.5 h-3.5" />
-                <span>Verified Talent Marketplace</span>
+                <span>Skilled Talent Marketplace</span>
               </div>
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-slate-900 tracking-tight">
                 USA Professional Directory &amp; Talent Portfolios
               </h1>
               <p className="text-base sm:text-lg text-slate-600 leading-relaxed">
-                Discover independent consultants, certified engineers, creative directors, licensed legal advisors, and skilled master tradesmen across the United States.
+                Discover independent consultants, engineers, creative directors, legal advisors, and skilled tradespeople across the United States.
               </p>
               
               <div className="pt-2 flex flex-wrap gap-3">
@@ -172,9 +172,9 @@ export default function ProfessionalDirectoryHub() {
               <div className="space-y-1">
                 <div className="flex items-center gap-2 font-bold text-sm text-slate-900">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <span>Verified Credentials</span>
+                  <span>Credentials & Trust</span>
                 </div>
-                <p className="text-xs text-slate-500">Earn a verified trust badge that validates your real identity and credentials.</p>
+                <p className="text-xs text-slate-500">Showcase credentials that build trust with clients and employers.</p>
               </div>
 
               <div className="space-y-1">
@@ -182,7 +182,7 @@ export default function ProfessionalDirectoryHub() {
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                   <span>One-Click Job Applications</span>
                 </div>
-                <p className="text-xs text-slate-500">Apply to active US employer job postings with your verified credentials.</p>
+                <p className="text-xs text-slate-500">Apply to active US employer job postings with your professional credentials.</p>
               </div>
             </div>
 

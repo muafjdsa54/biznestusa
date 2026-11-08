@@ -47,7 +47,7 @@ export default function BusinessListingGuidelinesPage() {
             <section className="space-y-3">
               <h2 className="text-xl font-bold text-slate-900">1. Purpose &amp; Quality Mandate</h2>
               <p>
-                <strong>BizNestUSA</strong> maintains high standards of data accuracy, consumer transparency, and local commercial credibility. To protect consumers and preserve high search engine indexing signals across all 50 states, every business entity, independent practitioner, and employer profile submitted to our directory must comply with the guidelines detailed below.
+                <strong>BizNestUSA</strong> maintains high standards of data accuracy, consumer transparency, and local commercial credibility. To protect consumers and preserve high search engine indexing signals across 39 states and Washington, D.C., every business entity, independent practitioner, and employer profile submitted to our directory must comply with the guidelines detailed below.
               </p>
               <p>
                 Profiles that fail to meet these criteria are returned for revision or removed by our editorial moderation team.

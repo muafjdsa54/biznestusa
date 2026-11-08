@@ -33,8 +33,19 @@ export async function generateMetadata(props: { params: Promise<{ username: stri
   const name = pro ? pro.name : username.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
   const profession = pro?.profession || pro?.title || 'Professional'
   const city = pro?.city || 'United States'
-  const title = `${name} – ${profession} in ${city} | BizNestUSA`
-  const description = pro ? `${pro.bio.slice(0, 160)}... Review credentials, portfolio, and contact details for ${name} on BizNestUSA.` : `View the profile, skills, credentials, and contact details for ${name} on BizNestUSA.`
+  let title = `${name} – ${profession} in ${city} | BizNestUSA`
+  if (title.length > 60) {
+    title = `${name} – ${profession} | BizNestUSA`.slice(0, 60)
+  }
+  const skillsText = pro?.skills?.length
+    ? ` Skills include ${pro.skills.slice(0, 4).join(', ')}.`
+    : ''
+  const rawDescription = pro
+    ? `${name} is a ${profession} based in ${city}${pro.state ? `, ${pro.state}` : ''}.${skillsText} View credentials, portfolio, and contact details on BizNestUSA.`
+    : `View the profile, skills, credentials, and contact details for ${name} on BizNestUSA.`
+  const description = rawDescription.length > 160
+    ? rawDescription.slice(0, 157).replace(/\s+\S*$/, '') + '...'
+    : rawDescription
   const canonicalUrl = toCanonicalUrl(`professionals/${username}`)
 
   return {
@@ -99,6 +110,7 @@ export default async function ProfessionalDetailPage(props: { params: Promise<{ 
     name: pro.name,
     jobTitle: pro.title,
     description: pro.bio,
+    knowsAbout: pro.skills,
     url: canonicalUrl,
     address: {
       '@type': 'PostalAddress',
@@ -315,9 +327,12 @@ export default async function ProfessionalDetailPage(props: { params: Promise<{ 
 
         {/* Short Bio & Detailed About */}
         <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xs space-y-4">
-          <h2 className="text-lg font-extrabold text-slate-900">About & Career Background</h2>
+          <h2 className="text-lg font-extrabold text-slate-900">About {pro.name} — {pro.title} in {pro.city}</h2>
           <p className="text-sm font-semibold text-slate-800 bg-slate-50 p-4 rounded-2xl border border-slate-200/60 leading-relaxed">
             {pro.bio}
+          </p>
+          <p className="text-xs text-slate-600 leading-relaxed">
+            Hiring a {pro.title} in {pro.city}? Use the contact links above to reach {pro.name} directly — rates and availability are set by the professional.
           </p>
           {pro.about && (
             <p className="text-xs text-slate-600 leading-relaxed space-y-2 whitespace-pre-line">
@@ -331,7 +346,7 @@ export default async function ProfessionalDetailPage(props: { params: Promise<{ 
           <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
             <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              <span>Verified Skills & Competencies</span>
+              <span>Skills & Competencies</span>
             </h2>
             <div className="flex flex-wrap gap-2">
               {pro.skills.map((skill) => (
@@ -356,7 +371,7 @@ export default async function ProfessionalDetailPage(props: { params: Promise<{ 
                   </div>
                 ))
               ) : (
-                <p className="text-slate-500 italic">Custom professional consultation and project contracts.</p>
+                <p className="text-slate-500 italic">{pro.name} has not listed specific services yet — contact them directly to discuss your project.</p>
               )}
             </div>
           </div>
@@ -391,7 +406,7 @@ export default async function ProfessionalDetailPage(props: { params: Promise<{ 
         {/* Similar Professionals Internal Linking */}
         {similarPros.length > 0 && (
           <div className="space-y-4 pt-4">
-            <h2 className="text-base font-extrabold text-slate-900">Similar Verified Professionals</h2>
+            <h2 className="text-base font-extrabold text-slate-900">More Professionals on BizNestUSA</h2>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {similarPros.map((sim) => (
                 <Link

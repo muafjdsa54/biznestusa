@@ -9,6 +9,9 @@ import {
   Sparkles, Building2, MapPin, Check, Briefcase, FileText, Lock
 } from 'lucide-react'
 import { auth } from '@/lib/firebase'
+import { getAuthHeaders } from '@/lib/client-auth'
+import TurnstileWidget from '@/components/turnstile-widget'
+import { isTurnstileWidgetEnabled } from '@/lib/turnstile'
 import { onAuthStateChanged } from 'firebase/auth'
 import { toast } from 'sonner'
 
@@ -52,6 +55,7 @@ export default function JobInteractiveApply({
   // Verification & Profile State
   const [isCheckingEmail, setIsCheckingEmail] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
   const [professionalProfile, setProfessionalProfile] = useState<ProfessionalPreview | null>(null)
   const [isVerifiedPro, setIsVerifiedPro] = useState(false)
   const [profileNotFound, setProfileNotFound] = useState(false)
@@ -82,7 +86,7 @@ export default function JobInteractiveApply({
     try {
       const res = await fetch('/api/jobs/apply', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
         body: JSON.stringify({
           action: 'check_email',
           email: cleanEmail
@@ -122,18 +126,28 @@ export default function JobInteractiveApply({
       return
     }
 
+    // Cloudflare Turnstile: when keys are set (user's job), a completed
+    // check is required — the token is verified server-side in
+    // /api/jobs/apply before the application is stored. With no keys
+    // configured the check is skipped and apply proceeds.
+    if (isTurnstileWidgetEnabled() && !turnstileToken) {
+      toast.error('Please complete the security check before submitting.')
+      return
+    }
+
     setIsSubmitting(true)
     try {
       const response = await fetch('/api/jobs/apply', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
         body: JSON.stringify({
           action: 'apply',
           email: cleanEmail,
           jobId: jobId || 'job-' + encodeURIComponent(jobTitle.toLowerCase().replace(/\s+/g, '-')),
           jobTitle,
           companyName,
-          coverNote
+          coverNote,
+          turnstileToken
         })
       })
 
@@ -439,6 +453,7 @@ export default function JobInteractiveApply({
                   </div>
 
                   {/* Submit Button */}
+                  <TurnstileWidget onToken={setTurnstileToken} className="flex justify-center" />
                   <button
                     type="submit"
                     disabled={isSubmitting || isCheckingEmail || (professionalProfile !== null && !isVerifiedPro)}

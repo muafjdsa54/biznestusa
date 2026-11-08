@@ -1,15 +1,12 @@
 'use client'
 
-import { useState, useMemo, useEffect, Suspense } from 'react'
+import { useState, useMemo, useEffect, useCallback, useRef, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Navbar from '@/components/navbar'
 import Footer from '@/components/footer'
 import { ListingLogo } from '@/components/listing-logo'
 import SearchFilters from '@/components/search/search-filters'
 import { BusinessItem, JobItem, ProfessionalItem } from '@/lib/data'
-import { getAllBusinesses } from '@/lib/db-service'
-import { getAllJobs } from '@/lib/job-service'
-import { getAllProfessionals } from '@/lib/professional-service'
 import { getPublicJobPath } from '@/lib/job-url'
 import Link from 'next/link'
 import { 
@@ -49,32 +46,66 @@ function SearchContent() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [showMobileFilter, setShowMobileFilter] = useState(false)
 
-  // Real Database Lists
-  const [businessesList, setBusinessesList] = useState<BusinessItem[]>([])
-  const [jobsList, setJobsList] = useState<JobItem[]>([])
-  const [professionalsList, setProfessionalsList] = useState<ProfessionalItem[]>([])
+  // Server-side search results (one page per request — the client never
+  // downloads whole collections; see app/api/search/route.ts). The three
+  // arrays below hold the CURRENT PAGE for the active tab only; the tab
+  // badges use `counts` (server totals), not these page arrays.
+  const [filteredBusinesses, setFilteredBusinesses] = useState<BusinessItem[]>([])
+  const [filteredProfessionals, setFilteredProfessionals] = useState<ProfessionalItem[]>([])
+  const [filteredJobs, setFilteredJobs] = useState<JobItem[]>([])
+  const [counts, setCounts] = useState({ businesses: 0, professionals: 0, jobs: 0 })
+  const [totalPages, setTotalPages] = useState(1)
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
+  // First load + submit/tab/page changes fetch immediately; typing
+  // debounces (see the effect below) so each keystroke is not a request.
+  const fetchNowRef = useRef(true)
+  const requestIdRef = useRef(0)
 
-  useEffect(() => {
-    async function loadAllData() {
-      setLoading(true)
-      try {
-        const [bizData, jobsData, prosData] = await Promise.all([
-          getAllBusinesses().catch(() => [] as BusinessItem[]),
-          getAllJobs().catch(() => [] as JobItem[]),
-          getAllProfessionals().catch(() => [] as ProfessionalItem[])
-        ])
-        setBusinessesList((bizData || []).filter(b => b.status === 'approved' || !b.status))
-        setJobsList((jobsData || []).filter(j => j.status === 'approved' || !j.status))
-        setProfessionalsList((prosData || []).filter(p => p.status === 'approved' || !p.status))
-      } catch (err) {
-        console.error('Error fetching search data:', err)
-      } finally {
-        setLoading(false)
+  const fetchResults = useCallback(async () => {
+    const myId = ++requestIdRef.current
+    setLoading(true)
+    try {
+      const params = new URLSearchParams()
+      if (keyword.trim()) params.set('q', keyword.trim())
+      if (location.trim()) params.set('location', location.trim())
+      if (selectedCategory.trim()) params.set('category', selectedCategory.trim())
+      params.set('type', activeTab)
+      if (onlyVerified) params.set('verified', 'true')
+      if (minRating > 0) params.set('minRating', String(minRating))
+      params.set('page', String(page))
+      const res = await fetch(`/api/search?${params.toString()}`)
+      if (!res.ok) throw new Error(`Search failed: ${res.status}`)
+      const data = await res.json()
+      // Ignore stale responses from an earlier keystroke's request.
+      if (requestIdRef.current !== myId) return
+      if (data.type === 'professionals') {
+        setFilteredProfessionals(data.results || [])
+      } else if (data.type === 'jobs') {
+        setFilteredJobs(data.results || [])
+      } else {
+        setFilteredBusinesses(data.results || [])
       }
+      setCounts(data.counts || { businesses: 0, professionals: 0, jobs: 0 })
+      setTotalPages(data.totalPages || 1)
+    } catch (err) {
+      console.error('Error fetching search data:', err)
+    } finally {
+      if (requestIdRef.current === myId) setLoading(false)
     }
-    loadAllData()
-  }, [])
+  }, [keyword, location, selectedCategory, activeTab, onlyVerified, minRating, page])
+
+  // Debounced search: typing waits 400ms; fetchNowRef (submit, tab or
+  // page change) fetches immediately instead.
+  useEffect(() => {
+    if (fetchNowRef.current) {
+      fetchNowRef.current = false
+      fetchResults()
+      return
+    }
+    const timer = setTimeout(fetchResults, 400)
+    return () => clearTimeout(timer)
+  }, [fetchResults])
 
   // Sync state with URL search parameters on route navigation
   useEffect(() => {
@@ -84,140 +115,28 @@ function SearchContent() {
     const currentType = searchParams.get('type') as 'businesses' | 'professionals' | 'jobs' | null
 
     const currentParsed = parseSearchQuery(currentQ)
-    setKeyword(currentParsed.keyword || currentQ)
-    setLocation(currentLoc || currentParsed.location)
-    setSelectedCategory(currentCat)
-    if (currentType && ['businesses', 'professionals', 'jobs'].includes(currentType)) {
+    const nextKeyword = currentParsed.keyword || currentQ
+    const nextLocation = currentLoc || currentParsed.location
+    // Only overwrite state when the URL actually differs (typing must
+    // never be reset to the stale URL value mid-keystroke).
+    if (nextKeyword !== keyword) setKeyword(nextKeyword)
+    if (nextLocation !== location) setLocation(nextLocation)
+    if (currentCat !== selectedCategory) setSelectedCategory(currentCat)
+    if (currentType && ['businesses', 'professionals', 'jobs'].includes(currentType) && currentType !== activeTab) {
       setActiveTab(currentType)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
 
-  // Filtered Businesses
-  const filteredBusinesses = useMemo(() => {
-    return businessesList.filter(biz => {
-      const q = keyword.toLowerCase().trim()
-      const loc = location.toLowerCase().trim()
 
-      const matchesKeyword = !q ||
-        biz.name.toLowerCase().includes(q) ||
-        (biz.description || '').toLowerCase().includes(q) ||
-        (biz.category || '').toLowerCase().includes(q) ||
-        (biz.categoryId || '').toLowerCase().includes(q) ||
-        (biz.subCategory || '').toLowerCase().includes(q) ||
-        (biz.subcategory || '').toLowerCase().includes(q) ||
-        (biz.secondaryCategories && biz.secondaryCategories.some(sc => sc.toLowerCase().includes(q))) ||
-        (biz.services && biz.services.some(s => s.toLowerCase().includes(q)))
-
-      const matchesLocation = !loc ||
-        (biz.city || '').toLowerCase().includes(loc) ||
-        (biz.state || '').toLowerCase().includes(loc) ||
-        (biz.province || '').toLowerCase().includes(loc) ||
-        (biz.address || '').toLowerCase().includes(loc) ||
-        (biz.zipCode || '').toLowerCase().includes(loc) ||
-        (biz.cities && biz.cities.some(c => c.toLowerCase().includes(loc))) ||
-        (biz.locations && biz.locations.some(l => 
-          (l.city || '').toLowerCase().includes(loc) || 
-          (l.state || '').toLowerCase().includes(loc) || 
-          (l.address || '').toLowerCase().includes(loc)
-        ))
-
-      const selNorm = selectedCategory.toLowerCase().replace(/[^a-z0-9]/g, '')
-      const catNorm = (biz.category || '').toLowerCase().replace(/[^a-z0-9]/g, '')
-      const catIdNorm = (biz.categoryId || '').toLowerCase().replace(/[^a-z0-9]/g, '')
-      const subCatNorm = (biz.subCategory || biz.subcategory || '').toLowerCase().replace(/[^a-z0-9]/g, '')
-
-      const matchesCategory = !selectedCategory ||
-        catNorm.includes(selNorm) ||
-        selNorm.includes(catNorm) ||
-        catIdNorm.includes(selNorm) ||
-        selNorm.includes(catIdNorm) ||
-        subCatNorm.includes(selNorm) ||
-        (biz.secondaryCategories && biz.secondaryCategories.some(sc => sc.toLowerCase().replace(/[^a-z0-9]/g, '').includes(selNorm)))
-
-      const matchesVerified = !onlyVerified || biz.verified
-      const matchesRating = (biz.rating || 0) >= minRating
-
-      return matchesKeyword && matchesLocation && matchesCategory && matchesVerified && matchesRating
-    })
-  }, [businessesList, keyword, location, selectedCategory, onlyVerified, minRating])
-
-  // Filtered Professionals
-  const filteredProfessionals = useMemo(() => {
-    return professionalsList.filter(pro => {
-      const q = keyword.toLowerCase().trim()
-      const loc = location.toLowerCase().trim()
-
-      const matchesKeyword = !q ||
-        (pro.name || '').toLowerCase().includes(q) ||
-        (pro.fullName || '').toLowerCase().includes(q) ||
-        (pro.title || '').toLowerCase().includes(q) ||
-        (pro.profession || '').toLowerCase().includes(q) ||
-        (pro.specialization || '').toLowerCase().includes(q) ||
-        (pro.bio || '').toLowerCase().includes(q) ||
-        (pro.skills && pro.skills.some(s => s.toLowerCase().includes(q)))
-
-      const matchesLocation = !loc ||
-        (pro.city || '').toLowerCase().includes(loc) ||
-        (pro.state || '').toLowerCase().includes(loc) ||
-        (pro.province || '').toLowerCase().includes(loc) ||
-        (pro.zipCode || '').toLowerCase().includes(loc) ||
-        (pro.cities && pro.cities.some(c => c.toLowerCase().includes(loc)))
-
-      const selNorm = selectedCategory.toLowerCase().replace(/[^a-z0-9]/g, '')
-      const proCatNorm = (pro.category || '').toLowerCase().replace(/[^a-z0-9]/g, '')
-      const proProfNorm = (pro.profession || '').toLowerCase().replace(/[^a-z0-9]/g, '')
-
-      const matchesCategory = !selectedCategory ||
-        proCatNorm.includes(selNorm) ||
-        selNorm.includes(proCatNorm) ||
-        proProfNorm.includes(selNorm) ||
-        selNorm.includes(proProfNorm)
-
-      const matchesVerified = !onlyVerified || pro.verified
-      const matchesRating = (pro.rating || 0) >= minRating
-
-      return matchesKeyword && matchesLocation && matchesCategory && matchesVerified && matchesRating
-    })
-  }, [professionalsList, keyword, location, selectedCategory, onlyVerified, minRating])
-
-  // Filtered Jobs
-  const filteredJobs = useMemo(() => {
-    return jobsList.filter(job => {
-      const q = keyword.toLowerCase().trim()
-      const loc = location.toLowerCase().trim()
-
-      const matchesKeyword = !q ||
-        (job.title || '').toLowerCase().includes(q) ||
-        (job.company || '').toLowerCase().includes(q) ||
-        (job.description || '').toLowerCase().includes(q) ||
-        (job.category || '').toLowerCase().includes(q) ||
-        (job.skills && job.skills.some(s => s.toLowerCase().includes(q)))
-
-      const matchesLocation = !loc ||
-        (job.city || '').toLowerCase().includes(loc) ||
-        (job.state || '').toLowerCase().includes(loc) ||
-        (job.country || '').toLowerCase().includes(loc) ||
-        (job.workplaceType || '').toLowerCase().includes(loc) ||
-        (job.cities && job.cities.some(c => c.toLowerCase().includes(loc)))
-
-      const selNorm = selectedCategory.toLowerCase().replace(/[^a-z0-9]/g, '')
-      const jobCatNorm = (job.category || '').toLowerCase().replace(/[^a-z0-9]/g, '')
-
-      const matchesCategory = !selectedCategory ||
-        jobCatNorm.includes(selNorm) ||
-        selNorm.includes(jobCatNorm)
-
-      const matchesVerified = !onlyVerified || (job.verified ?? true)
-
-      return matchesKeyword && matchesLocation && matchesCategory && matchesVerified
-    })
-  }, [jobsList, keyword, location, selectedCategory, onlyVerified])
-
+  // Server totals for the active tab (from /api/search counts), so the
+  // tab badges and the filters panel show the full match count, not
+  // just the current page.
   const currentCount = activeTab === 'businesses'
-    ? filteredBusinesses.length
+    ? counts.businesses
     : activeTab === 'professionals'
-    ? filteredProfessionals.length
-    : filteredJobs.length
+    ? counts.professionals
+    : counts.jobs
 
   const handleResetFilters = () => {
     setKeyword('')
@@ -225,6 +144,8 @@ function SearchContent() {
     setSelectedCategory('')
     setOnlyVerified(false)
     setMinRating(0)
+    setPage(1)
+    fetchNowRef.current = true
     router.replace('/search')
   }
 
@@ -235,6 +156,8 @@ function SearchContent() {
     if (location.trim()) params.set('location', location.trim())
     if (selectedCategory.trim()) params.set('category', selectedCategory.trim())
     if (activeTab !== 'businesses') params.set('type', activeTab)
+    setPage(1)
+    fetchNowRef.current = true
     router.replace(`/search?${params.toString()}`)
   }
 
@@ -293,7 +216,7 @@ function SearchContent() {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setActiveTab('businesses')}
+                onClick={() => { setActiveTab('businesses'); setPage(1); fetchNowRef.current = true }}
                 className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-colors flex items-center gap-2 cursor-pointer ${
                   activeTab === 'businesses'
                     ? 'bg-blue-600 text-white shadow-xs'
@@ -303,13 +226,13 @@ function SearchContent() {
                 <Building2 className="w-3.5 h-3.5" />
                 <span>Businesses</span>
                 <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${activeTab === 'businesses' ? 'bg-blue-500 text-white' : 'bg-slate-200 text-slate-600'}`}>
-                  {filteredBusinesses.length}
+                  {counts.businesses}
                 </span>
               </button>
 
               <button
                 type="button"
-                onClick={() => setActiveTab('professionals')}
+                onClick={() => { setActiveTab('professionals'); setPage(1); fetchNowRef.current = true }}
                 className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-colors flex items-center gap-2 cursor-pointer ${
                   activeTab === 'professionals'
                     ? 'bg-indigo-600 text-white shadow-xs'
@@ -319,13 +242,13 @@ function SearchContent() {
                 <Users className="w-3.5 h-3.5" />
                 <span>Professionals</span>
                 <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${activeTab === 'professionals' ? 'bg-indigo-500 text-white' : 'bg-slate-200 text-slate-600'}`}>
-                  {filteredProfessionals.length}
+                  {counts.professionals}
                 </span>
               </button>
 
               <button
                 type="button"
-                onClick={() => setActiveTab('jobs')}
+                onClick={() => { setActiveTab('jobs'); setPage(1); fetchNowRef.current = true }}
                 className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-colors flex items-center gap-2 cursor-pointer ${
                   activeTab === 'jobs'
                     ? 'bg-emerald-600 text-white shadow-xs'
@@ -335,7 +258,7 @@ function SearchContent() {
                 <Briefcase className="w-3.5 h-3.5" />
                 <span>Jobs</span>
                 <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${activeTab === 'jobs' ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-600'}`}>
-                  {filteredJobs.length}
+                  {counts.jobs}
                 </span>
               </button>
             </div>
@@ -576,6 +499,33 @@ function SearchContent() {
                   </Link>
                 </div>
               )
+            )}
+
+            {/* Server-side pagination (50 results per page) */}
+            {!loading && currentCount > 0 && totalPages > 1 && (
+              <div className="bg-white rounded-xl border border-slate-200 p-3 flex items-center justify-between gap-3">
+                <span className="text-xs text-slate-500">
+                  Page {page} of {totalPages} · {currentCount} result{currentCount === 1 ? '' : 's'}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={page <= 1}
+                    onClick={() => { setPage(page - 1); fetchNowRef.current = true }}
+                    className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    disabled={page >= totalPages}
+                    onClick={() => { setPage(page + 1); fetchNowRef.current = true }}
+                    className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         </div>

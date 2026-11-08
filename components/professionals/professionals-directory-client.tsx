@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
-import Image from 'next/image'
 import Link from 'next/link'
+import ListingLogo from '@/components/listing-logo'
 import { ProfessionalItem, TOP_CITIES, US_STATES } from '@/lib/data'
 import { 
   Users, MapPin, Search, ShieldCheck, Star, ArrowRight, Award, 
@@ -99,7 +99,8 @@ export default function ProfessionalsDirectoryClient({ initialProfessionals }: P
 
     return matchesQuery && matchesCity && matchesProfession && matchesAvailability && matchesVerified
   }).sort((a, b) => {
-    if (sortBy === 'rating') return (b.rating || 5) - (a.rating || 5)
+    // Unrated professionals sort as 0 (last), never as 5-star.
+    if (sortBy === 'rating') return (b.rating || 0) - (a.rating || 0)
     if (sortBy === 'experience') return (b.experienceYears || 0) - (a.experienceYears || 0)
     return a.name.localeCompare(b.name)
   })
@@ -181,7 +182,7 @@ export default function ProfessionalsDirectoryClient({ initialProfessionals }: P
           <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">
             United States Professionals Directory ({filtered.length})
           </h2>
-          <p className="text-xs text-slate-500">Approved professional profiles indexed across all 50 states.</p>
+          <p className="text-xs text-slate-500">Approved professional profiles across 39 states and Washington, D.C.</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3 text-xs">
@@ -249,13 +250,10 @@ export default function ProfessionalsDirectoryClient({ initialProfessionals }: P
               >
                 <div className="space-y-4">
                   <div className="flex items-start gap-4">
-                    <Image
+                    <ListingLogo
+                      name={pro.name}
                       src={pro.avatar}
-                      alt={pro.name}
-                      width={64}
-                      height={64}
-                      loading="lazy"
-                      sizes="64px"
+                      size={64}
                       className="w-16 h-16 rounded-2xl object-cover border border-slate-100 shadow-xs shrink-0"
                     />
                     <div className="space-y-1 min-w-0 flex-1">
@@ -288,10 +286,14 @@ export default function ProfessionalsDirectoryClient({ initialProfessionals }: P
                           {pro.city}
                         </span>
                         <span>•</span>
-                        <span className="font-extrabold text-amber-500 flex items-center gap-0.5">
-                          <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                          {pro.rating}
-                        </span>
+                        {pro.rating > 0 ? (
+                          <span className="font-extrabold text-amber-500 flex items-center gap-0.5">
+                            <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                            {pro.rating}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-medium">No ratings yet</span>
+                        )}
                         <span>•</span>
                         <span className="text-slate-600 font-semibold">{pro.experienceYears}y Exp</span>
                       </div>

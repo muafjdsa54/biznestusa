@@ -6,7 +6,7 @@ import { collection, getDocs, query, where, limit, addDoc, doc, updateDoc, delet
 import { normalizeSlug } from './db-service'
 import { JOB_SLUG_ALIASES } from './job-url'
 import { sanitizeText, sanitizeUrl } from './sanitizer'
-import { isPakistaniEntity } from './directory-helpers'
+import { computeCitySlugs, isPakistaniEntity } from './directory-helpers'
 
 let memoryJobsCache: JobItem[] = [...MOCK_JOBS]
 
@@ -16,9 +16,20 @@ export function isExpiredJob(job: JobItem): boolean {
   return !Number.isNaN(deadline.getTime()) && deadline.getTime() < Date.now()
 }
 
-export const getAllJobs = cache(async function getAllJobs(includePending: boolean = false): Promise<JobItem[]> {
+export const getAllJobs = cache(async function getAllJobs(includePending: boolean = false, pageSize?: number): Promise<JobItem[]> {
   try {
-    const snap = await getDocs(collection(db, 'jobs'))
+    // P1-2: public reads fetch APPROVED listings only. includePending=true
+    // is the separate owner/admin read path and keeps the unfiltered query.
+    // Perf: the Firestore read is bounded with limit() — the old query had
+    // no limit and pulled the whole collection on every list/search page.
+    // (The merged in-memory mock jobs can push the returned array a
+    // little past the cap; the cap bounds the Firestore read, not the
+    // merged result.) Admin reads default to a higher cap so pending
+    // items are not silently hidden.
+    const cap = pageSize ?? (includePending ? 500 : 100)
+    const snap = await getDocs(includePending
+      ? query(collection(db, 'jobs'), limit(cap))
+      : query(collection(db, 'jobs'), where('status', '==', 'approved'), limit(cap)))
     if (!snap.empty) {
       const items: JobItem[] = []
       snap.forEach((docSnap) => {
@@ -42,29 +53,38 @@ export const getAllJobs = cache(async function getAllJobs(includePending: boolea
           type: data.type || 'Full-time',
           employmentType: data.employmentType || data.type || 'Full-time',
           salary: data.salary || 'Competitive Package',
-          experience: data.experience || '1 - 3 Years',
+          experience: data.experience || '',
           education: data.education || 'Bachelor Degree',
-          skills: data.skills || ['Communication', 'Teamwork'],
-          vacancies: data.vacancies || 1,
+          skills: data.skills || [],
+          vacancies: data.vacancies ?? '',
           genderPreference: data.genderPreference || 'Any',
           ageRequirement: data.ageRequirement || 'N/A',
           deadline: data.deadline || 'Open until filled',
           joiningDate: data.joiningDate || 'Immediate',
-          workingHours: data.workingHours || '09:00 AM - 06:00 PM',
-          shiftType: data.shiftType || 'Day Shift',
+          workingHours: data.workingHours || '',
+          shiftType: data.shiftType || '',
           benefits: data.benefits || ['Health Insurance', 'Annual Bonus', 'Paid Leaves'],
           postedDate: data.postedDate || 'Just now',
           description: data.description || 'Verified job vacancy on BizNestUSA.',
-          responsibilities: data.responsibilities || ['Fulfill daily role responsibilities with quality.'],
-          requirements: data.requirements || ['Relevant experience and educational qualifications.'],
+          responsibilities: data.responsibilities || [],
+          requirements: data.requirements || [],
           preferredQualifications: data.preferredQualifications || [],
           applicationWebsite: data.applicationWebsite || '',
           applicationEmail: data.applicationEmail || '',
           applicationMethod: data.applicationMethod || 'both',
           applicationUrl: data.applicationUrl || data.applicationWebsite || '',
-          verified: data.verified ?? true,
+          // UX #9: jobs must NOT default to verified — verification comes
+          // only from the real verification path.
+          verified: data.verified === true,
           isFeatured: data.isFeatured ?? false,
-          status: data.status || 'approved'
+          // P0-3: a doc with NO status must NEVER render as approved.
+          status: data.status || 'pending',
+          // Caller identity, preserved so the hardened rules' owner-match
+          // (userId / email) can be satisfied on create and update.
+          userId: (data as any).userId || '',
+          email: (data as any).email || data.applicationEmail || '',
+          ownerEmail: (data as any).ownerEmail || (data as any).email || data.applicationEmail || '',
+          zipCode: (data as any).zipCode || (data as any).zip || ''
         })
       })
 
@@ -85,7 +105,7 @@ export const getAllJobs = cache(async function getAllJobs(includePending: boolea
     return validJobs
   }
 
-  return validJobs.filter(j => (j.status || 'approved') === 'approved' && !isExpiredJob(j))
+  return validJobs.filter(j => (j.status || 'pending') === 'approved' && !isExpiredJob(j))
 })
 
 export function normalizeJobDoc(docId: string, data: any): JobItem {
@@ -102,6 +122,12 @@ export function normalizeJobDoc(docId: string, data: any): JobItem {
     companyLogo: data.companyLogo || '',
     city: data.city || 'New York',
     cities: data.cities || [data.city || 'New York'],
+    // Denormalized canonical city slugs for future Firestore cursor
+    // pagination. Always recomputed from the city fields (data.city can
+    // be a multi-city summary string — its junk slug is dropped by the
+    // helper's isUsCity check; the real slugs come from cities[]).
+    // No filter reads it yet, so it changes no rendered output.
+    citySlugs: computeCitySlugs(data),
     state: data.state || data.province || 'New York',
     province: data.state || data.province || 'New York',
     country: data.country || 'United States',
@@ -110,29 +136,38 @@ export function normalizeJobDoc(docId: string, data: any): JobItem {
     type: data.type || 'Full-time',
     employmentType: data.employmentType || data.type || 'Full-time',
     salary: data.salary || 'Negotiable',
-    experience: data.experience || '1 - 3 Years',
+    // No invented defaults on read either: blank stays blank.
+    experience: data.experience || '',
     education: data.education || 'Bachelor Degree',
-    skills: data.skills || ['Communication'],
-    vacancies: Number(data.vacancies) || 1,
+    skills: data.skills || [],
+    vacancies: data.vacancies ?? '',
     genderPreference: data.genderPreference || 'Any',
     ageRequirement: data.ageRequirement || 'N/A',
     deadline: data.deadline || 'Open until filled',
     joiningDate: data.joiningDate || 'Immediate',
-    workingHours: data.workingHours || '09:00 AM - 06:00 PM',
-    shiftType: data.shiftType || 'Day Shift',
+    workingHours: data.workingHours || '',
+    shiftType: data.shiftType || '',
     benefits: data.benefits || ['Health Insurance', 'Paid Leaves'],
     postedDate: data.postedDate || 'Recent',
     description: data.description || `Job opening for ${title} at ${company}.`,
-    responsibilities: data.responsibilities || ['Perform core job responsibilities.'],
-    requirements: data.requirements || ['Relevant experience in field.'],
+    responsibilities: data.responsibilities || [],
+    requirements: data.requirements || [],
     preferredQualifications: data.preferredQualifications || [],
     applicationWebsite: data.applicationWebsite || '',
     applicationEmail: data.applicationEmail || '',
     applicationMethod: data.applicationMethod || 'both',
     applicationUrl: data.applicationUrl || data.applicationWebsite || '',
-    verified: data.verified ?? true,
+    // UX #9: jobs must NOT default to verified.
+    verified: data.verified === true,
     isFeatured: data.isFeatured ?? false,
-    status: data.status || 'approved'
+    // P0-3: a doc with NO status must NEVER render as approved.
+    status: data.status || 'pending',
+    // Caller identity, preserved so the hardened rules' owner-match
+    // (userId / email) can be satisfied on create and update.
+    userId: data.userId || '',
+    email: data.email || data.applicationEmail || '',
+    ownerEmail: (data as any).ownerEmail || data.email || data.applicationEmail || '',
+    zipCode: (data as any).zipCode || (data as any).zip || ''
   }
 }
 
@@ -141,9 +176,9 @@ export const getJobBySlug = cache(async function getJobBySlug(idOrSlug: string, 
   const normalized = raw.toLowerCase()
   if (!normalized) return null
 
-  // 1. Live Firestore check
+  // 1. Live Firestore check (public read: approved only — P1-2)
   try {
-    const q = query(collection(db, 'jobs'), where('slug', '==', normalized), limit(1))
+    const q = query(collection(db, 'jobs'), where('slug', '==', normalized), where('status', '==', 'approved'), limit(1))
     const snap = await getDocs(q)
     if (!snap.empty) {
       const docSnap = snap.docs[0]
@@ -159,7 +194,7 @@ export const getJobBySlug = cache(async function getJobBySlug(idOrSlug: string, 
     }
 
     try {
-      const direct = await getDocs(query(collection(db, 'jobs'), where('id', '==', raw), limit(1)))
+      const direct = await getDocs(query(collection(db, 'jobs'), where('id', '==', raw), where('status', '==', 'approved'), limit(1)))
       if (!direct.empty) {
         const item = normalizeJobDoc(direct.docs[0].id, direct.docs[0].data())
         if (item.status === 'approved' && !isPakistaniEntity(item) && (allowExpired || !isExpiredJob(item))) return item
@@ -171,7 +206,7 @@ export const getJobBySlug = cache(async function getJobBySlug(idOrSlug: string, 
 
   // 2. Memory cache check
   const cached = memoryJobsCache.find(j => (j.id === raw || j.slug?.toLowerCase() === normalized) && !isPakistaniEntity(j))
-  if (cached && (cached.status || 'approved') === 'approved' && (allowExpired || !isExpiredJob(cached))) {
+  if (cached && (cached.status || 'pending') === 'approved' && (allowExpired || !isExpiredJob(cached))) {
     return cached
   }
 
@@ -182,16 +217,18 @@ export async function saveJobToDatabase(jobData: Partial<JobItem>): Promise<JobI
   const title = sanitizeText(jobData.title || 'New Job Opportunity', 120)
   const company = sanitizeText(jobData.company || 'Hiring Employer', 120)
   
+  // No invented location defaults: blank cities stay blank instead of
+  // defaulting to 'New York'.
   const rawCities = (jobData.cities && jobData.cities.length > 0)
     ? jobData.cities.map(c => sanitizeText(c, 60))
-    : [sanitizeText(jobData.city || 'New York', 60)]
-  const cities = Array.from(new Set(rawCities))
-  
+    : (jobData.city ? [sanitizeText(jobData.city, 60)] : [])
+  const cities = Array.from(new Set(rawCities.filter(Boolean)))
+
   const citySummary = cities.length === 1
     ? cities[0]
     : (cities.length <= 3 ? cities.join(', ') : `${cities.slice(0, 2).join(', ')} (+${cities.length - 2} cities)`)
 
-  const slug = normalizeSlug(`${title} ${cities[0] || 'New York'}`) + '-' + Math.floor(Math.random() * 1000)
+  const slug = normalizeSlug(`${title} ${cities[0] || ''}`) + '-' + Math.floor(Math.random() * 1000)
 
   const newJob: JobItem = {
     id: 'job-' + Date.now(),
@@ -202,28 +239,37 @@ export async function saveJobToDatabase(jobData: Partial<JobItem>): Promise<JobI
     companyLogo: sanitizeUrl(jobData.companyLogo || ''),
     city: citySummary,
     cities: cities,
-    province: sanitizeText(jobData.province || 'New York', 60),
+    // Denormalized canonical city slugs for future Firestore cursor
+    // pagination (persisted via the firestorePayload spread below).
+    // Computed from cities[] + the first city only — NOT from
+    // citySummary, which is a joined display string for multi-city jobs.
+    citySlugs: computeCitySlugs({ city: cities[0] || '', cities }),
+    province: sanitizeText(jobData.province || '', 60),
     country: 'United States',
     category: sanitizeText(jobData.category || 'Technology & IT', 80),
     department: sanitizeText(jobData.department || 'General', 80),
     type: sanitizeText(jobData.type || 'Full-time', 40),
     employmentType: sanitizeText(jobData.employmentType || jobData.type || 'Full-time', 40),
     salary: sanitizeText(jobData.salary || 'Negotiable', 80),
-    experience: sanitizeText(jobData.experience || '1 - 3 Years', 60),
+    // No invented defaults: blank stays blank. The form sends undefined
+    // for fields the employer leaves empty — the service must not fill
+    // them with '1 - 3 Years', vacancies 1, canned skills, or generic
+    // responsibilities/requirements.
+    experience: sanitizeText(jobData.experience || '', 60),
     education: sanitizeText(jobData.education || 'Bachelor Degree', 80),
-    skills: Array.isArray(jobData.skills) ? jobData.skills.map(s => sanitizeText(s, 50)) : ['Communication'],
-    vacancies: Number(jobData.vacancies) || 1,
+    skills: Array.isArray(jobData.skills) ? jobData.skills.map(s => sanitizeText(s, 50)) : [],
+    vacancies: jobData.vacancies ?? '',
     genderPreference: sanitizeText(jobData.genderPreference || 'Any', 40),
     ageRequirement: sanitizeText(jobData.ageRequirement || 'N/A', 40),
     deadline: sanitizeText(jobData.deadline || 'Open until filled', 60),
     joiningDate: sanitizeText(jobData.joiningDate || 'Immediate', 60),
-    workingHours: sanitizeText(jobData.workingHours || '09:00 AM - 06:00 PM', 60),
-    shiftType: sanitizeText(jobData.shiftType || 'Day Shift', 40),
+    workingHours: sanitizeText(jobData.workingHours || '', 60),
+    shiftType: sanitizeText(jobData.shiftType || '', 40),
     benefits: Array.isArray(jobData.benefits) ? jobData.benefits.map(b => sanitizeText(b, 60)) : ['Health Insurance', 'Paid Leaves'],
     postedDate: 'Just now',
     description: sanitizeText(jobData.description || `Job opening for ${title} at ${company}.`, 5000),
-    responsibilities: Array.isArray(jobData.responsibilities) ? jobData.responsibilities.map(r => sanitizeText(r, 200)) : ['Perform core job responsibilities.'],
-    requirements: Array.isArray(jobData.requirements) ? jobData.requirements.map(rq => sanitizeText(rq, 200)) : ['Relevant experience in field.'],
+    responsibilities: Array.isArray(jobData.responsibilities) ? jobData.responsibilities.map(r => sanitizeText(r, 200)) : [],
+    requirements: Array.isArray(jobData.requirements) ? jobData.requirements.map(rq => sanitizeText(rq, 200)) : [],
     preferredQualifications: Array.isArray(jobData.preferredQualifications) ? jobData.preferredQualifications.map(pq => sanitizeText(pq, 200)) : [],
     applicationWebsite: sanitizeUrl(jobData.applicationWebsite || ''),
     applicationEmail: sanitizeText(jobData.applicationEmail || '', 120),
@@ -231,15 +277,32 @@ export async function saveJobToDatabase(jobData: Partial<JobItem>): Promise<JobI
     applicationUrl: sanitizeUrl(jobData.applicationUrl || jobData.applicationWebsite || ''),
     verified: false, // Trust protocol: requires admin verification
     isFeatured: false,
-    status: 'pending' // PENDING WORKFLOW
+    status: 'pending', // PENDING WORKFLOW
+    // Caller identity for the hardened rules' owner-match: userId, email
+    // and ownerEmail as passed by the post-job form (authed user's uid and
+    // email), plus zipCode. None of these may be dropped — the form sends
+    // them so the create can satisfy the caller-identity rule.
+    userId: (jobData as any).userId || '',
+    email: sanitizeText((jobData as any).email || jobData.applicationEmail || '', 120),
+    ownerEmail: (jobData as any).ownerEmail || (jobData as any).email || sanitizeText(jobData.applicationEmail || '', 120),
+    zipCode: (jobData as any).zipCode || (jobData as any).zip || ''
   }
 
   memoryJobsCache = [newJob, ...memoryJobsCache.filter(j => j.id !== newJob.id)]
 
+  // P0-3 / hardened rules: the create may not carry privileged fields
+  // (verified, isFeatured). Strip them from the Firestore payload.
+  const firestorePayload: Record<string, any> = { ...newJob }
+  delete firestorePayload.verified
+  delete firestorePayload.isFeatured
+
   try {
-    await addDoc(collection(db, 'jobs'), newJob)
+    await addDoc(collection(db, 'jobs'), firestorePayload)
   } catch (err) {
+    // P1-5: surface the persistence failure instead of returning
+    // success while nothing was saved server-side.
     console.warn('Firestore saveJobToDatabase error:', err)
+    throw new Error('Job posting could not be saved. Please try again.')
   }
 
   return newJob
@@ -273,6 +336,18 @@ async function updateJobInFirestore(idOrSlug: string, fieldsToUpdate: Record<str
 export async function approveJob(id: string, adminUid: string): Promise<boolean> {
   const norm = id.toLowerCase().trim()
   const idx = memoryJobsCache.findIndex(j => j.id === id || j.slug?.toLowerCase() === norm)
+  const cached = idx !== -1 ? memoryJobsCache[idx] : undefined
+  // PRICING (b) — NO free listings: admin approves ONLY submissions with
+  // verified payment. Block while a recorded payment is unverified
+  // ('awaiting_payment' / 'payment_rejected' and this repo's equivalents).
+  // Jobs have no payment step, so no paymentStatus normally exists and
+  // the guard is dormant; it bites only if a paymentStatus is ever
+  // recorded on the job.
+  const paymentStatus = String((cached as any)?.paymentStatus || '').trim().toLowerCase()
+  if (paymentStatus && paymentStatus !== 'verified' && paymentStatus !== 'paid') {
+    console.warn(`Approve blocked for job ${id}: payment not verified (paymentStatus: '${(cached as any)?.paymentStatus || ''}').`)
+    return false
+  }
   if (idx !== -1) {
     memoryJobsCache[idx].status = 'approved'
   }

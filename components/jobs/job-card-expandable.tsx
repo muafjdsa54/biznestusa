@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { JobItem } from '@/lib/data'
 import { toast } from 'sonner'
+import { getAuthHeaders } from '@/lib/client-auth'
 
 interface JobCardExpandableProps {
   job: JobItem
@@ -45,7 +46,7 @@ export default function JobCardExpandable({ job }: JobCardExpandableProps) {
     try {
       const response = await fetch('/api/jobs/apply', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
         body: JSON.stringify({
           action: 'apply',
           email: cleanEmail,

@@ -8,7 +8,7 @@ import {
 const faqs = [
   {
     question: "What is BizNest USA and how does the business directory work?",
-    answer: "BizNest USA is a unified national directory connecting verified American businesses, licensed trade professionals, and hiring employers across all 50 states. Business owners can submit their listings for free, while consumers get direct access to verified phone numbers, websites, and service scopes."
+    answer: "BizNest USA is a unified national directory connecting American businesses, skilled trade professionals, and hiring employers across 39 states and Washington, D.C. Searching and browsing the directory is free; listing a business is a paid submission starting at $1, and consumers get direct access to phone numbers, websites, and service scopes."
   },
   {
     question: "How do I verify if a business or contractor is licensed?",

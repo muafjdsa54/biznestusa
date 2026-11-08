@@ -4,11 +4,11 @@ import { ShieldCheck, Building2, CheckCircle2, HelpCircle } from 'lucide-react'
 
 export const metadata: Metadata = {
   title: 'Register Company | Add Employer Profile to BizNest',
-  description: 'Register your employer profile on BizNestUSA to post career vacancies, recruit verified professionals, and expand corporate hiring visibility in the US.',
+  description: 'Register your employer profile on BizNestUSA to post career vacancies, recruit professionals, and expand corporate hiring visibility in the US.',
   alternates: { canonical: 'https://www.biznestusa.com/add-company/' },
   openGraph: {
     title: 'Register Company | Add Employer Profile to BizNest',
-    description: 'Register your employer profile on BizNestUSA to post career vacancies, recruit verified professionals, and expand corporate hiring visibility in the US.',
+    description: 'Register your employer profile on BizNestUSA to post career vacancies, recruit professionals, and expand corporate hiring visibility in the US.',
     url: 'https://www.biznestusa.com/add-company/',
     type: 'website',
   },
@@ -22,7 +22,7 @@ export default function AddCompanyPage() {
     },
     {
       q: 'How long does company profile review and verification take?',
-      a: 'Our editorial and verification team typically reviews corporate registrations within 1 to 2 business days. During this period, we verify your corporate entity standing with state registration authorities.'
+      a: 'Our editorial and verification team typically reviews corporate registrations within 1 to 2 business days. During this period, we review the company details and contact information submitted with the registration.'
     },
     {
       q: 'Can our company post multiple job vacancies across different states?',
@@ -30,7 +30,7 @@ export default function AddCompanyPage() {
     },
     {
       q: 'Is there a cost to register a company profile on BizNestUSA?',
-      a: 'Basic company registration and standard employer profile publishing are completely free. Optional premium featured placements and highlighted recruitment sponsorships are available for accelerated talent acquisition.'
+      a: 'No — listing a company profile is a paid submission. Choose a plan when you submit and upload your payment screenshot; only submissions with a verified payment are approved and published. Searching and browsing the directory is free.'
     }
   ]
 

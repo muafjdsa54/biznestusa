@@ -88,9 +88,9 @@ export async function runComprehensiveSeoAudit(): Promise<SeoAuditReport> {
     getCmsLocations().catch(() => []),
   ])
 
-  const approvedBiz = allBiz.filter(b => (b.status || 'approved') === 'approved')
-  const approvedPros = allPros.filter(p => (p.status || 'approved') === 'approved')
-  const approvedJobs = allJobs.filter(j => (j.status || 'approved') === 'approved')
+  const approvedBiz = allBiz.filter(b => b.status === 'approved')
+  const approvedPros = allPros.filter(p => p.status === 'approved')
+  const approvedJobs = allJobs.filter(j => j.status === 'approved')
   const blogPostsList = Object.values(BLOG_POSTS)
 
   // 1. Build Topical Matrix

@@ -38,8 +38,16 @@ export async function generateMetadata(props: { params: Promise<{ id: string }> 
   const jobCity = job ? job.city : 'United States'
   const publicSlug = job ? getPublicJobSlug(job) : idOrSlug
   const canonicalUrl = toCanonicalUrl(`jobs/${publicSlug}`)
-  const title = job ? `${job.title} at ${job.company} in ${job.city} | BizNestUSA Jobs` : 'Job Vacancy | BizNestUSA'
-  const description = job ? `${job.description.slice(0, 160)}... Review role details, qualifications, salary, and application routes on BizNestUSA.` : `Review current job opportunities across the USA on the BizNestUSA jobs directory.`
+  let title = job ? `${job.title} at ${job.company} in ${job.city} | BizNestUSA` : 'Job Vacancy | BizNestUSA'
+  if (title.length > 60) {
+    title = `${job?.title} at ${job?.company} | BizNestUSA`.slice(0, 60)
+  }
+  const rawDescription = job
+    ? `${job.title} at ${job.company} in ${job.city} — ${job.type}${job.workplaceType ? `, ${job.workplaceType}` : ''}. Salary: ${job.salary}. Apply on the employer's own careers page.`
+    : `Review current job opportunities across the USA on the BizNestUSA jobs directory.`
+  const description = rawDescription.length > 160
+    ? rawDescription.slice(0, 157).replace(/\s+\S*$/, '') + '...'
+    : rawDescription
 
   return {
     title,
@@ -137,7 +145,6 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
     ...(datePosted ? { datePosted } : {}),
     ...(validThrough ? { validThrough } : {}),
     employmentType: (job.type || 'FULL_TIME').toUpperCase().replace('-', '_'),
-    directApply: true,
     hiringOrganization: {
       '@type': 'Organization',
       name: job.company,
@@ -282,7 +289,7 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
                       rel="noopener noreferrer"
                       className="px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
                     >
-                      <span>Careers Site</span>
+                      <span>Apply on {job.company} Careers Site</span>
                       <ExternalLink className="w-3.5 h-3.5" />
                     </a>
                   )}
@@ -312,7 +319,7 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
           <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-2xl p-4 flex items-start gap-3 text-xs text-emerald-900 shadow-2xs">
             <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
             <p className="leading-relaxed">
-              <strong>Verified Employer Listing:</strong> {VERIFICATION_DISCLAIMER}
+              <strong>Verified Listing:</strong> {VERIFICATION_DISCLAIMER}
             </p>
           </div>
         )}
@@ -337,7 +344,7 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
             {/* Job Overview Bar */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-white rounded-3xl p-6 border border-slate-200 shadow-xs text-xs">
               <div>
-                <span className="text-slate-400 font-medium">Salary Package</span>
+                <span className="text-slate-400 font-medium">Salary as Listed</span>
                 <p className="font-extrabold text-slate-900 text-sm mt-0.5">{job.salary}</p>
               </div>
               <div>

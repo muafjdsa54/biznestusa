@@ -8,12 +8,12 @@ const features = [
   },
   {
     title: "Nationwide Reach",
-    description: "Explore businesses, verified professionals, and job opportunities across neighborhoods and communities throughout the United States on BizNest USA.",
+    description: "Explore businesses, skilled professionals, and job opportunities across neighborhoods and communities throughout the United States on BizNest USA.",
     icon: <Users className="w-8 h-8 text-blue-500" />
   },
   {
     title: "Direct Contact",
-    description: "Connect directly via phone, corporate websites, and verified emails without registration walls or hidden paywalls.",
+    description: "Connect directly via phone, corporate websites, and business emails without registration walls or hidden paywalls.",
     icon: <ShieldCheck className="w-8 h-8 text-indigo-500" />
   },
   {
@@ -31,7 +31,7 @@ export default function TrustSection() {
           <h2 className="text-3xl font-bold text-slate-900 mb-4">Why Choose BizNest USA?</h2>
           <p className="text-slate-600 max-w-2xl mx-auto">
             We are dedicated to building a transparent and verified American business directory, 
-            connecting customers with verified local services, licensed talent, and career opportunities.
+            connecting customers with local services, skilled talent, and career opportunities.
           </p>
         </div>
 
@@ -54,13 +54,13 @@ export default function TrustSection() {
 
         <div className="mt-16 flex flex-wrap justify-center items-center gap-8 opacity-80">
           <div className="flex items-center gap-2 font-bold text-slate-600 text-sm">
-            <span className="text-xl">✅</span> 100% Free Listing
+            <span className="text-xl">✅</span> Listings From $1
           </div>
           <div className="flex items-center gap-2 font-bold text-slate-600 text-sm">
             <span className="text-xl">🛡️</span> Verified Contact Details
           </div>
           <div className="flex items-center gap-2 font-bold text-slate-600 text-sm">
-            <span className="text-xl">📍</span> All 50 US States
+            <span className="text-xl">📍</span> 39 States + Washington, D.C.
           </div>
           <div className="flex items-center gap-2 font-bold text-slate-600 text-sm">
             <span className="text-xl">🤝</span> Direct Communication

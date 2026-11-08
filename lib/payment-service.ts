@@ -78,7 +78,8 @@ export async function createOrGetPaymentRecord(params: {
 }): Promise<PaymentRecord> {
   const { userId, userEmail, businessId, businessName, businessSlug, planId } = params
 
-  // 1. Canonical Plan Verification
+  // 1. Canonical Plan Verification — the plan must exist in BUSINESS_PLANS
+  // (all three live tiers: $1 Basic, $5 Standard, $10 Authoritative).
   const planConfig = BUSINESS_PLANS[planId]
   if (!planConfig) {
     throw new Error(`Invalid plan ID: ${planId}`)
@@ -94,6 +95,9 @@ export async function createOrGetPaymentRecord(params: {
   if (existing && (existing.payment_status === 'PENDING_PAYMENT' || existing.payment_status === 'PAYMENT_VERIFICATION_PENDING')) {
     // If the plan changed while still pending, update the existing record
     if (existing.plan_id !== planId) {
+      const prevPlanId = existing.plan_id
+      const prevPlanName = existing.plan_name
+      const prevAmount = existing.amount
       existing.plan_id = planId
       existing.plan_name = canonicalPlanName
       existing.amount = canonicalPrice
@@ -106,6 +110,12 @@ export async function createOrGetPaymentRecord(params: {
             updated_at: nowIso
           })
         } catch (e) {
+          // P1-5: do not report the plan change as applied when the
+          // Firestore write failed — revert the in-memory mutation so
+          // the returned record matches what is actually stored.
+          existing.plan_id = prevPlanId
+          existing.plan_name = prevPlanName
+          existing.amount = prevAmount
           console.warn('Error updating payment plan in Firestore:', e)
         }
       }
@@ -158,7 +168,12 @@ export async function createOrGetPaymentRecord(params: {
         notes: `Created payment record for ${canonicalPlanName} ($${canonicalPrice} USD)`
       })
     } catch (err) {
+      // P1-5: surface the persistence failure instead of returning a
+      // record that exists only in server memory. Callers (saveBusiness
+      // / payment-proof sync) already wrap this call in try/catch.
       console.warn('Firestore payment record save error:', err)
+      memoryPaymentsCache = memoryPaymentsCache.filter(p => p.id !== paymentId)
+      throw new Error('Payment record could not be saved. Please try again.')
     }
   }
 
@@ -199,6 +214,9 @@ export async function submitPaymentProof(params: {
   }
 
   // 3. Update Payment Record to PAYMENT_VERIFICATION_PENDING
+  // Snapshot the pre-call state so a Firestore failure can revert the
+  // in-memory mutation instead of leaving a phantom "submitted" record.
+  const prevPayment = { ...payment }
   payment.payment_status = 'PAYMENT_VERIFICATION_PENDING'
   payment.payment_screenshot_url = screenshotDataUrl
   payment.payoneer_transaction_id = cleanTxId || null
@@ -257,7 +275,15 @@ export async function submitPaymentProof(params: {
         notes: `Customer uploaded screenshot proof (Tx ID: ${cleanTxId || 'N/A'})`
       })
     } catch (err) {
+      // P1-5: a Firestore failure must NOT return {success:true} — the
+      // proof would exist only in server memory. Revert the in-memory
+      // mutation and report the failure; callers (incl. the
+      // /api/payments/submit-proof route) already check result.success.
       console.warn('Error updating payment proof in Firestore:', err)
+      Object.assign(payment, prevPayment)
+      const rIdx = memoryPaymentsCache.findIndex(p => p.id === payment!.id)
+      if (rIdx !== -1) memoryPaymentsCache[rIdx] = { ...payment }
+      return { success: false, error: 'Payment proof could not be saved. Please try again.' }
     }
   }
 
@@ -280,6 +306,11 @@ export async function approvePayment(
   const nowIso = new Date().toISOString()
 
   if (payment) {
+    // Snapshot the pre-call state so a Firestore failure can revert the
+    // in-memory mutation instead of leaving a phantom "PAID" record.
+    const prevStatus = payment.payment_status
+    const prevVerifiedAt = payment.verified_at
+    const prevVerifiedBy = payment.verified_by
     payment.payment_status = 'PAID'
     payment.verified_at = nowIso
     payment.verified_by = adminId
@@ -296,7 +327,19 @@ export async function approvePayment(
           updated_at: nowIso
         })
       } catch (e) {
+        // P1-5: do not report the payment as verified when the Firestore
+        // write failed.
         console.warn('Firestore updateDoc payment error:', e)
+        payment.payment_status = prevStatus
+        payment.verified_at = prevVerifiedAt
+        payment.verified_by = prevVerifiedBy
+        const rIdx = memoryPaymentsCache.findIndex(p => p.id === payment!.id)
+        if (rIdx !== -1) memoryPaymentsCache[rIdx] = { ...payment }
+        return {
+          success: false,
+          message: 'Payment approval could not be saved. Please try again.',
+          payment
+        }
       }
     }
   }
@@ -320,7 +363,7 @@ export async function approvePayment(
           plan,
           planName: BUSINESS_PLANS[plan].name,
           planPrice: BUSINESS_PLANS[plan].price,
-          hasSinglePage: !isAuthoritative && !isStandard ? false : true,
+          hasSinglePage: true,
           canEditProfile: isStandard || isAuthoritative,
           blog_post_entitled: isStandard || isAuthoritative,
           blog_posts_allowed: isAuthoritative ? 10 : (isStandard ? 5 : 0),
@@ -342,7 +385,14 @@ export async function approvePayment(
         })
       }
     } catch (err) {
+      // P1-5: the payment record may already be PAID, but the business
+      // entitlements did not persist — do not report full success.
       console.warn('Firestore business entitlement update error:', err)
+      return {
+        success: false,
+        message: 'Payment was marked paid, but plan entitlements could not be saved. Please retry.',
+        payment: payment || undefined
+      }
     }
   }
 
@@ -374,6 +424,11 @@ export async function rejectPayment(
   const cleanReason = sanitizeText(reason, 500)
 
   if (payment) {
+    // Snapshot the pre-call state so a Firestore failure can revert the
+    // in-memory mutation instead of leaving a phantom "REJECTED" record.
+    const prevStatus = payment.payment_status
+    const prevRejectedAt = payment.rejected_at
+    const prevRejectionReason = payment.rejection_reason
     payment.payment_status = 'REJECTED'
     payment.rejected_at = nowIso
     payment.rejection_reason = cleanReason
@@ -390,7 +445,19 @@ export async function rejectPayment(
           updated_at: nowIso
         })
       } catch (e) {
+        // P1-5: do not report the payment as rejected when the Firestore
+        // write failed.
         console.warn('Firestore payment reject error:', e)
+        payment.payment_status = prevStatus
+        payment.rejected_at = prevRejectedAt
+        payment.rejection_reason = prevRejectionReason
+        const rIdx = memoryPaymentsCache.findIndex(p => p.id === payment!.id)
+        if (rIdx !== -1) memoryPaymentsCache[rIdx] = { ...payment }
+        return {
+          success: false,
+          message: 'Payment rejection could not be saved. Please try again.',
+          payment
+        }
       }
     }
   }
@@ -417,7 +484,14 @@ export async function rejectPayment(
         })
       }
     } catch (e) {
+      // P1-5: the payment record may already be REJECTED, but the business
+      // record did not update — do not report full success.
       console.warn('Firestore business rejection sync error:', e)
+      return {
+        success: false,
+        message: 'Payment was marked rejected, but the business record could not be updated. Please retry.',
+        payment: payment || undefined
+      }
     }
   }
 

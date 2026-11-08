@@ -7,11 +7,11 @@ import { Metadata } from 'next'
 
 export const metadata: Metadata = {
   title: 'USA Cities & Local Business Directory | BizNestUSA',
-  description: 'Explore business listings, verified professionals, and jobs across all 50 US states and major metropolitan areas on the BizNestUSA location directory.',
+  description: 'Explore business listings, professionals, and jobs across 39 states and Washington, D.C., and major metropolitan areas on the BizNestUSA location directory.',
   alternates: { canonical: 'https://www.biznestusa.com/cities/' },
   openGraph: {
     title: 'USA Cities & Local Business Directory | BizNestUSA',
-    description: 'Explore business listings, verified professionals, and jobs across all 50 US states and major metropolitan areas on the BizNestUSA location directory.',
+    description: 'Explore business listings, professionals, and jobs across 39 states and Washington, D.C., and major metropolitan areas on the BizNestUSA location directory.',
     url: 'https://www.biznestusa.com/cities/',
     type: 'website',
   },
@@ -30,7 +30,7 @@ export default function CitiesIndexPage() {
           </span>
           <h1 className="text-2xl sm:text-4xl font-bold text-slate-900">Locations & Cities Across the USA</h1>
           <p className="text-slate-600 text-xs sm:text-sm max-w-xl mx-auto">
-            Discover local businesses, individual professionals, and career vacancies across all 50 states and metropolitan areas.
+            Discover local businesses, individual professionals, and career vacancies across 39 states and Washington, D.C., and metropolitan areas.
           </p>
         </div>
       </section>

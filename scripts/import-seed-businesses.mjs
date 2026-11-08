@@ -162,8 +162,9 @@ async function runImport() {
       country: item.country || 'US',
       service_area: item.service_area || null,
       hours: item.hours || null,
-      operatingHours: item.hours ? { 'General Hours': item.hours } : { 'Monday - Saturday': '09:00 AM - 06:00 PM', 'Sunday': 'Closed' },
-      services: Array.isArray(item.services) && item.services.length > 0 ? item.services : ['Professional Services'],
+      // Never invent hours: only write operatingHours when the record has real hours.
+      ...(item.hours ? { operatingHours: { 'General Hours': item.hours } } : {}),
+      services: Array.isArray(item.services) && item.services.length > 0 ? item.services : [],
       social_profiles: Array.isArray(item.social_profiles) && item.social_profiles.length > 0 ? item.social_profiles : null,
       // Source & Provenance
       source_type: 'seed_research',
@@ -198,8 +199,9 @@ async function runImport() {
       planName: 'Directory Seed Listing',
       planPrice: 0,
       paymentStatus: 'VERIFIED',
-      coverImage: 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1200&q=80',
-      logo: (item.logo_url || '').trim() || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=200&q=80',
+      // Never assign a stock cover/logo: null lets the UI initial-letter tile show.
+      coverImage: null,
+      logo: (item.logo_url || '').trim() || null,
       created_at: '2026-10-05T00:00:00.000Z',
       updated_at: '2026-10-05T00:00:00.000Z',
       submittedAt: '2026-10-05T00:00:00.000Z',

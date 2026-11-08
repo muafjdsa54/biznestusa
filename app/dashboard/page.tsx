@@ -5,23 +5,25 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Navbar from '@/components/navbar'
 import Footer from '@/components/footer'
-import { 
-  Building2, MapPin, Phone, Mail, Globe, Upload, CheckCircle2, ShieldCheck, 
-  Sparkles, ArrowRight, Star, Clock, AlertCircle, RefreshCw, ExternalLink, 
+import {
+  Building2, MapPin, Phone, Mail, Globe, Upload, CheckCircle2, ShieldCheck,
+  Sparkles, ArrowRight, Star, Clock, AlertCircle, RefreshCw, ExternalLink,
   Copy, LogIn, UserPlus, LogOut, X, Zap, ChevronRight, Eye, EyeOff, Lock,
-  FileText, Edit3, Plus, Check, MessageSquare, Info, AlertTriangle
+  FileText, Edit3, Plus, Check, MessageSquare, Info, AlertTriangle,
+  Factory, Briefcase, UserRound, ImageIcon
 } from 'lucide-react'
-import { BusinessItem, UserBlogPost, BUSINESS_PLANS, BusinessPlan } from '@/lib/data'
+import { BusinessItem, CompanyItem, ProfessionalItem, UserBlogPost, BUSINESS_PLANS, BusinessPlan } from '@/lib/data'
 import { getUserBusinesses, updateBusinessPaymentProof, submitBusinessEditRequest } from '@/lib/db-service'
+import { getAllCompanies } from '@/lib/company-service'
+import { getAllProfessionals } from '@/lib/professional-service'
 import { auth } from '@/lib/firebase'
-import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  signOut, 
+import { getAuthHeaders } from '@/lib/client-auth'
+import {
+  signOut,
   onAuthStateChanged,
-  updateProfile 
+  sendEmailVerification
 } from 'firebase/auth'
-import { isValidPersonName, validatePersonName, filterPersonNameInput, isValidUsPhone, validateUsPhone, formatUsPhone, isValidEmail } from '@/lib/validation'
+import { filterPersonNameInput, formatUsPhone } from '@/lib/validation'
 import { toast } from 'sonner'
 
 const US_PAYMENT_CHANNELS = [
@@ -79,22 +81,21 @@ function DashboardContent() {
 
   const [currentUser, setCurrentUser] = useState<{ uid?: string; name?: string; email?: string; role?: string } | null>(null)
   const [loading, setLoading] = useState(true)
+  // Signup-first flow (LocalePak pattern): the dashboard requires a
+  // signed-in user with a VERIFIED email. Unverified users see the
+  // verify panel below, not the add cards or their listings.
+  const [isEmailVerified, setIsEmailVerified] = useState(false)
+  const [verificationSent, setVerificationSent] = useState(false)
+  const [verifyMsg, setVerifyMsg] = useState('')
   const [userBusinesses, setUserBusinesses] = useState<BusinessItem[]>([])
   const [isLoadingBusinesses, setIsLoadingBusinesses] = useState(false)
-
-  // Auth Mode for non-logged in users
-  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login')
-  const [loginEmail, setLoginEmail] = useState('')
-  const [loginPassword, setLoginPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
-  const [isLoggingIn, setIsLoggingIn] = useState(false)
-  const [loginError, setLoginError] = useState('')
-
-  const [signupName, setSignupName] = useState('')
-  const [signupPhone, setSignupPhone] = useState('')
-  const [signupEmail, setSignupEmail] = useState('')
-  const [signupPassword, setSignupPassword] = useState('')
-  const [isSigningUp, setIsSigningUp] = useState(false)
+  // Own-submission counts for the add cards. Null = not loaded (yet or
+  // on error) — the card then shows no count line rather than a guess.
+  // Jobs carry no reliable owner key (no userId; applicationEmail is the
+  // employer's contact, not an account link), so the Post a Job card
+  // shows no count.
+  const [companyCounts, setCompanyCounts] = useState<{ total: number; pending: number; approved: number } | null>(null)
+  const [professionalCounts, setProfessionalCounts] = useState<{ total: number; pending: number; approved: number } | null>(null)
 
   // Payment Proof Modal State
   const [activePaymentBiz, setActivePaymentBiz] = useState<BusinessItem | null>(null)
@@ -117,7 +118,7 @@ function DashboardContent() {
     if (activePaymentBiz) {
       const ref = activePaymentBiz.payment_reference || activePaymentBiz.paymentDetails?.referenceNumber || ('BNUSA-' + new Date().getFullYear() + '-' + Math.floor(100000 + Math.random() * 900000))
       setPayoneerReference(ref)
-      setSelectedPlan(activePaymentBiz.plan || 'priority_5')
+      setSelectedPlan(activePaymentBiz.plan === 'authoritative_10' ? 'authoritative_10' : 'priority_5')
       setHasClickedCompletedPayment(false)
       setCustomerNote('')
       setPayoneerTxId('')
@@ -164,7 +165,8 @@ function DashboardContent() {
     googleBusinessProfile: '',
     facebookUrl: '',
     instagramUrl: '',
-    linkedinUrl: ''
+    linkedinUrl: '',
+    gallery: [] as string[]
   })
   const [isSubmittingEdit, setIsSubmittingEdit] = useState(false)
 
@@ -188,8 +190,82 @@ function DashboardContent() {
       googleBusinessProfile: biz.googleBusinessProfile || '',
       facebookUrl: biz.facebookUrl || '',
       instagramUrl: biz.instagramUrl || '',
-      linkedinUrl: biz.linkedinUrl || ''
+      linkedinUrl: biz.linkedinUrl || '',
+      gallery: Array.isArray((biz as any).gallery) ? [...(biz as any).gallery] : []
     })
+  }
+
+  // Photo gallery upload — $10 Authoritative benefit only (same canvas
+  // compression as the add-business form; at most 5 photos).
+  const handleEditGalleryFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
+    const remaining = 5 - (editFormData.gallery || []).length
+    if (remaining <= 0) {
+      toast.error('You can upload up to 5 photos in the gallery.')
+      return
+    }
+    const accepted = files.filter(file => file.type.startsWith('image/')).slice(0, remaining)
+    if (accepted.length === 0) {
+      toast.error('Please upload image files (PNG, JPG, JPEG, WEBP).')
+      return
+    }
+    accepted.forEach(file => {
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error(`"${file.name}" is larger than 10MB and was skipped.`)
+        return
+      }
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        const rawBase64 = event.target?.result as string
+        const addPhoto = (dataUrl: string) => {
+          setEditFormData(prev => {
+            if ((prev.gallery || []).length >= 5) return prev
+            return { ...prev, gallery: [...(prev.gallery || []), dataUrl] }
+          })
+        }
+        try {
+          const img = new Image()
+          img.onload = () => {
+            const canvas = document.createElement('canvas')
+            let width = img.width
+            let height = img.height
+            const maxDim = 800
+            if (width > maxDim || height > maxDim) {
+              if (width > height) {
+                height = Math.round((height * maxDim) / width)
+                width = maxDim
+              } else {
+                width = Math.round((width * maxDim) / height)
+                height = maxDim
+              }
+            }
+            canvas.width = width
+            canvas.height = height
+            const ctx = canvas.getContext('2d')
+            if (ctx) {
+              ctx.drawImage(img, 0, 0, width, height)
+              addPhoto(canvas.toDataURL('image/jpeg', 0.8))
+            } else {
+              addPhoto(rawBase64)
+            }
+          }
+          img.onerror = () => addPhoto(rawBase64)
+          img.src = rawBase64
+        } catch (_) {
+          addPhoto(rawBase64)
+        }
+      }
+      reader.readAsDataURL(file)
+    })
+    e.target.value = ''
+  }
+
+  const handleRemoveEditGalleryPhoto = (index: number) => {
+    setEditFormData(prev => ({
+      ...prev,
+      gallery: (prev.gallery || []).filter((_, i) => i !== index)
+    }))
   }
 
   const handleSubmitEdit = async (e: React.FormEvent) => {
@@ -209,7 +285,8 @@ function DashboardContent() {
         googleBusinessProfile: editFormData.googleBusinessProfile.trim(),
         facebookUrl: editFormData.facebookUrl.trim(),
         instagramUrl: editFormData.instagramUrl.trim(),
-        linkedinUrl: editFormData.linkedinUrl.trim()
+        linkedinUrl: editFormData.linkedinUrl.trim(),
+        gallery: editFormData.gallery
       })
 
       if (res.success) {
@@ -258,45 +335,9 @@ function DashboardContent() {
   }
 
   useEffect(() => {
-    // 1. Immediately read session from storage so Ctrl+R refresh is instant
-    let sessionFound = false
-    const rawSession = sessionStorage.getItem('biznestusa_user_session') || localStorage.getItem('biznestusa_user_session') || sessionStorage.getItem('listpak_user_session') || localStorage.getItem('listpak_user_session')
-    if (rawSession) {
-      try {
-        const parsed = JSON.parse(rawSession)
-        if (parsed && (parsed.email || parsed.name || parsed.uid)) {
-          sessionFound = true
-          setCurrentUser(parsed)
-          fetchBusinesses(parsed.email, parsed.uid || parsed.userId)
-        }
-      } catch (_) {}
-    }
-    
-    // Fallback: If no explicit session but custom businesses exist in localStorage, hydrate automatically
-    if (!sessionFound) {
-      try {
-        const custom = localStorage.getItem('biznestusa_custom_businesses') || localStorage.getItem('listpak_custom_businesses')
-        if (custom) {
-          const parsedCustom = JSON.parse(custom)
-          if (Array.isArray(parsedCustom) && parsedCustom.length > 0) {
-            const latest = parsedCustom[0]
-            const autoUser = {
-              name: latest.ownerName || latest.name || 'Business Owner',
-              email: latest.email || 'business@biznestusa.com',
-              uid: latest.userId || 'local-biz-owner',
-              role: 'business'
-            }
-            setCurrentUser(autoUser)
-            sessionStorage.setItem('biznestusa_user_session', JSON.stringify(autoUser))
-            localStorage.setItem('biznestusa_user_session', JSON.stringify(autoUser))
-            setUserBusinesses(parsedCustom)
-            fetchUserPosts(parsedCustom)
-            sessionFound = true
-          }
-        }
-      } catch (_) {}
-    }
-
+    // Identity comes ONLY from Firebase Auth (onAuthStateChanged).
+    // Storage JSON is never trusted: no session read, no auto-fabrication
+    // from localStorage businesses. Signed-out users go to /login.
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       if (fbUser) {
         const userObj = {
@@ -306,15 +347,108 @@ function DashboardContent() {
           role: 'business'
         }
         setCurrentUser(userObj)
-        fetchBusinesses(userObj.email, userObj.uid)
-        sessionStorage.setItem('biznestusa_user_session', JSON.stringify(userObj))
-        localStorage.setItem('biznestusa_user_session', JSON.stringify(userObj))
+        const verified = fbUser.emailVerified === true
+        setIsEmailVerified(verified)
+        if (verified) {
+          fetchBusinesses(userObj.email, userObj.uid)
+          fetchMyCounts(userObj.email, userObj.uid)
+        } else {
+          setUserBusinesses([])
+          setCompanyCounts(null)
+          setProfessionalCounts(null)
+        }
+      } else {
+        setCurrentUser(null)
+        setUserBusinesses([])
+        setIsEmailVerified(false)
+        setCompanyCounts(null)
+        setProfessionalCounts(null)
+        router.push('/login')
       }
       setLoading(false)
     })
 
     return () => unsubscribe()
   }, [])
+
+  // Own-submission counts for the Add Company / Add Professional cards.
+  // Companies have no userId (submitted anonymously) so they match on the
+  // owner's email (email / companyEmail / hrEmail); professionals match
+  // on userId first, then email. A failed load leaves the count null and
+  // the card simply shows no count line.
+  const fetchMyCounts = async (email?: string, uid?: string) => {
+    const normEmail = (email || '').toLowerCase().trim()
+    const normUid = (uid || '').toLowerCase().trim()
+    if (!normEmail && !normUid) return
+    try {
+      const companies = await getAllCompanies(true)
+      const mine = companies.filter((c: CompanyItem) => {
+        const emails = [c.email, c.companyEmail, c.hrEmail].map((e) => (e || '').toLowerCase().trim())
+        return normEmail ? emails.includes(normEmail) : false
+      })
+      setCompanyCounts({
+        total: mine.length,
+        pending: mine.filter((c) => c.status === 'pending').length,
+        approved: mine.filter((c) => c.status === 'approved').length,
+      })
+    } catch (_) {
+      setCompanyCounts(null)
+    }
+    try {
+      const pros = await getAllProfessionals(true)
+      const mine = pros.filter((p: ProfessionalItem) => {
+        if (normUid && p.userId && p.userId.toLowerCase().trim() === normUid) return true
+        return normEmail ? (p.email || '').toLowerCase().trim() === normEmail : false
+      })
+      setProfessionalCounts({
+        total: mine.length,
+        pending: mine.filter((p) => p.status === 'pending').length,
+        approved: mine.filter((p) => p.status === 'approved').length,
+      })
+    } catch (_) {
+      setProfessionalCounts(null)
+    }
+  }
+
+  const handleResendVerification = async () => {
+    setVerifyMsg('')
+    try {
+      const user = auth.currentUser
+      if (!user) {
+        setVerifyMsg('Please sign in again, then resend the verification email.')
+        return
+      }
+      await sendEmailVerification(user)
+      setVerificationSent(true)
+      setVerifyMsg(`Verification email sent to ${user.email}. Please check your inbox (and spam folder), then click the link.`)
+    } catch (err: any) {
+      setVerifyMsg(err?.message || 'Could not send the verification email. Please try again.')
+    }
+  }
+
+  // After clicking the link in the verification email, refresh the
+  // Firebase user so the dashboard unlocks without a fresh sign-in.
+  const handleRecheckVerification = async () => {
+    setVerifyMsg('')
+    try {
+      const user = auth.currentUser
+      if (!user) return
+      await user.reload()
+      const verified = auth.currentUser?.emailVerified === true
+      setIsEmailVerified(verified)
+      if (verified) {
+        setVerifyMsg('Email verified — welcome to your dashboard.')
+        if (currentUser) {
+          fetchBusinesses(currentUser.email, currentUser.uid)
+          fetchMyCounts(currentUser.email, currentUser.uid)
+        }
+      } else {
+        setVerifyMsg('Not verified yet — click the link in the verification email, then try again.')
+      }
+    } catch (err: any) {
+      setVerifyMsg(err?.message || 'Could not check verification status. Please try again.')
+    }
+  }
 
   const fetchUserPosts = async (businesses: BusinessItem[]) => {
     if (!businesses || businesses.length === 0) {
@@ -362,111 +496,6 @@ function DashboardContent() {
       console.warn('Failed to load user businesses:', err)
     } finally {
       setIsLoadingBusinesses(false)
-    }
-  }
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoginError('')
-    if (!loginEmail.trim() || !loginPassword.trim()) {
-      setLoginError('Please enter both email and password.')
-      return
-    }
-
-    setIsLoggingIn(true)
-    try {
-      let loggedUser = {
-        name: loginEmail.split('@')[0],
-        email: loginEmail.trim().toLowerCase(),
-        uid: ''
-      }
-
-      try {
-        const cred = await signInWithEmailAndPassword(auth, loginEmail.trim(), loginPassword)
-        if (cred.user) {
-          loggedUser = {
-            uid: cred.user.uid,
-            name: cred.user.displayName || loginEmail.split('@')[0],
-            email: cred.user.email || loginEmail.trim().toLowerCase()
-          }
-        }
-      } catch (authErr: any) {
-        const existingSession = localStorage.getItem('biznestusa_user_session') || localStorage.getItem('listpak_user_session')
-        if (existingSession) {
-          const parsed = JSON.parse(existingSession)
-          if (parsed.email?.toLowerCase() === loginEmail.trim().toLowerCase()) {
-            loggedUser = parsed
-          } else {
-            throw new Error(authErr?.message || 'Invalid credentials')
-          }
-        } else {
-          throw new Error('Invalid email or password. Please verify your credentials.')
-        }
-      }
-
-      setCurrentUser(loggedUser)
-      sessionStorage.setItem('biznestusa_user_session', JSON.stringify({ ...loggedUser, role: 'business' }))
-      localStorage.setItem('biznestusa_user_session', JSON.stringify({ ...loggedUser, role: 'business' }))
-      fetchBusinesses(loggedUser.email, loggedUser.uid)
-      toast.success(`Welcome back, ${loggedUser.name}!`)
-    } catch (err: any) {
-      setLoginError(err.message || 'Login failed. Please check your credentials.')
-    } finally {
-      setIsLoggingIn(false)
-    }
-  }
-
-  const handleSignup = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoginError('')
-    const nameVal = validatePersonName(signupName)
-    if (!nameVal.isValid) {
-      setLoginError(nameVal.error || 'Full Name must contain only alphabetic letters (no numbers like "232" or special symbols).')
-      return
-    }
-    if (!isValidEmail(signupEmail)) {
-      setLoginError('Please enter a valid email address.')
-      return
-    }
-    const phoneVal = validateUsPhone(signupPhone)
-    if (!phoneVal.isValid) {
-      setLoginError(phoneVal.error || 'Please enter a valid 10-digit US phone number: +1 (XXX) XXX-XXXX.')
-      return
-    }
-    if (signupPassword.length < 6) {
-      setLoginError('Password must be at least 6 characters.')
-      return
-    }
-
-    setIsSigningUp(true)
-    try {
-      let newUser = {
-        name: signupName.trim(),
-        email: signupEmail.trim().toLowerCase(),
-        phone: signupPhone.trim(),
-        uid: ''
-      }
-
-      try {
-        const cred = await createUserWithEmailAndPassword(auth, signupEmail.trim(), signupPassword)
-        if (cred.user) {
-          await updateProfile(cred.user, { displayName: signupName.trim() })
-          newUser.uid = cred.user.uid
-        }
-      } catch (authErr: any) {
-        if (authErr?.code === 'auth/email-already-in-use') {
-          throw new Error('This email is already registered. Please sign in instead.')
-        }
-      }
-
-      setCurrentUser(newUser)
-      sessionStorage.setItem('biznestusa_user_session', JSON.stringify({ ...newUser, role: 'business' }))
-      localStorage.setItem('biznestusa_user_session', JSON.stringify({ ...newUser, role: 'business' }))
-      toast.success('Your BizNest USA business account has been created!')
-    } catch (err: any) {
-      setLoginError(err.message || 'Signup failed. Please try again.')
-    } finally {
-      setIsSigningUp(false)
     }
   }
 
@@ -567,7 +596,7 @@ function DashboardContent() {
       try {
         await fetch('/api/payments/submit-proof', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
           body: JSON.stringify({
             businessId: targetId,
             businessName: activePaymentBiz.name,
@@ -621,7 +650,7 @@ function DashboardContent() {
     try {
       const res = await fetch('/api/business/post-submit', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
         body: JSON.stringify({
           userId: currentUser?.uid || writingPostBiz.userId || 'user',
           businessId: writingPostBiz.id,
@@ -667,186 +696,18 @@ function DashboardContent() {
     )
   }
 
-  // STATE A: Unauthenticated User -> Sleek Sign In / Sign Up Card
+  // Signed-out users are redirected to /login by the onAuthStateChanged
+  // listener above — this is only a fallback while the redirect lands.
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans">
         <Navbar />
-        <main className="max-w-md mx-auto px-4 py-16 flex-1 flex flex-col items-center justify-center w-full">
-          <div className="w-full bg-white border border-slate-200 rounded-3xl p-8 sm:p-10 shadow-xl space-y-6 animate-in zoom-in-95">
-            <div className="text-center space-y-2">
-              <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
-                <Building2 className="w-7 h-7" />
-              </div>
-              <h1 className="text-2xl font-extrabold text-slate-900">
-                {authMode === 'login' ? 'Business Dashboard Login' : 'Create Business Account'}
-              </h1>
-              <p className="text-xs text-slate-500">
-                Log in to check the real-time approval status of your business listings, upload payment receipts, and manage branches.
-              </p>
-            </div>
-
-            {/* Toggle Login / Signup */}
-            <div className="grid grid-cols-2 p-1 bg-slate-100 rounded-2xl text-xs font-bold">
-              <button
-                type="button"
-                onClick={() => { setAuthMode('login'); setLoginError(''); }}
-                className={`py-2 rounded-xl transition ${authMode === 'login' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-600 hover:text-slate-900'}`}
-              >
-                Sign In
-              </button>
-              <button
-                type="button"
-                onClick={() => { setAuthMode('signup'); setLoginError(''); }}
-                className={`py-2 rounded-xl transition ${authMode === 'signup' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-600 hover:text-slate-900'}`}
-              >
-                Create Account
-              </button>
-            </div>
-
-            {loginError && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
-                <span>{loginError}</span>
-              </div>
-            )}
-
-            {authMode === 'login' ? (
-              <form onSubmit={handleLogin} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Email Address</label>
-                  <div className="relative">
-                    <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="email"
-                      required
-                      value={loginEmail}
-                      onChange={(e) => setLoginEmail(e.target.value)}
-                      placeholder="e.g. owner@business.com"
-                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Password</label>
-                  <div className="relative">
-                    <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      required
-                      value={loginPassword}
-                      onChange={(e) => setLoginPassword(e.target.value)}
-                      placeholder="••••••••"
-                      className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-1"
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isLoggingIn}
-                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  {isLoggingIn ? <span>Signing In...</span> : <><span>Sign In to Dashboard</span><ArrowRight className="w-4 h-4" /></>}
-                </button>
-              </form>
-            ) : (
-              <form onSubmit={handleSignup} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Your Full Name</label>
-                  <input
-                    type="text"
-                    required
-                    value={signupName}
-                    onChange={(e) => setSignupName(filterPersonNameInput(e.target.value))}
-                    placeholder="e.g. Alex Johnson"
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
-                  />
-                  <p className="text-[10px] text-slate-400 mt-1">Letters only (no numbers like &quot;232&quot;).</p>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Phone Number (USA Standard)</label>
-                  <div className="relative">
-                    <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="tel"
-                      required
-                      maxLength={17}
-                      value={signupPhone}
-                      onChange={(e) => setSignupPhone(formatUsPhone(e.target.value))}
-                      placeholder="+1 (555) 234-5678"
-                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <p className="text-[10px] text-slate-400 mt-1">USA format: +1 (XXX) XXX-XXXX (10 digits).</p>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Email Address</label>
-                  <div className="relative">
-                    <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="email"
-                      required
-                      value={signupEmail}
-                      onChange={(e) => setSignupEmail(e.target.value)}
-                      placeholder="e.g. owner@business.com"
-                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Account Password</label>
-                  <div className="relative">
-                    <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      required
-                      value={signupPassword}
-                      onChange={(e) => setSignupPassword(e.target.value)}
-                      placeholder="At least 6 characters"
-                      className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-1"
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isSigningUp}
-                  className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  {isSigningUp ? <span>Creating Account...</span> : <><span>Create Account &amp; Access Dashboard</span><ArrowRight className="w-4 h-4" /></>}
-                </button>
-              </form>
-            )}
-
-            <div className="pt-4 border-t border-slate-100 text-center">
-              <Link
-                href="/add-business"
-                className="inline-flex items-center gap-1 text-xs text-blue-600 font-extrabold hover:underline"
-              >
-                <span>Need to submit a new business? Click here</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-          </div>
+        <main className="max-w-6xl mx-auto px-4 py-20 flex-1 flex flex-col items-center justify-center text-center space-y-4">
+          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <h2 className="text-lg font-bold text-slate-800">Redirecting to Sign In...</h2>
+          <p className="text-xs text-slate-500">
+            <Link href="/login" className="text-blue-600 font-bold hover:underline">Click here to sign in</Link>
+          </p>
         </main>
         <Footer />
       </div>
@@ -868,9 +729,19 @@ function DashboardContent() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
                   Business Owner Dashboard
                 </span>
+                {isEmailVerified ? (
+                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    Email Verified
+                  </span>
+                ) : (
+                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                    Email Not Verified
+                  </span>
+                )}
               </div>
               <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900">
                 Welcome, {currentUser.name || currentUser.email}
@@ -909,33 +780,128 @@ function DashboardContent() {
             </div>
           </div>
 
-          {/* STATS CARDS */}
+          {/* STATS CARDS — verified users only; unverified users have no
+              listings loaded (see the verify panel below). */}
+          {isEmailVerified && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
             <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/90 space-y-1">
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Total Listings</span>
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Listings</span>
               <p className="text-2xl font-extrabold text-slate-900">{userBusinesses.length}</p>
             </div>
 
             <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 space-y-1">
-              <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wider">Pending Review</span>
+              <span className="text-xs font-bold text-amber-800 uppercase tracking-wider">Pending Review</span>
               <p className="text-2xl font-extrabold text-amber-900">{pendingCount}</p>
             </div>
 
             <div className="p-4 rounded-2xl bg-emerald-50/80 border border-emerald-200 space-y-1">
-              <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">Approved &amp; Live</span>
+              <span className="text-xs font-bold text-emerald-800 uppercase tracking-wider">Approved &amp; Live</span>
               <p className="text-2xl font-extrabold text-emerald-900">{approvedCount}</p>
             </div>
 
             <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/90 space-y-1">
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Modifications Needed</span>
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Modifications Needed</span>
               <p className="text-2xl font-extrabold text-slate-900">{rejectedCount}</p>
             </div>
           </div>
+          )}
         </div>
       </section>
 
       {/* MAIN LISTINGS CONTENT */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full space-y-6">
+
+        {!isEmailVerified ? (
+          <div className="bg-white rounded-3xl p-8 sm:p-10 border border-amber-200 shadow-sm space-y-5 max-w-2xl mx-auto text-center">
+            <div className="w-14 h-14 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+              <Mail className="w-7 h-7" />
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-xl font-extrabold text-slate-900">Please verify your email</h2>
+              <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                Your account is signed in as <strong>{currentUser.email}</strong>, but the email address is not verified yet. Verify it to unlock the dashboard — the add cards and your listings stay hidden until then.
+              </p>
+            </div>
+            {verifyMsg && (
+              <p className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">{verifyMsg}</p>
+            )}
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <button
+                type="button"
+                onClick={handleResendVerification}
+                className="px-6 py-3 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs rounded-xl shadow-md cursor-pointer"
+              >
+                {verificationSent ? 'Resend Verification Email' : 'Send Verification Email'}
+              </button>
+              <button
+                type="button"
+                onClick={handleRecheckVerification}
+                className="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer"
+              >
+                I&apos;ve Verified — Check Again
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* ADD A LISTING — signup-first cards (LocalePak pattern, BizNestUSA styling) */}
+            <section aria-label="Add a listing">
+              <h2 className="text-lg font-extrabold text-slate-900 flex items-center gap-2 mb-4">
+                <Plus className="w-5 h-5 text-blue-600" />
+                <span>Add a Listing</span>
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <Link href="/add-business" className="bg-white rounded-3xl border border-slate-200 p-6 hover:border-blue-500 hover:shadow-md transition-all space-y-3 group">
+                  <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center group-hover:scale-105 transition-transform">
+                    <Building2 className="w-6 h-6" />
+                  </div>
+                  <h3 className="font-extrabold text-slate-900">Add Business</h3>
+                  <p className="text-xs text-slate-500 leading-relaxed">List your business so customers across the United States can find it.</p>
+                  {userBusinesses.length > 0 && (
+                    <p className="text-xs font-bold text-slate-600">{userBusinesses.length} submitted · {approvedCount} approved · {pendingCount} pending</p>
+                  )}
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600">
+                    Add now <ArrowRight className="w-4 h-4" />
+                  </span>
+                </Link>
+                <Link href="/add-company" className="bg-white rounded-3xl border border-slate-200 p-6 hover:border-blue-500 hover:shadow-md transition-all space-y-3 group">
+                  <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center group-hover:scale-105 transition-transform">
+                    <Factory className="w-6 h-6" />
+                  </div>
+                  <h3 className="font-extrabold text-slate-900">Add Company</h3>
+                  <p className="text-xs text-slate-500 leading-relaxed">Add your company profile for hiring and employer visibility.</p>
+                  {companyCounts && companyCounts.total > 0 && (
+                    <p className="text-xs font-bold text-slate-600">{companyCounts.total} submitted · {companyCounts.approved} approved · {companyCounts.pending} pending</p>
+                  )}
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600">
+                    Add now <ArrowRight className="w-4 h-4" />
+                  </span>
+                </Link>
+                <Link href="/add-professional" className="bg-white rounded-3xl border border-slate-200 p-6 hover:border-blue-500 hover:shadow-md transition-all space-y-3 group">
+                  <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center group-hover:scale-105 transition-transform">
+                    <UserRound className="w-6 h-6" />
+                  </div>
+                  <h3 className="font-extrabold text-slate-900">Add Professional Profile</h3>
+                  <p className="text-xs text-slate-500 leading-relaxed">Create your professional profile to receive client inquiries.</p>
+                  {professionalCounts && professionalCounts.total > 0 && (
+                    <p className="text-xs font-bold text-slate-600">{professionalCounts.total} submitted · {professionalCounts.approved} approved · {professionalCounts.pending} pending</p>
+                  )}
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600">
+                    Add now <ArrowRight className="w-4 h-4" />
+                  </span>
+                </Link>
+                <Link href="/post-job" className="bg-white rounded-3xl border border-slate-200 p-6 hover:border-blue-500 hover:shadow-md transition-all space-y-3 group">
+                  <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center group-hover:scale-105 transition-transform">
+                    <Briefcase className="w-6 h-6" />
+                  </div>
+                  <h3 className="font-extrabold text-slate-900">Post a Job</h3>
+                  <p className="text-xs text-slate-500 leading-relaxed">Post an open role for candidates to apply to.</p>
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600">
+                    Post now <ArrowRight className="w-4 h-4" />
+                  </span>
+                </Link>
+              </div>
+            </section>
         
         {/* SUBMISSION CONFIRMATION ALERT (IF REDIRECTED FROM ADD BUSINESS) */}
         {showSubmittedAlert && (
@@ -945,7 +911,7 @@ function DashboardContent() {
             </div>
             <div className="space-y-1 flex-1">
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                <span className="text-xs font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
                   Profile Created &amp; Queued
                 </span>
               </div>
@@ -975,7 +941,7 @@ function DashboardContent() {
             <div className="space-y-2">
               <h2 className="text-xl font-extrabold text-slate-900">No Business Listings Registered Yet</h2>
               <p className="text-xs text-slate-500 max-w-md mx-auto">
-                You have not submitted any business profiles under <strong>{currentUser.email}</strong> yet. Register your business today to reach thousands of customers across the United States.
+                You have not submitted any business profiles under <strong>{currentUser.email}</strong> yet. Register your business today to reach customers across the United States.
               </p>
             </div>
             <div className="pt-2">
@@ -1012,22 +978,22 @@ function DashboardContent() {
                     <div className="space-y-3">
                       {/* Top Badges */}
                       <div className="flex flex-wrap justify-between items-center gap-2">
-                        <span className="text-[11px] font-extrabold uppercase px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
+                        <span className="text-xs font-extrabold uppercase px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
                           {biz.category || 'Services'}
                         </span>
 
                         {isApproved ? (
-                          <span className="text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1">
+                          <span className="text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1">
                             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                             <span>Approved &amp; Live</span>
                           </span>
                         ) : isPending ? (
-                          <span className="text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-300 flex items-center gap-1 animate-pulse">
+                          <span className="text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-300 flex items-center gap-1 animate-pulse">
                             <Clock className="w-3.5 h-3.5 text-amber-600" />
                             <span>Under Review (1–2 Hours)</span>
                           </span>
                         ) : (
-                          <span className="text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-red-50 text-red-800 border border-red-200 flex items-center gap-1">
+                          <span className="text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-red-50 text-red-800 border border-red-200 flex items-center gap-1">
                             <AlertCircle className="w-3.5 h-3.5 text-red-600" />
                             <span>Revision Needed</span>
                           </span>
@@ -1063,7 +1029,7 @@ function DashboardContent() {
                             <Clock className="w-4 h-4 text-amber-700 shrink-0" />
                             <span>In Moderation Queue</span>
                           </div>
-                          <p className="text-[11px] text-amber-800 leading-relaxed">
+                          <p className="text-xs text-amber-800 leading-relaxed">
                             Our editorial team is reviewing your business details for verification before publishing.
                           </p>
                         </div>
@@ -1072,7 +1038,7 @@ function DashboardContent() {
                       {isApproved && (
                         <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-2xl text-xs text-emerald-900 flex items-center gap-2">
                           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                          <span className="text-[11px] font-medium">
+                          <span className="text-xs font-medium">
                             Your business is live and searchable by customers nationwide!
                           </span>
                         </div>
@@ -1084,14 +1050,14 @@ function DashboardContent() {
                             <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
                             <span>Modification Notice</span>
                           </div>
-                          <p className="text-[11px] text-red-800">
+                          <p className="text-xs text-red-800">
                             {biz.rejectionReason || 'Please verify your contact and location details to satisfy directory guidelines.'}
                           </p>
                         </div>
                       )}
 
                       {/* Key details list */}
-                      <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-600 pt-1">
+                      <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 pt-1">
                         <div>
                           <span className="text-slate-400 block font-medium">Phone:</span>
                           <span className="font-bold text-slate-800">{biz.phone || 'N/A'}</span>
@@ -1129,7 +1095,7 @@ function DashboardContent() {
                         {/* Payment Reference */}
                         <div className="flex justify-between items-center pb-1.5 border-b border-slate-200/60">
                           <span className="font-semibold text-slate-500">Payment Reference:</span>
-                          <span className="font-mono font-bold text-slate-800 text-[11px]">
+                          <span className="font-mono font-bold text-slate-800 text-xs">
                             {biz.payment_reference || (biz as any).paymentDetails?.referenceNumber || biz.transactionRef || 'Pending Ref'}
                           </span>
                         </div>
@@ -1145,27 +1111,27 @@ function DashboardContent() {
                             
                             if (isPaid) {
                               return (
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
                                   Payment Verified
                                 </span>
                               )
                             }
                             if (isRejectedPayment) {
                               return (
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 border border-red-300">
+                                <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-800 border border-red-300">
                                   Payment Rejected
                                 </span>
                               )
                             }
                             if (isPending) {
                               return (
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                                <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">
                                   Payment Verification Pending
                                 </span>
                               )
                             }
                             return (
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                              <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">
                                 Pending Payment
                               </span>
                             )
@@ -1175,7 +1141,7 @@ function DashboardContent() {
                         {/* Screenshot Status */}
                         <div className="flex justify-between items-center pb-1.5 border-b border-slate-200/60">
                           <span className="font-semibold text-slate-500">Screenshot:</span>
-                          <span className="font-bold text-slate-800 text-[11px]">
+                          <span className="font-bold text-slate-800 text-xs">
                             {biz.paymentScreenshot || (biz as any).paymentDetails?.paymentScreenshot ? 'Submitted' : 'Not Submitted'}
                           </span>
                         </div>
@@ -1183,7 +1149,7 @@ function DashboardContent() {
                         {/* Separate Business Approval Status */}
                         <div className="flex justify-between items-center pb-1.5 border-b border-slate-200/60">
                           <span className="font-semibold text-slate-500">Business Status:</span>
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
                             isApproved
                               ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                               : isRejected
@@ -1200,20 +1166,20 @@ function DashboardContent() {
                             const quota = getPostQuotaInfo(biz)
                             if (biz.plan === 'review_1') {
                               return (
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-200 text-slate-600">
+                                <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-200 text-slate-600">
                                   Not Included in $1 Basic Plan
                                 </span>
                               )
                             }
                             if (biz.blog_post_feature_enabled || biz.paymentStatus === 'VERIFIED' || isApproved) {
                               return (
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                                <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200">
                                   {quota.label}
                                 </span>
                               )
                             }
                             return (
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                              <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
                                 Waiting for Admin Approval
                               </span>
                             )
@@ -1225,7 +1191,7 @@ function DashboardContent() {
                       {(biz as any).pendingEditRequest && (
                         <div className="p-3 bg-blue-50/80 border border-blue-200 rounded-2xl text-xs text-blue-900 flex items-center gap-2">
                           <Clock className="w-4 h-4 text-blue-600 shrink-0" />
-                          <span className="text-[11px] font-medium">
+                          <span className="text-xs font-medium">
                             Profile edit request is undergoing 24h moderation review.
                           </span>
                         </div>
@@ -1265,7 +1231,7 @@ function DashboardContent() {
                         if (biz.plan === 'review_1') {
                           return (
                             <div className="p-3 bg-blue-50/70 rounded-xl border border-blue-100 flex items-center justify-between gap-2 text-xs">
-                              <span className="text-[11px] text-blue-900 font-medium">
+                              <span className="text-xs text-blue-900 font-medium">
                                 Article posting &amp; editing available with Standard ($5) &amp; Authoritative ($10).
                               </span>
                               <button
@@ -1274,7 +1240,7 @@ function DashboardContent() {
                                   setActivePaymentBiz(biz)
                                   setSelectedPlan('priority_5')
                                 }}
-                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold rounded-lg shrink-0 cursor-pointer shadow-xs"
+                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shrink-0 cursor-pointer shadow-xs"
                               >
                                 Upgrade to $5
                               </button>
@@ -1311,7 +1277,7 @@ function DashboardContent() {
                       </button>
 
                       {isApproved ? (
-                        biz.plan === 'review_1' || biz.hasSinglePage === false ? (
+                        biz.hasSinglePage === false ? (
                           <Link
                             href={`/category/${biz.category ? biz.category.toLowerCase().replace(/[^a-z0-9]+/g, '-') : 'general'}`}
                             target="_blank"
@@ -1337,7 +1303,7 @@ function DashboardContent() {
                           type="button"
                           onClick={() => {
                             setActivePaymentBiz(biz)
-                            setSelectedPlan(biz.plan || 'priority_5')
+                            setSelectedPlan(biz.plan === 'authoritative_10' ? 'authoritative_10' : biz.plan === 'review_1' ? 'review_1' : 'priority_5')
                           }}
                           className="flex-1 px-3.5 py-2 text-xs font-bold rounded-xl border text-center flex items-center justify-center gap-1.5 transition cursor-pointer bg-blue-50 hover:bg-blue-100 text-blue-800 border-blue-200"
                         >
@@ -1373,7 +1339,7 @@ function DashboardContent() {
               ) : userPosts.length === 0 ? (
                 <div className="bg-white rounded-3xl p-8 border border-slate-200 text-center space-y-2">
                   <p className="text-xs font-bold text-slate-700">No business posts written yet.</p>
-                  <p className="text-[11px] text-slate-500 max-w-md mx-auto">
+                  <p className="text-xs text-slate-500 max-w-md mx-auto">
                     Businesses with the $5 Business Priority plan can publish up to 5 articles directly on BizNest USA with backlink attribution to their business listing.
                   </p>
                 </div>
@@ -1384,18 +1350,18 @@ function DashboardContent() {
                       <div className="space-y-1.5">
                         <div className="flex justify-between items-start gap-2">
                           <h4 className="font-extrabold text-slate-900 text-sm line-clamp-2">{post.title}</h4>
-                          <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[10px] font-bold shrink-0 capitalize">
+                          <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-xs font-bold shrink-0 capitalize">
                             {post.status}
                           </span>
                         </div>
                         <p className="text-xs text-slate-500">
                           Published for: <strong className="text-slate-800">{post.businessName}</strong>
                         </p>
-                        <p className="text-[11px] text-slate-600 line-clamp-2">{post.excerpt}</p>
+                        <p className="text-xs text-slate-600 line-clamp-2">{post.excerpt}</p>
                       </div>
 
                       <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
-                        <span className="text-[11px] text-slate-400">
+                        <span className="text-xs text-slate-400">
                           {post.createdAt ? new Date(post.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recently'}
                         </span>
                         <Link
@@ -1414,6 +1380,8 @@ function DashboardContent() {
             </div>
 
           </div>
+        )}
+          </>
         )}
 
       </main>
@@ -1531,7 +1499,7 @@ function DashboardContent() {
                   placeholder="Write your informative article content here. Provide valuable tips, advice, or service breakdowns for customers in your area..."
                   className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 leading-relaxed font-sans"
                 />
-                <span className="text-[10px] text-slate-400 block mt-1">
+                <span className="text-xs text-slate-400 block mt-1">
                   Character count: {postContent.length} / 50 min
                 </span>
               </div>
@@ -1547,17 +1515,18 @@ function DashboardContent() {
                   placeholder="e.g. emergency plumber, pipe leak, residential plumbing (optional, comma-separated)"
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 />
-                <span className="text-[10px] text-slate-400 block mt-0.5">
+                <span className="text-xs text-slate-400 block mt-0.5">
                   Optional. Do not keyword stuff. Enter natural search terms.
                 </span>
               </div>
 
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600 flex items-start gap-2">
                 <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-                <p className="text-[11px] leading-relaxed">
+                <p className="text-xs leading-relaxed">
                   Published articles are linked to your business listing, giving customers informative discovery points and establishing local authority.
                 </p>
               </div>
+
 
               <div className="pt-2 flex justify-end gap-2.5">
                 <button
@@ -1605,17 +1574,18 @@ function DashboardContent() {
 
             {/* PLAN SELECTION (3 PLANS) */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+
               <div
                 onClick={() => setSelectedPlan('review_1')}
                 className={`p-3 rounded-xl border-2 transition-all cursor-pointer ${
                   selectedPlan === 'review_1'
-                    ? 'border-blue-600 bg-blue-50/40 font-bold'
+                    ? 'border-emerald-600 bg-emerald-50/40 font-bold'
                     : 'border-slate-200 hover:border-slate-300'
                 }`}
               >
-                <p className="text-[11px] font-extrabold text-slate-800">$1 Basic Plan</p>
-                <p className="text-base font-black text-slate-900 mt-0.5">$1.00</p>
-                <p className="text-[10px] text-slate-500 mt-1">Category List/Grid view only. No single page.</p>
+                <p className="text-xs font-extrabold text-emerald-700">$1 Basic Plan</p>
+                <p className="text-base font-black text-emerald-600 mt-0.5">$1.00</p>
+                <p className="text-xs text-slate-500 mt-1">Submit only — dedicated page, no edit, no blog, no gallery</p>
               </div>
 
               <div
@@ -1626,9 +1596,9 @@ function DashboardContent() {
                     : 'border-slate-200 hover:border-slate-300'
                 }`}
               >
-                <p className="text-[11px] font-extrabold text-blue-700">$5 Standard Plan</p>
+                <p className="text-xs font-extrabold text-blue-700">$5 Standard Plan</p>
                 <p className="text-base font-black text-blue-600 mt-0.5">$5.00</p>
-                <p className="text-[10px] text-slate-500 mt-1">Single page created + dashboard profile editing + 5 posts</p>
+                <p className="text-xs text-slate-500 mt-1">Single page created + dashboard profile editing + 5 posts</p>
               </div>
 
               <div
@@ -1639,9 +1609,9 @@ function DashboardContent() {
                     : 'border-slate-200 hover:border-slate-300'
                 }`}
               >
-                <p className="text-[11px] font-extrabold text-indigo-700">$10 Authoritative</p>
+                <p className="text-xs font-extrabold text-indigo-700">$10 Authoritative</p>
                 <p className="text-base font-black text-indigo-600 mt-0.5">$10.00</p>
-                <p className="text-[10px] text-slate-500 mt-1">Single page + 24h approval + 10 posts / 60 days</p>
+                <p className="text-xs text-slate-500 mt-1">Single page + priority review + 10 posts / 60 days</p>
               </div>
             </div>
 
@@ -1649,7 +1619,7 @@ function DashboardContent() {
             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-2.5">
                 <div>
-                  <span className="text-[10px] font-extrabold uppercase text-slate-500 block tracking-wider">
+                  <span className="text-xs font-extrabold uppercase text-slate-500 block tracking-wider">
                     BizNestUSA Payment Reference
                   </span>
                   <span className="text-base font-mono font-black text-blue-700">
@@ -1692,7 +1662,7 @@ function DashboardContent() {
                     className="flex-1 py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 text-center"
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
-                    <span>Pay Securely with Payoneer ({selectedPlan === 'authoritative_10' ? '$10.00' : selectedPlan === 'priority_5' ? '$5.00' : '$1.00'})</span>
+                    <span>Pay Securely with Payoneer (${BUSINESS_PLANS[selectedPlan].price.toFixed(2)})</span>
                   </a>
                 ) : (
                   <div className="flex-1 py-2.5 px-4 bg-slate-200 text-slate-600 font-bold text-xs rounded-xl text-center">
@@ -1712,7 +1682,7 @@ function DashboardContent() {
             </div>
 
             <form onSubmit={handleSubmitProof} className="space-y-3.5">
-              <p className="text-[11px] text-slate-600 leading-relaxed">
+              <p className="text-xs text-slate-600 leading-relaxed">
                 After completing payment in Payoneer, attach your receipt screenshot below. Your payment will be manually verified by our team before your listing is approved.
               </p>
 
@@ -1757,7 +1727,7 @@ function DashboardContent() {
                       />
                       <div>
                         <p className="text-xs font-bold text-slate-900">Proof Attached</p>
-                        <p className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
+                        <p className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
                           <CheckCircle2 className="w-3 h-3" /> Ready for verification
                         </p>
                       </div>
@@ -1774,7 +1744,7 @@ function DashboardContent() {
                   <label className="p-4 border-2 border-dashed border-slate-300 hover:border-blue-500 bg-slate-50/70 hover:bg-blue-50/30 rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-colors text-center">
                     <Upload className="w-4 h-4 text-blue-600" />
                     <span className="text-xs font-bold text-slate-700">Click to upload transfer screenshot</span>
-                    <span className="text-[10px] text-slate-400">(PNG, JPG, WEBP)</span>
+                    <span className="text-xs text-slate-400">(PNG, JPG, WEBP)</span>
                     <input
                       type="file"
                       accept="image/png,image/jpeg,image/webp"
@@ -1835,7 +1805,7 @@ function DashboardContent() {
                 <Clock className="w-4 h-4 text-amber-700 shrink-0" />
                 <span>24-Hour Review &amp; Moderation Notice</span>
               </div>
-              <p className="text-[11px] text-amber-800 leading-relaxed">
+              <p className="text-xs text-amber-800 leading-relaxed">
                 You can edit your personal representative info and business profile details below. In accordance with platform compliance, all submitted modifications will be reviewed by site admin and <strong>applied after 24 hours</strong>.
               </p>
             </div>
@@ -1935,7 +1905,7 @@ function DashboardContent() {
                 </span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">Google Business Profile (Maps URL)</label>
+                    <label className="block text-xs font-semibold text-slate-700 mb-0.5">Google Business Profile (Maps URL)</label>
                     <input
                       type="url"
                       placeholder="https://maps.google.com/?cid=..."
@@ -1945,7 +1915,7 @@ function DashboardContent() {
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">Facebook Page URL</label>
+                    <label className="block text-xs font-semibold text-slate-700 mb-0.5">Facebook Page URL</label>
                     <input
                       type="url"
                       placeholder="https://facebook.com/..."
@@ -1955,7 +1925,7 @@ function DashboardContent() {
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">Instagram Profile URL</label>
+                    <label className="block text-xs font-semibold text-slate-700 mb-0.5">Instagram Profile URL</label>
                     <input
                       type="url"
                       placeholder="https://instagram.com/..."
@@ -1965,7 +1935,7 @@ function DashboardContent() {
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">LinkedIn Profile / Company</label>
+                    <label className="block text-xs font-semibold text-slate-700 mb-0.5">LinkedIn Profile / Company</label>
                     <input
                       type="url"
                       placeholder="https://linkedin.com/company/..."
@@ -1975,6 +1945,49 @@ function DashboardContent() {
                     />
                   </div>
                 </div>
+              {/* PHOTO GALLERY — $10 AUTHORITATIVE BENEFIT ONLY */}
+              {editingBiz.plan === 'authoritative_10' && (
+                <div className="p-3.5 bg-emerald-50/60 border border-emerald-200/80 rounded-2xl space-y-3">
+                  <span className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                    <ImageIcon className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Photo Gallery — $10 Authoritative Benefit (up to 5 photos)</span>
+                  </span>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Add or remove listing photos. Changes are reviewed by admin and applied after 24 hours, like other edits.
+                  </p>
+                  {(editFormData.gallery || []).length > 0 && (
+                    <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                      {(editFormData.gallery || []).map((photo, photoIdx) => (
+                        <div key={photoIdx} className="relative w-full aspect-square rounded-xl overflow-hidden border border-slate-200 bg-white">
+                          <img src={photo} alt={`Business photo ${photoIdx + 1}`} className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveEditGalleryPhoto(photoIdx)}
+                            className="absolute top-1 right-1 p-1.5 min-h-[44px] min-w-[44px] flex items-center justify-center bg-white/90 text-red-600 rounded-lg shadow-xs hover:bg-red-50 cursor-pointer"
+                            title="Remove photo"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {(editFormData.gallery || []).length < 5 && (
+                    <label className="px-4 py-2.5 min-h-[44px] bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-xs rounded-xl cursor-pointer transition shadow-2xs inline-flex items-center gap-2">
+                      <Upload className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>{(editFormData.gallery || []).length === 0 ? 'Add Photos (PNG, JPG, WebP — max 10MB each)' : `Add More Photos (${5 - (editFormData.gallery || []).length} left)`}</span>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/jpg,image/webp"
+                        multiple
+                        onChange={handleEditGalleryFileChange}
+                        className="hidden"
+                      />
+                    </label>
+                  )}
+                </div>
+              )}
+
               </div>
 
               <div className="pt-2 flex justify-end gap-2.5">

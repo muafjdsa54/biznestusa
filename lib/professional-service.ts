@@ -4,7 +4,7 @@ import { db } from './firebase'
 import { collection, getDocs, query, where, limit, addDoc, doc, updateDoc, deleteDoc, setDoc, orderBy } from 'firebase/firestore'
 import { normalizeSlug } from './db-service'
 import { sanitizeText, sanitizeUrl, sanitizePhone, sanitizePersonName } from './sanitizer'
-import { isPakistaniEntity } from './directory-helpers'
+import { computeCitySlugs, isPakistaniEntity } from './directory-helpers'
 
 /**
  * Generate clean SEO friendly slug for professionals.
@@ -87,7 +87,9 @@ export function normalizeProfessionalDoc(docId: string, data: Partial<Profession
   const proName = data.fullName || data.name || 'Verified Professional'
   const proCities = (data as any).cities || (data.city ? [data.city] : [])
   const proUsername = data.username || data.slug || generateProfessionalSlug(proName, data.title, data.profession, proCities)
-  const itemStatus = data.status || 'approved'
+  // P0-3: a doc with NO status must NEVER render as approved. A missing
+  // status (or profileStatus) defaults to pending, never approved.
+  const itemStatus = data.status || 'pending'
   const itemVerified = data.verified ?? (data.verificationStatus === 'VERIFIED' ? true : false)
   const itemVerificationStatus = data.verificationStatus || (itemVerified ? 'VERIFIED' : 'UNVERIFIED')
   const itemProfileStatus = data.profileStatus || (itemStatus === 'approved' ? 'APPROVED' : itemStatus === 'rejected' ? 'REJECTED' : 'PENDING')
@@ -103,9 +105,14 @@ export function normalizeProfessionalDoc(docId: string, data: Partial<Profession
     profession: data.profession || 'Specialist',
     category: data.category || 'Professional / Job Seeker',
     specialization: data.specialization || 'General',
-    city: data.city || 'New York',
-    state: (data as any).state || data.province || 'New York',
-    province: data.province || 'New York',
+    city: data.city || '',
+    // Denormalized canonical city slugs for future Firestore cursor
+    // pagination. Always recomputed from the city fields; no filter
+    // reads it yet, so it changes no rendered output. (The normalizer
+    // intentionally still does NOT return cities[] — out of scope.)
+    citySlugs: computeCitySlugs(data),
+    state: (data as any).state || data.province || '',
+    province: data.province || '',
     country: data.country || 'United States',
     address: data.address || '',
     googleMapUrl: data.googleMapUrl || '',
@@ -115,7 +122,7 @@ export function normalizeProfessionalDoc(docId: string, data: Partial<Profession
     availability: data.availability || 'Available',
     gender: data.gender || '',
     avatar: data.avatar || '',
-    coverImage: data.coverImage || 'https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=1200&q=80',
+    coverImage: data.coverImage || '',
     bio: data.bio || data.about || 'Verified professional profile on BizNestUSA.',
     about: data.about || data.bio || '',
     skills: data.skills && data.skills.length > 0 ? data.skills : ['Professional Services'],
@@ -144,7 +151,7 @@ export function normalizeProfessionalDoc(docId: string, data: Partial<Profession
 
     education: data.education || [],
     certifications: data.certifications || [],
-    languages: data.languages || ['Urdu', 'English'],
+    languages: data.languages || [],
     previousExperience: data.previousExperience || [],
     servicesOffered: data.servicesOffered || [],
     reviews: data.reviews && data.reviews.length > 0 ? data.reviews : [],
@@ -175,9 +182,18 @@ export function normalizeProfessionalDoc(docId: string, data: Partial<Profession
 /**
  * Fetch all professionals. If includePending is false, returns ONLY approved profiles.
  */
-export const getAllProfessionals = cache(async function getAllProfessionals(includePending: boolean = false): Promise<ProfessionalItem[]> {
+export const getAllProfessionals = cache(async function getAllProfessionals(includePending: boolean = false, pageSize?: number): Promise<ProfessionalItem[]> {
   try {
-    const querySnapshot = await getDocs(collection(db, 'professionals'))
+    // P1-2: public reads fetch APPROVED listings only. includePending=true
+    // is the separate owner/admin read path and keeps the unfiltered query.
+    // Perf: the Firestore read is bounded with limit() — the old query had
+    // no limit and pulled the whole collection on every list/search page.
+    // Admin reads default to a higher cap so pending profiles are not
+    // silently hidden.
+    const cap = pageSize ?? (includePending ? 500 : 100)
+    const querySnapshot = await getDocs(includePending
+      ? query(collection(db, 'professionals'), limit(cap))
+      : query(collection(db, 'professionals'), where('status', '==', 'approved'), limit(cap)))
     if (!querySnapshot.empty) {
       const firestoreItems: ProfessionalItem[] = []
       querySnapshot.forEach((docSnap) => {
@@ -212,7 +228,7 @@ export const getAllProfessionals = cache(async function getAllProfessionals(incl
     return validPros
   }
 
-  return validPros.filter(p => (p.status || 'approved') === 'approved' && (p.profileStatus || 'APPROVED') === 'APPROVED')
+  return validPros.filter(p => (p.status || 'pending') === 'approved' && (p.profileStatus || 'PENDING') === 'APPROVED')
 })
 
 export async function getPendingProfessionals(): Promise<ProfessionalItem[]> {
@@ -225,10 +241,11 @@ export const getProfessionalByUsername = cache(async function getProfessionalByU
   const normalized = rawInput.toLowerCase()
   if (!normalized) return null
 
-  // 1. First check Firestore live to ensure latest approval state is reflected immediately
+  // 1. First check Firestore live to ensure latest approval state is reflected immediately.
+  // P1-2: public lookup fetches APPROVED profiles only.
   try {
     // Try where username == normalized or original
-    const q = query(collection(db, 'professionals'), where('username', '==', normalized), limit(1))
+    const q = query(collection(db, 'professionals'), where('username', '==', normalized), where('status', '==', 'approved'), limit(1))
     const snap = await getDocs(q)
     if (!snap.empty) {
       const docSnap = snap.docs[0]
@@ -245,7 +262,7 @@ export const getProfessionalByUsername = cache(async function getProfessionalByU
     }
 
     // Secondary fallback: query by 'slug' field
-    const qSlug = query(collection(db, 'professionals'), where('slug', '==', normalized), limit(1))
+    const qSlug = query(collection(db, 'professionals'), where('slug', '==', normalized), where('status', '==', 'approved'), limit(1))
     const snapSlug = await getDocs(qSlug)
     if (!snapSlug.empty) {
       const docSnap = snapSlug.docs[0]
@@ -262,7 +279,7 @@ export const getProfessionalByUsername = cache(async function getProfessionalByU
 
     // Tertiary fallback: query direct by doc ID
     try {
-      const directDoc = await getDocs(query(collection(db, 'professionals'), where('id', '==', rawInput), limit(1)))
+      const directDoc = await getDocs(query(collection(db, 'professionals'), where('id', '==', rawInput), where('status', '==', 'approved'), limit(1)))
       if (!directDoc.empty) {
         const item = normalizeProfessionalDoc(directDoc.docs[0].id, directDoc.docs[0].data())
         if ((item.status === 'approved' || item.profileStatus === 'APPROVED') && !isPakistaniEntity(item)) {
@@ -301,7 +318,7 @@ export const getProfessionalByUsername = cache(async function getProfessionalByU
     )
   })
 
-  if (cached && (cached.status || 'approved') === 'approved' && (cached.profileStatus || 'APPROVED') === 'APPROVED') {
+  if (cached && (cached.status || 'pending') === 'approved' && (cached.profileStatus || 'PENDING') === 'APPROVED') {
     return cached
   }
 
@@ -358,9 +375,14 @@ export async function saveProfessionalToDatabase(proData: Partial<ProfessionalIt
     profession: sanitizeText(profession || 'Specialist', 80),
     category: sanitizeText(proData.category || 'Professional / Job Seeker', 80),
     specialization: sanitizeText(proData.specialization || profession, 120),
-    city: sanitizeText(proData.city || 'New York', 60),
-    state: sanitizeText((proData as any).state || proData.province || 'New York', 60),
-    province: sanitizeText(proData.province || 'New York', 60),
+    // No invented location defaults: a blank city/state stays blank
+    // instead of defaulting to 'New York'.
+    city: sanitizeText(proData.city || '', 60),
+    // Denormalized canonical city slugs for future Firestore cursor
+    // pagination (persisted via the firestorePayload spread below).
+    citySlugs: computeCitySlugs({ city: proData.city || '', cities: proCities }),
+    state: sanitizeText((proData as any).state || proData.province || '', 60),
+    province: sanitizeText(proData.province || '', 60),
     country: 'United States',
     address: sanitizeText(proData.address || '', 250),
     googleMapUrl: sanitizeUrl(proData.googleMapUrl || ''),
@@ -370,17 +392,20 @@ export async function saveProfessionalToDatabase(proData: Partial<ProfessionalIt
     availability: sanitizeText(proData.availability || 'Open to Work', 60),
     gender: sanitizeText(proData.gender || '', 20),
     avatar: sanitizeUrl(proData.avatar || ''),
-    coverImage: sanitizeUrl(proData.coverImage || 'https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=1200&q=80'),
+    // No invented cover default: no upload means no cover image, not a
+    // generic stock photo on every profile.
+    coverImage: sanitizeUrl(proData.coverImage || ''),
     bio: sanitizeText(proData.bio || `Professional profile on BizNestUSA.`, 5000),
     about: sanitizeText(proData.about || proData.bio || '', 5000),
     skills: Array.isArray(proData.skills) ? proData.skills.map(s => sanitizeText(s, 50)) : [sanitizeText(profession, 50)],
     experienceYears: Number(proData.experienceYears) || 0,
     verified: false, // Verification managed via admin approval
     isFeatured: false,
-    status: 'approved', // Auto-approved upon creation so public profile is immediately live
-    profileStatus: 'APPROVED',
-    approvedAt: nowIso,
-    approvedBy: 'system_auto_approved',
+    // P0-3: professionals are created PENDING like businesses/companies/
+    // jobs — admin approval is required before the profile goes live.
+    // Any status/profileStatus the caller passes in is ignored here.
+    status: 'pending',
+    profileStatus: 'PENDING',
     verificationStatus: 'UNVERIFIED',
     verificationRequestStatus: 'NOT_REQUESTED',
     submittedAt: nowIso,
@@ -399,7 +424,7 @@ export async function saveProfessionalToDatabase(proData: Partial<ProfessionalIt
       year: sanitizeText(e.year, 20),
     })) : [],
     certifications: Array.isArray(proData.certifications) ? proData.certifications.map((c: any) => sanitizeText(c, 150)) : [],
-    languages: Array.isArray(proData.languages) ? proData.languages.map((l: any) => sanitizeText(l, 40)) : ['English'],
+    languages: Array.isArray(proData.languages) ? proData.languages.map((l: any) => sanitizeText(l, 40)) : [],
     previousExperience: Array.isArray(proData.previousExperience) ? proData.previousExperience.map((pe: any) => ({
       role: sanitizeText(pe.role, 100),
       company: sanitizeText(pe.company, 120),
@@ -437,22 +462,26 @@ export async function saveProfessionalToDatabase(proData: Partial<ProfessionalIt
   // Update memory cache
   memoryProfessionalsCache = [newPro, ...memoryProfessionalsCache.filter(p => p.username !== username && p.id !== newProId)]
 
+  // P0-3 / hardened rules: the create may not carry privileged fields
+  // (verified, isFeatured). Strip them from the Firestore payload —
+  // they are set only by the admin approve/verify flow.
+  const firestorePayload: Record<string, any> = { ...newPro, createdAt: nowIso }
+  delete firestorePayload.verified
+  delete firestorePayload.isFeatured
+
   // Persist to Firestore with explicit document ID using setDoc
   try {
     const docRef = doc(db, 'professionals', newProId)
-    await setDoc(docRef, {
-      ...newPro,
-      createdAt: nowIso
-    })
+    await setDoc(docRef, firestorePayload)
   } catch (err) {
     console.warn('Firestore saveProfessionalToDatabase error, attempting addDoc fallback:', err)
     try {
-      await addDoc(collection(db, 'professionals'), {
-        ...newPro,
-        createdAt: nowIso
-      })
+      await addDoc(collection(db, 'professionals'), firestorePayload)
     } catch (innerErr) {
+      // P1-5: surface the persistence failure instead of returning
+      // success while nothing was saved server-side.
       console.warn('Firestore fallback addDoc failed:', innerErr)
+      throw new Error('Professional profile could not be saved. Please try again.')
     }
   }
 
@@ -498,6 +527,20 @@ async function updateProfessionalInFirestore(idOrUsername: string, fieldsToUpdat
 export async function approveProfessional(id: string, adminUid: string): Promise<boolean> {
   const norm = id.toLowerCase().trim()
   const idx = memoryProfessionalsCache.findIndex(p => p.id === id || p.username.toLowerCase() === norm || p.slug?.toLowerCase() === norm)
+  const cached = idx !== -1 ? memoryProfessionalsCache[idx] : undefined
+  // PRICING (b) — NO free listings: admin approves ONLY submissions with
+  // verified payment. Block while a recorded payment is unverified
+  // ('awaiting_payment' / 'payment_rejected' and this repo's equivalents).
+  // Profiles have no payment step (verification payment is a separate
+  // flow), so no paymentStatus normally exists and the guard is dormant;
+  // it bites only if a paymentStatus is ever recorded on the profile.
+  // verified is NOT set here — verification comes only from the real
+  // verification path.
+  const paymentStatus = String((cached as any)?.paymentStatus || '').trim().toLowerCase()
+  if (paymentStatus && paymentStatus !== 'verified' && paymentStatus !== 'paid') {
+    console.warn(`Approve blocked for professional ${id}: payment not verified (paymentStatus: '${(cached as any)?.paymentStatus || ''}').`)
+    return false
+  }
   if (idx !== -1) {
     memoryProfessionalsCache[idx].status = 'approved'
     memoryProfessionalsCache[idx].profileStatus = 'APPROVED'
@@ -617,7 +660,9 @@ export async function unverifyProfessional(idOrUsername: string, adminUid: strin
  */
 export async function getVerificationRequests(): Promise<ProfessionalVerificationRequest[]> {
   try {
-    const querySnapshot = await getDocs(collection(db, 'professional_verifications'))
+    // Perf: bounded read (admin-only collection; 200 cap is far above
+    // the live count and keeps the query from growing unbounded).
+    const querySnapshot = await getDocs(query(collection(db, 'professional_verifications'), limit(200)))
     if (!querySnapshot.empty) {
       const items: ProfessionalVerificationRequest[] = []
       querySnapshot.forEach((docSnap) => {
@@ -641,7 +686,7 @@ export async function getVerificationRequests(): Promise<ProfessionalVerificatio
 export async function submitVerificationRequest(
   idOrUsername: string,
   paymentDetails: ProfessionalVerificationPaymentDetails
-): Promise<{ success: boolean; request: ProfessionalVerificationRequest }> {
+): Promise<{ success: boolean; request: ProfessionalVerificationRequest; error?: string }> {
   const pro = memoryProfessionalsCache.find(p => p.id === idOrUsername || p.username === idOrUsername)
   const now = new Date().toISOString()
   const reqId = 'ver-req-' + Date.now()
@@ -652,7 +697,7 @@ export async function submitVerificationRequest(
     username: pro?.username || idOrUsername,
     proName: pro?.name || 'Professional Candidate',
     profession: pro?.profession || 'Specialist',
-    city: pro?.city || 'New York',
+    city: pro?.city || '',
     avatar: pro?.avatar || '',
     amount: paymentDetails.amount || 25,
     paymentMethod: paymentDetails.paymentMethod || 'Credit Card / Online Verification',
@@ -671,7 +716,14 @@ export async function submitVerificationRequest(
   }
 
   try {
-    await setDoc(doc(db, 'professional_verifications', reqId), newRequest)
+    // P1-5 / hardened rules: the verification-request create must carry
+    // the caller's identity (userId and/or email matching the verified
+    // auth token), or the rules deny the write.
+    await setDoc(doc(db, 'professional_verifications', reqId), {
+      ...newRequest,
+      userId: pro?.userId || '',
+      email: pro?.email || ''
+    })
     const proDocId = pro?.id || idOrUsername
     if (proDocId) {
       const docRef = doc(db, 'professionals', proDocId)
@@ -681,7 +733,15 @@ export async function submitVerificationRequest(
       })
     }
   } catch (err) {
+    // P1-5: surface the persistence failure instead of returning
+    // success while nothing was saved server-side.
     console.warn('Firestore submitVerificationRequest error:', err)
+    memoryVerificationRequestsCache = memoryVerificationRequestsCache.filter(r => r.id !== reqId)
+    if (pro) {
+      pro.verificationRequestStatus = 'NOT_REQUESTED'
+      pro.verificationPaymentDetails = undefined
+    }
+    return { success: false, request: newRequest, error: 'Verification request could not be saved. Please try again.' }
   }
 
   return { success: true, request: newRequest }
@@ -742,20 +802,6 @@ export async function approveVerificationRequest(requestId: string, adminUid: st
 export async function rejectVerificationRequest(requestId: string, reason: string, adminUid: string): Promise<boolean> {
   const now = new Date().toISOString()
   const req = memoryVerificationRequestsCache.find(r => r.id === requestId)
-  if (req) {
-    req.status = 'REJECTED'
-    req.rejectionReason = reason
-    req.reviewedAt = now
-    req.reviewedBy = adminUid
-
-    // Update corresponding professional
-    const pro = memoryProfessionalsCache.find(p => p.id === req.professionalProfileId || p.username === req.username)
-    if (pro) {
-      pro.verified = false
-      pro.verificationStatus = 'UNVERIFIED'
-      pro.verificationRequestStatus = 'REJECTED'
-    }
-  }
 
   try {
     const reqRef = doc(db, 'professional_verifications', requestId)
@@ -773,7 +819,23 @@ export async function rejectVerificationRequest(requestId: string, reason: strin
       })
     }
   } catch (err) {
-    console.warn('Firestore rejectVerificationRequest error:', err)
+    console.error('Firestore rejectVerificationRequest error:', err)
+    return false
+  }
+
+  if (req) {
+    req.status = 'REJECTED'
+    req.rejectionReason = reason
+    req.reviewedAt = now
+    req.reviewedBy = adminUid
+
+    // Update corresponding professional
+    const pro = memoryProfessionalsCache.find(p => p.id === req.professionalProfileId || p.username === req.username)
+    if (pro) {
+      pro.verified = false
+      pro.verificationStatus = 'UNVERIFIED'
+      pro.verificationRequestStatus = 'REJECTED'
+    }
   }
 
   return true
@@ -795,7 +857,8 @@ export async function updateProfessionalProfileSecure(
   }
 
   // Security Check: An approved unverified user CANNOT edit their public profile!
-  const isApproved = (pro.status || 'approved') === 'approved'
+  // P0-3: a missing status is pending, never approved.
+  const isApproved = (pro.status || 'pending') === 'approved'
   const isVerified = pro.verified === true || pro.verificationStatus === 'VERIFIED'
 
   if (isApproved && !isVerified && !isAdmin) {
@@ -827,7 +890,10 @@ export async function updateProfessionalProfileSecure(
     const docRef = doc(db, 'professionals', pro.id || idOrUsername)
     await updateDoc(docRef, updates)
   } catch (err) {
+    // P1-5: surface the persistence failure instead of reporting success.
+    if (idx !== -1) memoryProfessionalsCache[idx] = pro
     console.warn('Firestore updateProfessionalProfileSecure error:', err)
+    return { success: false, message: 'Profile could not be saved. Please try again.' }
   }
 
   return { success: true, message: 'Profile updated successfully.', data: updatedPro }
@@ -875,7 +941,10 @@ export async function saveProfessionalInquiry(data: {
     const docRef = doc(db, 'professional_inquiries', newInquiry.id)
     await setDoc(docRef, newInquiry)
   } catch (err) {
+    // P1-5: surface the persistence failure instead of returning success.
     console.warn('Firestore saveProfessionalInquiry error:', err)
+    memoryInquiriesCache = memoryInquiriesCache.filter(i => i.id !== newInquiry.id)
+    return { success: false, error: 'Inquiry could not be sent. Please try again.' }
   }
 
   return { success: true, inquiry: newInquiry }
@@ -883,7 +952,9 @@ export async function saveProfessionalInquiry(data: {
 
 export async function getProfessionalInquiries(proUsernameOrId?: string): Promise<ProfessionalInquiry[]> {
   try {
-    const querySnapshot = await getDocs(collection(db, 'professional_inquiries'))
+    // Perf: bounded read (admin-only collection; 200 cap keeps the query
+    // from growing unbounded as inquiries accumulate).
+    const querySnapshot = await getDocs(query(collection(db, 'professional_inquiries'), limit(200)))
     const items: ProfessionalInquiry[] = []
     querySnapshot.forEach(docSnap => {
       items.push({ id: docSnap.id, ...(docSnap.data() as any) })

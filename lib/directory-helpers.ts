@@ -83,6 +83,47 @@ export function normalizeCitySlug(city: string): string {
   return CITY_SLUG_ALIASES[raw] ?? raw
 }
 
+/**
+ * Denormalized canonical city slugs for an entity (business / job /
+ * professional), groundwork for future Firestore cursor pagination
+ * (where('citySlugs', 'array-contains', slug) + limit + startAfter).
+ * Same semantics as the revalidation helper in lib/revalidate.ts: the
+ * primary city + cities[] + branch locations[], alias-normalized via
+ * normalizeCitySlug, deduped in first-seen order, with empty /
+ * Pakistani / non-US entries dropped (those city pages 404 by design).
+ * Uses ONLY the existing helpers — no new matching logic.
+ *
+ * NO caller filters on this field yet: list pages keep their current
+ * in-memory slug filtering, so adding it changes no rendered output,
+ * sitemap entry, or filter result. The normalizer ALWAYS recomputes it
+ * from the city fields (source of truth) rather than trusting a stored
+ * copy — the stored copy exists only for the future query. Caveat for
+ * that future work: edit/approve paths that change cities do NOT yet
+ * recompute the stored copy, so a backfill must recompute it (and any
+ * query-time use must tolerate a stale stored copy until then).
+ * Seeds carry no citySlugs today (0/292); new writes persist it.
+ */
+export function computeCitySlugs(
+  item: { city?: string | null; cities?: (string | null)[] | null; locations?: { city?: string | null }[] | null },
+): string[] {
+  const raw: (string | null | undefined)[] = [
+    item.city,
+    ...(item.cities || []),
+    ...((item.locations || []).map(l => l.city)),
+  ]
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const c of raw) {
+    if (!c) continue
+    const slug = normalizeCitySlug(c)
+    if (!slug || isPakistaniCity(slug) || !isUsCity(slug)) continue
+    if (seen.has(slug)) continue
+    seen.add(slug)
+    out.push(slug)
+  }
+  return out
+}
+
 export function isPakistaniCity(cityOrSlug?: string | null): boolean {
   if (!cityOrSlug) return false
   const norm = normalizeCitySlug(cityOrSlug)
@@ -160,7 +201,11 @@ export function filterBusinessesByCategory(businesses: BusinessItem[], categoryI
  * Filter businesses for a city, checking main city, cities array, and branch locations.
  */
 export function filterBusinessesByCity(businesses: BusinessItem[], citySlug: string): BusinessItem[] {
-  const normCity = citySlug.toLowerCase()
+  // Alias-aware: the requested slug must be normalized the same way the
+  // business cities are, or aliased slugs never match — /city/new-york
+  // rendered with 0 businesses while /city/new-york-city listed 24, because
+  // normalizeCitySlug('New York') is 'new-york-city', not 'new-york'.
+  const normCity = normalizeCitySlug(citySlug)
   return businesses.filter(b => {
     const mainCitySlug = normalizeCitySlug(b.city)
     if (mainCitySlug === normCity) return true
@@ -353,7 +398,10 @@ export function getCitiesWithListingsForCategory(businesses: BusinessItem[], cat
  * Returns distinct categories that have listings in a given city.
  */
 export function getCategoriesWithListingsForCity(businesses: BusinessItem[], citySlug: string): { categorySlug: string; categoryName: string; count: number }[] {
-  const normCity = citySlug.toLowerCase()
+  // Same alias bug as filterBusinessesByCity: pair citySlugs are canonical
+  // (normalizeCitySlug applied at build), so the requested slug must be
+  // normalized too or aliased cities show no categories.
+  const normCity = normalizeCitySlug(citySlug)
   const pairs = getPopulatedCategoryCityPairs(businesses)
   return pairs
     .filter(p => p.citySlug === normCity)

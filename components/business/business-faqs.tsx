@@ -32,8 +32,8 @@ export default function BusinessFaqsSection({
       answer: `You can reach out directly via the phone number, email, or official website listed on this profile. Consultations and estimates are typically arranged promptly during standard business hours.`
     },
     {
-      question: `Is ${businessName} licensed, verified, and operating in ${city}?`,
-      answer: `Yes, ${businessName} is registered and verified on the BizNest USA commercial directory. Our team undergoes background validation to ensure authentic customer representation.`
+      question: `Is ${businessName} listed on BizNestUSA?`,
+      answer: `${businessName} is listed on BizNestUSA with the contact details shown on this profile. Listings are reviewed before publication — a listing is not proof of a license, so confirm any license directly with the issuing authority.`
     }
   ]
 
@@ -57,7 +57,7 @@ export default function BusinessFaqsSection({
             </h2>
           </div>
           <p className="text-xs text-slate-500 mt-1 pl-8">
-            Common questions answered directly by the management at {businessName}.
+            Common questions about this listing.
           </p>
         </div>
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-50 border border-slate-200 text-[11px] font-semibold text-slate-600 self-start sm:self-center">

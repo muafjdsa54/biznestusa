@@ -82,10 +82,10 @@ const DEFAULT_SETTINGS: SiteSettings = {
   supportEmail: 'support@biznestusa.com',
   supportPhone: '',
   officeAddress: '100 Wall Street, Suite 1200, New York, NY 10005',
-  announcementText: 'Welcome to America\'s verified directory platform. Free listings for all US businesses and professionals.',
+  announcementText: 'Welcome to America\'s business directory platform. List your business and connect with customers across the United States.',
   announcementEnabled: false,
   defaultMetaTitle: 'BizNest USA | American Business Directory, Professional Profiles & Jobs',
-  defaultMetaDescription: 'Discover verified local businesses, licensed trade professionals, and employment opportunities across all 50 states.',
+  defaultMetaDescription: 'Discover local businesses, licensed trade professionals, and employment opportunities across 39 states and Washington, D.C.',
   socialLinks: {
     linkedin: 'https://linkedin.com/company/biznestusa',
     twitter: 'https://twitter.com/biznestusa'
@@ -115,7 +115,7 @@ export async function getCmsCategories(): Promise<CmsCategory[]> {
     description: cat.desc || '',
     icon: cat.icon,
     subcategories: cat.subcategories || [],
-    seoTitle: `${cat.name} in the USA | Verified Directory`,
+    seoTitle: `${cat.name} in the USA | BizNestUSA Directory`,
     metaDescription: `Find top-rated ${cat.name} services, contractors, and companies nationwide on BizNest USA.`,
     featured: true
   }))
@@ -179,7 +179,7 @@ export async function getCmsLocations(): Promise<CmsLocation[]> {
       state: 'United States',
       stateCode: 'US',
       slug,
-      description: `Explore verified businesses, licensed contractors, and open job roles across ${city}.`,
+      description: `Explore businesses, licensed contractors, and open job roles across ${city}.`,
       heroHeading: `Best Local Businesses & Services in ${city}`,
       featured: true
     }
@@ -246,7 +246,7 @@ export async function getCmsArticles(): Promise<CmsArticle[]> {
       status: 'published',
       publishedAt: '2026-09-05',
       seoTitle: 'Guide to Hiring Independent Professionals in the USA',
-      metaDescription: 'Evaluate verified talent portfolios and hire top independent consultants and specialists in the United States.'
+      metaDescription: 'Evaluate talent portfolios and hire top independent consultants and specialists in the United States.'
     },
     {
       id: 'small-business-directory-seo-guide-usa',

@@ -5,7 +5,7 @@ import { BusinessPlan } from '@/lib/data'
 export async function GET(req: NextRequest) {
   try {
     const searchParams = req.nextUrl.searchParams
-    const plan = (searchParams.get('plan') || 'review_1') as BusinessPlan
+    const plan = (searchParams.get('plan') || 'priority_5') as BusinessPlan
 
     const paymentUrl = getPayoneerPaymentUrl(plan)
 

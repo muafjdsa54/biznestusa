@@ -45,7 +45,7 @@ export default function CareersPage() {
               Careers at BizNestUSA: Build the Future of Commerce
             </h1>
             <p className="mt-3 text-slate-300 text-sm sm:text-base max-w-2xl mx-auto leading-relaxed">
-              Join a high-velocity team of software engineers, directory researchers, technical SEO strategists, and operations specialists connecting millions of Americans with verified local businesses.
+              Join a high-velocity team of software engineers, directory researchers, technical SEO strategists, and operations specialists connecting Americans with local businesses.
             </p>
           </div>
         </section>
@@ -57,7 +57,7 @@ export default function CareersPage() {
               Why Join the BizNestUSA Team?
             </h2>
             <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-              At BizNestUSA, our mission is to provide transparent, reliable, and verified business data to consumers and enterprises across all 50 states. We operate as an autonomous, remote-first team committed to engineering excellence, operational integrity, and high-impact software craft.
+              At BizNestUSA, our mission is to provide transparent, reliable, and verified business data to consumers and enterprises across 39 states and Washington, D.C. We operate as an autonomous, remote-first team committed to engineering excellence, operational integrity, and high-impact software craft.
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
@@ -104,7 +104,7 @@ export default function CareersPage() {
                 <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-md">Engineering</span>
                 <h3 className="font-bold text-slate-900 text-lg">Senior Full Stack Engineer (Next.js / TypeScript / React)</h3>
                 <p className="text-xs text-slate-600 leading-relaxed max-w-xl">
-                  Scale our Next.js App Router directory platform serving millions of monthly impressions. Design high-performance cached API endpoints, optimize Web Vitals, and build delightful experiences.
+                  Scale our Next.js App Router directory platform. Design high-performance cached API endpoints, optimize Web Vitals, and build delightful experiences.
                 </p>
                 <div className="flex items-center gap-4 text-xs text-slate-500 pt-1">
                   <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-slate-400" /> Remote (USA)</span>
@@ -121,7 +121,7 @@ export default function CareersPage() {
                 <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md">Growth &amp; SEO</span>
                 <h3 className="font-bold text-slate-900 text-lg">Technical SEO &amp; Directory Operations Specialist</h3>
                 <p className="text-xs text-slate-600 leading-relaxed max-w-xl">
-                  Monitor crawl efficiency, structured JSON-LD schemas, taxonomy deduplication, internal linking architecture, and indexation across hundreds of thousands of US local pages.
+                  Monitor crawl efficiency, structured JSON-LD schemas, taxonomy deduplication, internal linking architecture, and indexation across US local pages.
                 </p>
                 <div className="flex items-center gap-4 text-xs text-slate-500 pt-1">
                   <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-slate-400" /> Remote (USA)</span>

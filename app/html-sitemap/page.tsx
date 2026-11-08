@@ -8,7 +8,7 @@ import { normalizeCitySlug } from '@/lib/directory-helpers'
 import { MapPin, Sparkles, FileText, Briefcase, Building2, Store, Wrench } from 'lucide-react'
 import { POPULAR_SERVICES, getSubcategoryHref } from '@/lib/services-data'
 
-export const revalidate = 3600
+export const revalidate = 86400 // ISR budget: was hourly (3600)
 
 export const metadata: Metadata = {
   title: 'HTML Sitemap: Full Site Structure Index | BizNestUSA',
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
 
 export default async function HTMLSitemapPage() {
   const businesses = await getAllBusinesses(false)
-  const approvedBusinesses = businesses.filter(b => (b.status || 'approved') === 'approved')
+  const approvedBusinesses = businesses.filter(b => b.status === 'approved')
 
   return (
     <>

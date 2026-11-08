@@ -1,12 +1,51 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { verifyAdminToken } from '@/lib/server-auth'
+import {
+  checkRateLimit,
+  getClientIp,
+  rateLimitExceededResponse,
+  RATE_LIMITS,
+} from '@/lib/rate-limit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY
-const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'BizNest USA <onboarding@resend.dev>'
+/**
+ * Business-submission email — sent through the Brevo transactional API
+ * (https://api.brevo.com/v3/smtp/email) using the server-only BREVO_API_KEY
+ * (Vercel env). Sender is noreply@biznestusa.com unless BREVO_FROM_EMAIL
+ * overrides it; replies go to support@biznestusa.com, the site's public
+ * support inbox. Without a key the send is skipped (ok:true, skipped:true)
+ * so listing submission never fails on unconfigured mail.
+ *
+ * Brevo note: the sender address (or the biznestusa.com domain) must be a
+ * verified sender in the Brevo account, and the API key must have IP
+ * blocking OFF — Vercel egress IPs rotate, so an allowlisted IP will break
+ * sending. Called by lib/email-service.ts (sendBusinessSubmissionEmail),
+ * which the admin panel fires when a business is approved — that is when
+ * the "Your Business Listing is Live" copy below is true.
+ *
+ * AUTH (P0-4): admin-only. The caller must send
+ * `Authorization: Bearer <admin Firebase ID token>`; without a valid admin
+ * token the route returns 401 and sends nothing. This MUST hold before
+ * BREVO_API_KEY goes live, or the route is an open mail relay from
+ * noreply@biznestusa.com. The `to` address in the body is trusted only
+ * because the caller is the verified admin.
+ */
+const BREVO_URL = 'https://api.brevo.com/v3/smtp/email'
+const BREVO_API_KEY = process.env.BREVO_API_KEY
+const FROM_EMAIL_RAW = process.env.BREVO_FROM_EMAIL || 'BizNest USA <noreply@biznestusa.com>'
+const REPLY_TO_EMAIL = process.env.BREVO_REPLY_TO_EMAIL || 'support@biznestusa.com'
 const WHATSAPP_NUMBER = (process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || process.env.WHATSAPP_BUSINESS_NUMBER || '').replace(/[^0-9]/g, '')
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://biznestusa.com'
+
+// Split "Display Name <address@example.com>" (or a bare address) into parts.
+function parseSender(raw: string): { name: string; email: string } {
+  const m = raw.match(/^(.*?)<([^<>]+)>\s*$/)
+  if (m) return { name: m[1].trim() || 'BizNest USA', email: m[2].trim() }
+  return { name: 'BizNest USA', email: raw.trim() }
+}
+const FROM = parseSender(FROM_EMAIL_RAW)
 
 interface SubmissionEmailPayload {
   to: string
@@ -162,42 +201,62 @@ function escapeHtml(str: string) {
 
 export async function POST(req: NextRequest) {
   try {
+    // Per-IP rate limit first (30/hour): unauthenticated floods must not
+    // reach token verification. The admin is a single user approving in
+    // batches; 30/hour is generous for that and still caps the damage
+    // if an admin token is ever stolen.
+    const limit = checkRateLimit(
+      `business-email:${getClientIp(req)}`,
+      RATE_LIMITS.adminMail
+    )
+    if (!limit.allowed) {
+      return rateLimitExceededResponse(limit.resetAfterSeconds)
+    }
+
+    // P0-4: admin-only. No valid admin token => no mail, ever.
+    const auth = await verifyAdminToken(req)
+    if (!auth.ok) {
+      return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status })
+    }
+
     const body = (await req.json()) as SubmissionEmailPayload
 
     if (!body?.to || !body?.businessName || !body?.slug) {
       return NextResponse.json({ ok: false, error: 'Missing required fields' }, { status: 400 })
     }
 
-    if (!RESEND_API_KEY) {
-      console.log('[v0] RESEND_API_KEY not set - skipping email send')
-      return NextResponse.json({ ok: true, skipped: true, reason: 'RESEND_API_KEY not configured' })
+    if (!BREVO_API_KEY) {
+      console.log('[brevo] BREVO_API_KEY not set - skipping email send')
+      return NextResponse.json({ ok: true, skipped: true, reason: 'BREVO_API_KEY not configured' })
     }
 
-    const resendRes = await fetch('https://api.resend.com/emails', {
+    const brevoRes = await fetch(BREVO_URL, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${RESEND_API_KEY}`,
+        'api-key': BREVO_API_KEY,
+        accept: 'application/json',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: FROM_EMAIL,
-        to: [body.to],
+        sender: FROM,
+        to: [{ email: body.to }],
+        replyTo: { email: REPLY_TO_EMAIL },
         subject: 'Your Business Listing is Live 🎉',
-        html: buildHtml(body),
-        text: buildText(body),
+        htmlContent: buildHtml(body),
+        textContent: buildText(body),
       }),
     })
 
-    if (!resendRes.ok) {
-      const errText = await resendRes.text()
-      console.error('[v0] Resend API error:', resendRes.status, errText)
+    if (!brevoRes.ok) {
+      const errText = await brevoRes.text()
+      console.error('[brevo] Brevo API error:', brevoRes.status, errText)
       return NextResponse.json({ ok: false, error: errText }, { status: 502 })
     }
 
-    const data = await resendRes.json()
-    return NextResponse.json({ ok: true, id: data?.id ?? null })
+    const data = await brevoRes.json()
+    return NextResponse.json({ ok: true, id: data?.messageId ?? null })
   } catch (err: any) {
-    console.error('[v0] send-business-email error:', err?.message ?? err)
+    console.error('[brevo] send-business-email error:', err?.message ?? err)
     return NextResponse.json({ ok: false, error: err?.message ?? 'Unknown error' }, { status: 500 })
   }
 }

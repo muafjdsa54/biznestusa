@@ -9,12 +9,14 @@ import {
   filterBusinessesByCategoryAndCity,
   filterBusinessesByCategoryAndSubcategory,
   getPopulatedCategoryCityPairs,
+  getPopulatedCategorySubcategoryPairs,
   getCategoriesWithListingsForCity,
   getCitiesWithListingsForCategory,
   getCategoryDisplayName,
   getCityDisplayName,
   getSubcategoryDefinition,
   normalizeSubcategorySlug,
+  normalizeCitySlug,
   toCanonicalUrl,
   VERIFICATION_DISCLAIMER,
   isUsCity,
@@ -22,18 +24,16 @@ import {
 } from '@/lib/directory-helpers'
 import { CATEGORIES, BUSINESS_CATEGORIES } from '@/lib/data'
 import { BreadcrumbSchema } from '@/components/seo/breadcrumb-schema'
-import CategoryListingsView from '@/components/business/category-listings-view'
+import CategoryListingsPaginated from '@/components/business/category-listings-paginated'
+import { paginate } from '@/lib/pagination'
+import { toPublicBusiness } from '@/lib/listings-api'
 import {
   Building2,
   MapPin,
   ShieldCheck,
-  Star,
   ArrowRight,
   ArrowLeft,
-  Phone,
   CheckCircle2,
-  Globe,
-  Sparkles,
   ChevronRight,
   Wrench,
   HelpCircle,
@@ -64,17 +64,16 @@ const SUBCATEGORY_CANONICAL_REDIRECTS: Record<string, string> = {
 
 export async function generateStaticParams() {
   const allBiz = await getAllBusinesses(false)
-  
-  // 1. All category + subcategory pairs (deduplicated)
-  const subcategoryParams: { slug: string; city: string }[] = []
-  for (const cat of BUSINESS_CATEGORIES) {
-    for (const sub of cat.subcategories) {
-      subcategoryParams.push({
-        slug: cat.id,
-        city: normalizeSubcategorySlug(sub)
-      })
-    }
-  }
+
+  // 1. Only subcategory pairs that have at least one real approved listing.
+  // ISR budget: the full 217-pair taxonomy was prerendered on every deploy
+  // (~217 ISR writes per deploy). The rest render on first visit
+  // (dynamicParams=true) and cache for 7 days, so no URL breaks and the
+  // sitemap still lists them.
+  const subcategoryParams = getPopulatedCategorySubcategoryPairs(allBiz).map(p => ({
+    slug: p.categorySlug,
+    city: p.subcategorySlug,
+  }))
 
   // 2. All populated category + city pairs
   const cityPairs = getPopulatedCategoryCityPairs(allBiz)
@@ -90,16 +89,14 @@ export async function generateStaticParams() {
 
 function formatSubcategoryTitle(sub: string, catName: string): string {
   const candidates = [
-    `${sub} in USA – ${catName} Directory | BizNestUSA`,
-    `${sub} Services in USA – ${catName} | BizNestUSA`,
-    `${sub} in the USA – ${catName} Directory | BizNestUSA`,
-    `${sub} in the United States – ${catName} | BizNestUSA`,
-    `Verified ${sub} in USA – ${catName} | BizNestUSA`,
-    `${sub} Directory in USA – ${catName} | BizNestUSA`,
-    `${sub} in the USA – ${catName} | BizNestUSA`,
-    `Verified ${sub} Directory in USA | BizNestUSA`,
-    `${sub} in USA – ${catName} | BizNestUSA`,
-    `${sub} in USA | BizNestUSA Directory`
+    `${sub} Businesses in the USA | ${catName} | BizNestUSA`,
+    `Find ${sub} Near You | ${catName} | BizNestUSA`,
+    `${sub} Services in the USA | BizNestUSA`,
+    `${sub} in the USA | ${catName} | BizNestUSA`,
+    `${sub} | ${catName} Directory | BizNestUSA`,
+    `${sub} in USA | ${catName} | BizNestUSA`,
+    `${sub} | ${catName} | BizNestUSA`,
+    `${sub} | BizNestUSA`
   ]
 
   for (const c of candidates) {
@@ -108,23 +105,22 @@ function formatSubcategoryTitle(sub: string, catName: string): string {
 
   for (const c of candidates) {
     if (c.length > 60) {
-      const truncated = `${sub} in USA – ${catName}`.slice(0, 46).trim() + ' | BizNestUSA'
+      const truncated = `${sub} in USA | ${catName}`.slice(0, 46).trim() + ' | BizNestUSA'
       if (truncated.length >= 50 && truncated.length <= 60) return truncated
     }
   }
 
-  const padded = `Top Verified ${sub} in the USA | BizNestUSA Directory`
+  const padded = `${sub} Businesses in the USA | BizNestUSA`
   if (padded.length >= 50 && padded.length <= 60) return padded
 
-  return `${sub} in USA – Official Directory | BizNestUSA`.slice(0, 60)
+  return `${sub} in USA – Directory | BizNestUSA`.slice(0, 60)
 }
 
 function formatSubcategoryDescription(sub: string, catName: string): string {
   const templates = [
-    `Find verified ${sub.toLowerCase()} providers in ${catName.toLowerCase()} across the USA. Compare local business locations, contact numbers, services, and official profiles on BizNestUSA.`,
-    `Discover verified ${sub.toLowerCase()} services in ${catName.toLowerCase()} across the USA. Explore local business addresses, phone contacts, service options, and profiles on BizNestUSA.`,
-    `Browse licensed ${sub.toLowerCase()} specialists in ${catName.toLowerCase()} across the USA. View verified business addresses, phone contacts, service details, and profiles on BizNestUSA.`,
-    `Find verified ${sub.toLowerCase()} in ${catName.toLowerCase()} across the USA. Compare top local locations, verified contact details, services, and directory profiles on BizNestUSA.`
+    `Find ${sub.toLowerCase()} providers in ${catName.toLowerCase()} across the USA on BizNestUSA. Compare services, contact details, addresses, and hours — free to browse and search.`,
+    `Looking for ${sub.toLowerCase()} services? Browse ${catName.toLowerCase()} providers across the USA on BizNestUSA — compare services, locations, and contact details in one place.`,
+    `Browse ${sub.toLowerCase()} businesses across the USA. Compare ${catName.toLowerCase()} providers by location, services, phone numbers, and hours on BizNestUSA.`
   ]
 
   for (const t of templates) {
@@ -135,14 +131,14 @@ function formatSubcategoryDescription(sub: string, catName: string): string {
     if (t.length > 160) {
       const trimmed = t.slice(0, 156)
       const lastSpace = trimmed.lastIndexOf(' ')
-      return trimmed.slice(0, lastSpace) + ' on BizNest.'
+      return trimmed.slice(0, lastSpace) + '...'
     }
   }
 
-  const shortT = `Find verified ${sub.toLowerCase()} providers in ${catName.toLowerCase()} across the USA. Compare local business locations, contact details, and profiles on BizNestUSA.`
+  const shortT = `Find ${sub.toLowerCase()} providers in ${catName.toLowerCase()} across the USA. Compare services, contact details, addresses, and hours on BizNestUSA — free to search.`
   if (shortT.length >= 140 && shortT.length <= 160) return shortT
 
-  return `Find verified ${sub.toLowerCase()} in ${catName.toLowerCase()} across the United States. Compare top business locations, contact details, services, and directory profiles on BizNestUSA.`
+  return `Find ${sub.toLowerCase()} in ${catName.toLowerCase()} across the United States. Compare business locations, contact details, addresses, and services on BizNestUSA.`
 }
 
 function formatCategoryCityTitle(categoryName: string, cityName: string): string {
@@ -156,13 +152,14 @@ function formatCategoryCityTitle(categoryName: string, cityName: string): string
   if (cleanCat === 'Business & Finance') cleanCat = 'Business & Finance'
 
   const candidates = [
+    `Find ${cleanCat} Businesses in ${cityName}, USA | BizNestUSA`,
     `${cleanCat} Businesses in ${cityName}, USA | BizNestUSA`,
-    `${cleanCat} in ${cityName}, USA – Local Directory | BizNest`,
     `${cleanCat} in ${cityName}, USA | BizNestUSA Directory`,
-    `Verified ${cleanCat} in ${cityName}, USA | BizNestUSA`,
-    `${cleanCat} Directory in ${cityName}, USA | BizNestUSA`,
-    `Top ${cleanCat} in ${cityName}, USA | BizNestUSA Directory`,
-    `${cleanCat} in ${cityName}, USA | BizNestUSA`
+    `Find ${cleanCat} in ${cityName}, USA | BizNestUSA`,
+    `${cleanCat} Directory in ${cityName} | BizNestUSA`,
+    `${cleanCat} Services in ${cityName} | BizNestUSA`,
+    `${cleanCat} in ${cityName}, USA | BizNestUSA`,
+    `${cleanCat} in ${cityName} | BizNestUSA`
   ]
 
   for (const c of candidates) {
@@ -178,18 +175,17 @@ function formatCategoryCityTitle(categoryName: string, cityName: string): string
     }
   }
 
-  const padded = `Verified Local ${cleanCat} in ${cityName}, USA | BizNestUSA`
+  const padded = `Find ${cleanCat} in ${cityName}, USA | BizNestUSA`
   if (padded.length >= 50 && padded.length <= 60) return padded
 
-  return `${cleanCat} in ${cityName}, USA | BizNestUSA Directory`.slice(0, 60)
+  return `${cleanCat} in ${cityName}, USA | BizNestUSA`.slice(0, 60)
 }
 
 function formatCategoryCityDescription(categoryName: string, cityName: string): string {
   const templates = [
-    `Find verified ${categoryName.toLowerCase()} in ${cityName}, USA. Browse local business locations, contact phone numbers, verified addresses, and services on BizNestUSA.`,
-    `Find verified ${categoryName.toLowerCase()} businesses in ${cityName}, USA. Browse local directory listings, verified contact details, hours, and services on BizNestUSA.`,
-    `Explore top-rated ${categoryName.toLowerCase()} in ${cityName}, USA. Compare local business locations, verified phone numbers, specialized services, and ratings on BizNestUSA.`,
-    `Browse licensed ${categoryName.toLowerCase()} in ${cityName}, USA. View verified local business addresses, phone contacts, service options, and directory profiles on BizNestUSA.`
+    `Find ${categoryName.toLowerCase()} in ${cityName}, USA. Browse local business locations, phone numbers, addresses, and services on BizNestUSA — free to browse and search.`,
+    `Find ${categoryName.toLowerCase()} businesses in ${cityName}, USA. Browse local listings, contact details, hours, and services on BizNestUSA.`,
+    `${categoryName} in ${cityName}, USA — browse local businesses on BizNestUSA. Compare services, locations, and contact details before you call.`
   ]
 
   for (const t of templates) {
@@ -200,16 +196,20 @@ function formatCategoryCityDescription(categoryName: string, cityName: string): 
     if (t.length > 160) {
       const trimmed = t.slice(0, 156)
       const lastSpace = trimmed.lastIndexOf(' ')
-      return trimmed.slice(0, lastSpace) + ' on BizNest.'
+      return trimmed.slice(0, lastSpace) + '...'
     }
   }
 
-  const base = `Find verified ${categoryName.toLowerCase()} businesses in ${cityName}, USA. Browse local directory listings, verified contact details, and services on BizNestUSA.`
+  const base = `Find ${categoryName.toLowerCase()} businesses in ${cityName}, USA. Browse local directory listings, contact details, hours, and services on BizNestUSA.`
   if (base.length >= 140 && base.length <= 160) return base
-  if (base.length > 160) return base.slice(0, 156).replace(/\s\S*$/, '') + ' on BizNest.'
-  return base.replace('on BizNestUSA.', 'and customer reviews on BizNestUSA.')
+  if (base.length > 160) return base.slice(0, 156).replace(/\s\S*$/, '') + '...'
+  return base
 }
 
+// Static page: NO searchParams here. Reading ?page= in this file made
+// the route dynamic (ƒ) and killed prerendering. Page 1 is the only
+// server-rendered slice; pages 2+ are fetched client-side from
+// /api/listings by CategoryListingsPaginated and are not indexed.
 export async function generateMetadata(props: {
   params: Promise<{ slug: string; city: string }>
 }): Promise<Metadata> {
@@ -279,7 +279,10 @@ export async function generateMetadata(props: {
 
   const title = formatCategoryCityTitle(categoryName, cityName)
   const description = formatCategoryCityDescription(categoryName, cityName)
-  const canonicalUrl = toCanonicalUrl(`category/${catSlug}/${secondSlug}`)
+  // Canonical slug: an aliased city (e.g. 'new-york') canonicalizes to
+  // 'new-york-city' — the page component 301s there, so the canonical
+  // must point at the same URL.
+  const canonicalUrl = toCanonicalUrl(`category/${catSlug}/${normalizeCitySlug(secondSlug)}`)
 
   return {
     title,
@@ -328,6 +331,9 @@ export default async function CategorySubcategoryOrCityPage(props: {
   const subDef = getSubcategoryDefinition(catSlug, secondSlug)
   if (subDef) {
     const businesses = filterBusinessesByCategoryAndSubcategory(allBiz, catSlug, subDef.slug)
+    // Static page 1 only (24 items): the badge count uses the full
+    // filtered total; pages 2+ are fetched client-side from /api/listings.
+    const bizPage = paginate(businesses, 1)
     const currentPath = `category/${catSlug}/${subDef.slug}`
     const canonicalUrl = toCanonicalUrl(currentPath)
 
@@ -341,7 +347,7 @@ export default async function CategorySubcategoryOrCityPage(props: {
       '@context': 'https://schema.org',
       '@type': 'CollectionPage',
       name: `${subDef.name} Businesses in the United States`,
-      description: `Find verified ${subDef.name.toLowerCase()} businesses and licensed specialists across the United States on BizNestUSA.`,
+      description: `Find ${subDef.name.toLowerCase()} businesses across the United States on BizNestUSA. Compare services, locations, and contact details.`,
       url: canonicalUrl,
       isPartOf: {
         '@type': 'WebSite',
@@ -350,7 +356,7 @@ export default async function CategorySubcategoryOrCityPage(props: {
       },
       mainEntity: {
         '@type': 'ItemList',
-        itemListElement: businesses.map((biz, idx) => ({
+        itemListElement: bizPage.pageItems.map((biz, idx) => ({
           '@type': 'ListItem',
           position: idx + 1,
           name: biz.name,
@@ -396,26 +402,26 @@ export default async function CategorySubcategoryOrCityPage(props: {
       mainEntity: [
         {
           '@type': 'Question',
-          name: `How do I find verified ${subDef.name.toLowerCase()} providers on BizNestUSA?`,
+          name: `How do I find ${subDef.name.toLowerCase()} providers on BizNestUSA?`,
           acceptedAnswer: {
             '@type': 'Answer',
-            text: `BizNestUSA verifies public commercial listings across America. You can view official business locations, verified phone numbers, licensing references, operating hours, and direct web links on each listing profile.`
+            text: `Browse the ${subDef.name.toLowerCase()} listings on this page, or narrow by city. Each listing shows the services, location, phone number, and hours the business provided.`
           }
         },
         {
           '@type': 'Question',
-          name: `What credentials should I verify before hiring a ${subDef.name.toLowerCase()} specialist?`,
+          name: `What should I check before hiring a ${subDef.name.toLowerCase()} provider?`,
           acceptedAnswer: {
             '@type': 'Answer',
-            text: `Confirm that the provider maintains an active state or municipal business registration, required trade contractor licenses, commercial general liability insurance, and upfront written estimates for all project phases.`
+            text: `Check the services and service area on the listing, confirm the business serves your area, and ask for a written quote. Where a license, permit, or certification applies to this kind of work, ask to see it before work starts.`
           }
         },
         {
           '@type': 'Question',
-          name: `How are service costs and project estimates structured for ${subDef.name.toLowerCase()} services?`,
+          name: `How are prices set for ${subDef.name.toLowerCase()} services?`,
           acceptedAnswer: {
             '@type': 'Answer',
-            text: `Most providers charge either a standardized flat-rate fee for diagnostic consultations and routine tasks or an hourly labor rate plus material costs. Always request an itemized contract outlining project milestones before work commences.`
+            text: `Prices vary by provider, job size, and location. Ask for a written, itemized quote that lists labor, materials, and any fees before you agree to the work.`
           }
         },
         {
@@ -423,7 +429,7 @@ export default async function CategorySubcategoryOrCityPage(props: {
           name: `Can business owners claim or update their ${subDef.name.toLowerCase()} directory listing?`,
           acceptedAnswer: {
             '@type': 'Answer',
-            text: `Yes. Business owners can claim an existing profile or add a new verified listing using our self-service portal to update operating hours, services offered, verified phone numbers, and company bios.`
+            text: `Yes. Owners can claim an existing profile or add a new listing from $1. Basic ($1) is submit-only, Standard ($5) adds editing and 5 posts, and Authoritative ($10) adds a gallery, 10 posts over 60 days, and featured placement.`
           }
         }
       ]
@@ -471,7 +477,7 @@ export default async function CategorySubcategoryOrCityPage(props: {
                 </h1>
 
                 <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
-                  Browse directory listings for verified {subDef.name.toLowerCase()} businesses and licensed providers across the United States. Compare locations, official contact details, hours, and specialty services on BizNestUSA.
+                  Browse {subDef.name.toLowerCase()} businesses across the United States. Compare locations, contact details, hours, and services on BizNestUSA.
                 </p>
               </div>
 
@@ -507,8 +513,14 @@ export default async function CategorySubcategoryOrCityPage(props: {
           </div>
 
           {/* Business Listings: List & Grid Views */}
-          <CategoryListingsView
-            businesses={businesses}
+          <CategoryListingsPaginated
+            kind="subcategory"
+            basePath={`/category/${catSlug}/${subDef.slug}`}
+            categorySlug={catSlug}
+            subcategorySlug={subDef.slug}
+            initialItems={bizPage.pageItems.map(toPublicBusiness)}
+            total={bizPage.total}
+            totalPages={bizPage.totalPages}
             categoryName={subDef.categoryName}
             subCategoryTitle={subDef.name}
           />
@@ -523,7 +535,7 @@ export default async function CategorySubcategoryOrCityPage(props: {
                 How to Evaluate &amp; Select a Qualified {subDef.name} Specialist
               </h2>
               <p className="text-slate-600 text-sm leading-relaxed">
-                When engaging a professional or commercial business in the {subDef.name.toLowerCase()} sector, verifying credentials, business history, and service capabilities protects your budget and project timeline. Below is our standard checklist for American consumers and business managers.
+                Before you hire a {subDef.name.toLowerCase()} provider, check the listing&apos;s services, service area, and contact details — then confirm what matters for your job: the price in writing, and a license or permit where one applies. This checklist covers the basics.
               </p>
             </div>
 
@@ -534,7 +546,7 @@ export default async function CategorySubcategoryOrCityPage(props: {
                 </div>
                 <h3 className="text-base font-bold text-slate-900">Licensing &amp; Certification</h3>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Always verify that the provider holds valid state, municipal, or trade board credentials. Regulated professions require ongoing compliance and active registry status with relevant US authorities.
+                  Where a license applies to this kind of work, ask for the license number and check it with the state or city office that issued it. A listing on BizNestUSA is not proof of a license.
                 </p>
               </div>
 
@@ -565,7 +577,7 @@ export default async function CategorySubcategoryOrCityPage(props: {
                 <span>Scope of Services for {subDef.name} in the United States</span>
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Specialists operating in this field routinely handle diagnostic assessments, preventative maintenance, emergency interventions, routine servicing, and custom consultations. Because municipal building codes and service regulations differ across states, verify that the selected provider has established operating history in your target metropolitan market.
+                What {subDef.name.toLowerCase()} providers list on BizNestUSA: the services they offer, their service area, contact details, and operating hours. Because local rules differ by state and city, check the provider&apos;s registration, permits, or trade credentials where they apply to this kind of work before you book.
               </p>
             </div>
           </section>
@@ -612,37 +624,37 @@ export default async function CategorySubcategoryOrCityPage(props: {
             <div className="space-y-3 pt-2">
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5">
                 <h3 className="text-sm font-bold text-slate-900">
-                  How do I find verified {subDef.name.toLowerCase()} providers on BizNestUSA?
+                  How do I find {subDef.name.toLowerCase()} providers on BizNestUSA?
                 </h3>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  BizNestUSA verifies public commercial listings across America. You can view official business locations, verified phone numbers, licensing references, operating hours, and direct web links on each listing profile.
+                  Browse the {subDef.name.toLowerCase()} listings on this page, or narrow by city. Each listing shows the services, location, phone number, and hours the business provided.
                 </p>
               </div>
 
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5">
                 <h3 className="text-sm font-bold text-slate-900">
-                  What credentials should I verify before hiring a {subDef.name.toLowerCase()} specialist?
+                  What should I check before hiring a {subDef.name.toLowerCase()} provider?
                 </h3>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Confirm that the provider maintains an active state or municipal business registration, required trade contractor licenses, commercial general liability insurance, and upfront written estimates for all project phases.
+                  Check the services and service area on the listing, confirm the business serves your area, and ask for a written quote. Where a license, permit, or certification applies to this kind of work, ask to see it before work starts.
                 </p>
               </div>
 
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5">
                 <h3 className="text-sm font-bold text-slate-900">
-                  How are service costs and project estimates structured for {subDef.name.toLowerCase()} services?
+                  How are prices set for {subDef.name.toLowerCase()} services?
                 </h3>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Most providers charge either a standardized flat-rate fee for diagnostic consultations and routine tasks or an hourly labor rate plus material costs. Always request an itemized contract outlining project milestones before work commences.
+                  Prices vary by provider, job size, and location. Ask for a written, itemized quote that lists labor, materials, and any fees before you agree to the work.
                 </p>
               </div>
 
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5">
                 <h3 className="text-sm font-bold text-slate-900">
-                  How can business owners claim or update their {subDef.name.toLowerCase()} directory listing?
+                  How can business owners claim or update their {subDef.name.toLowerCase()} listing?
                 </h3>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Business owners can claim an existing profile or add a new verified listing using our self-service portal to update operating hours, services offered, verified phone numbers, and company bios.
+                  Owners can claim an existing profile or add a new listing from $1. Basic ($1) is submit-only, Standard ($5) adds editing and 5 posts, and Authoritative ($10) adds a gallery, 10 posts over 60 days, and featured placement.
                 </p>
               </div>
             </div>
@@ -658,7 +670,16 @@ export default async function CategorySubcategoryOrCityPage(props: {
   // BRANCH B: CATEGORY IN CITY PAGE (e.g. /category/automotive/dallas/)
   // -------------------------------------------------------------
   const citySlug = secondSlug
+  // Alias slugs 301 to the canonical city URL (same reason as the city
+  // page: /category/home-services/new-york/ → /category/home-services/new-york-city/).
+  const normCitySlug = normalizeCitySlug(citySlug)
+  if (normCitySlug !== citySlug) {
+    permanentRedirect(`/category/${catSlug}/${normCitySlug}/`)
+  }
   const businessesInCity = filterBusinessesByCategoryAndCity(allBiz, catSlug, citySlug)
+  // Static page 1 only (24 items): the badge count uses the full
+  // filtered total; pages 2+ are fetched client-side from /api/listings.
+  const bizPage = paginate(businessesInCity, 1)
 
   if (isPakistaniCity(citySlug) || !isUsCity(citySlug) || businessesInCity.length === 0) {
     notFound()
@@ -666,21 +687,21 @@ export default async function CategorySubcategoryOrCityPage(props: {
 
   const categoryName = getCategoryDisplayName(catSlug)
   const cityName = getCityDisplayName(citySlug)
-  const currentPath = `category/${catSlug}/${citySlug}`
+  const currentPath = `category/${catSlug}/${normCitySlug}`
   const canonicalUrl = toCanonicalUrl(currentPath)
 
   const otherCategoriesInCity = getCategoriesWithListingsForCity(allBiz, citySlug).filter(
     c => c.categorySlug !== catSlug
   )
   const otherCitiesForCategory = getCitiesWithListingsForCategory(allBiz, catSlug).filter(
-    c => c.citySlug !== citySlug
+    c => c.citySlug !== normCitySlug
   )
 
   const collectionSchema = {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
     name: `${categoryName} in ${cityName}, USA`,
-    description: `Find verified ${categoryName.toLowerCase()} in ${cityName}, USA. Browse local business listings, contact details and verified directory information on BizNestUSA.`,
+    description: `Find ${categoryName.toLowerCase()} in ${cityName}, USA. Browse local business listings, contact details and directory information on BizNestUSA.`,
     url: canonicalUrl,
     isPartOf: {
       '@type': 'WebSite',
@@ -689,7 +710,7 @@ export default async function CategorySubcategoryOrCityPage(props: {
     },
     mainEntity: {
       '@type': 'ItemList',
-      itemListElement: businessesInCity.map((biz, idx) => ({
+      itemListElement: bizPage.pageItems.map((biz, idx) => ({
         '@type': 'ListItem',
         position: idx + 1,
         name: biz.name,
@@ -738,7 +759,7 @@ export default async function CategorySubcategoryOrCityPage(props: {
         name: `How do I locate reputable ${categoryName.toLowerCase()} providers in ${cityName}?`,
         acceptedAnswer: {
           '@type': 'Answer',
-          text: `Use BizNestUSA to review verified local businesses operating within ${cityName}. Compare published telephone numbers, registered business addresses, service areas, and direct customer reviews.`
+          text: `Use BizNestUSA to review local businesses operating within ${cityName}. Compare the phone numbers, addresses, service areas, and hours shown on each listing.`
         }
       },
       {
@@ -746,7 +767,7 @@ export default async function CategorySubcategoryOrCityPage(props: {
         name: `What licensing regulations apply to ${categoryName.toLowerCase()} in ${cityName}, USA?`,
         acceptedAnswer: {
           '@type': 'Answer',
-          text: `Businesses in ${cityName} must comply with state licensing boards, municipal operating permits, and local sales tax registrations. We recommend asking providers for their state trade registration number before commissioning major projects.`
+          text: `Rules differ by trade and by state. Where a license or permit applies to the work, ask the provider for its number and check it with the state or city office before a major project.`
         }
       },
       {
@@ -754,7 +775,7 @@ export default async function CategorySubcategoryOrCityPage(props: {
         name: `How can local businesses in ${cityName} add or claim their profile on BizNestUSA?`,
         acceptedAnswer: {
           '@type': 'Answer',
-          text: `Company owners in ${cityName} can submit their listing for human review via the 'List Your Business' link, enabling local residents and commercial clients to discover their services.`
+          text: `Company owners in ${cityName} can add a listing for review via the 'List Your Business' link. Listings start at $1; Standard ($5) adds editing and 5 posts, and Authoritative ($10) adds a gallery, 10 posts over 60 days, and featured placement.`
         }
       }
     ]
@@ -791,14 +812,14 @@ export default async function CategorySubcategoryOrCityPage(props: {
                   <span>{cityName}, USA</span>
                 </span>
                 <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-bold border border-emerald-200">
-                  <span>{businessesInCity.length} Verified {businessesInCity.length === 1 ? 'Listing' : 'Listings'}</span>
+                  <span>{businessesInCity.length} {businessesInCity.length === 1 ? 'Listing' : 'Listings'}</span>
                 </span>
               </div>
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-slate-900 tracking-tight leading-tight">
                 {categoryName} in {cityName}
               </h1>
               <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
-                Find verified {categoryName.toLowerCase()} in {cityName}, USA. Browse local business profiles, services, phone numbers, addresses, and official locations on BizNestUSA.
+                Find {categoryName.toLowerCase()} in {cityName}, USA. Browse local business profiles, services, phone numbers, addresses, and locations on BizNestUSA.
               </p>
             </div>
 
@@ -825,8 +846,14 @@ export default async function CategorySubcategoryOrCityPage(props: {
         </div>
 
         {/* Business Listings */}
-        <CategoryListingsView
-          businesses={businessesInCity}
+        <CategoryListingsPaginated
+          kind="category-city"
+          basePath={`/category/${catSlug}/${citySlug}`}
+          categorySlug={catSlug}
+          citySlug={citySlug}
+          initialItems={bizPage.pageItems.map(toPublicBusiness)}
+          total={bizPage.total}
+          totalPages={bizPage.totalPages}
           categoryName={categoryName}
           cityName={cityName}
         />
@@ -841,7 +868,7 @@ export default async function CategorySubcategoryOrCityPage(props: {
               Hiring {categoryName} in {cityName}, USA
             </h2>
             <p className="text-slate-600 text-sm leading-relaxed">
-              When sourcing {categoryName.toLowerCase()} providers in the {cityName} metropolitan area, local proximity and regulatory compliance play crucial roles. Local providers offer responsive dispatch, familiar knowledge of regional building and trade standards, and established community reputations.
+              When choosing a {categoryName.toLowerCase()} provider in {cityName}, start with the listings on this page: compare the services each business lists, where it is located, and how to reach it. For work that needs a license or permit, confirm it before you book — and get the price in writing.
             </p>
           </div>
 
@@ -852,7 +879,7 @@ export default async function CategorySubcategoryOrCityPage(props: {
                 <span>Checking Local {cityName} Credentials</span>
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Confirm that service providers hold current municipal permits and state registrations appropriate for {cityName}. Reputable businesses will readily provide active registration identifiers and commercial liability certificates upon request.
+                Where a license or permit applies to this kind of work, ask for the number and check it with the state or city office that issued it. A business listed here is not automatically licensed for every service it names.
               </p>
             </div>
 
@@ -862,7 +889,7 @@ export default async function CategorySubcategoryOrCityPage(props: {
                 <span>Comparing Quotes &amp; Service Estimates</span>
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                For major commercial or residential undertakings in {cityName}, we recommend gathering at least two independent written estimates. Transparent contracts should clearly specify material costs, hourly rates, milestone schedules, and warranty conditions.
+                For larger jobs in {cityName}, gather at least two written estimates. Transparent contracts should clearly specify material costs, hourly rates, milestone schedules, and warranty conditions.
               </p>
             </div>
           </div>
@@ -888,7 +915,7 @@ export default async function CategorySubcategoryOrCityPage(props: {
                 How do I locate reputable {categoryName.toLowerCase()} providers in {cityName}?
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Use BizNestUSA to review verified local businesses operating within {cityName}. Compare published telephone numbers, registered business addresses, service areas, and direct customer reviews.
+                Use BizNestUSA to review local businesses operating within {cityName}. Compare the phone numbers, addresses, service areas, and hours shown on each listing.
               </p>
             </div>
 
@@ -897,7 +924,7 @@ export default async function CategorySubcategoryOrCityPage(props: {
                 What licensing regulations apply to {categoryName.toLowerCase()} in {cityName}, USA?
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Businesses in {cityName} must comply with state licensing boards, municipal operating permits, and local sales tax registrations. We recommend asking providers for their state trade registration number before commissioning major projects.
+                Rules differ by trade and by state. Where a license or permit applies to the work, ask the provider for its number and check it with the state or city office before a major project.
               </p>
             </div>
 
@@ -906,7 +933,7 @@ export default async function CategorySubcategoryOrCityPage(props: {
                 How can local businesses in {cityName} add or claim their profile on BizNestUSA?
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Company owners in {cityName} can submit their listing for human review via the &apos;List Your Business&apos; link, enabling local residents and commercial clients to discover their services.
+                Company owners in {cityName} can add a listing for review via the &apos;List Your Business&apos; link. Listings start at $1; Standard ($5) adds editing and 5 posts, and Authoritative ($10) adds a gallery, 10 posts over 60 days, and featured placement.
               </p>
             </div>
           </div>

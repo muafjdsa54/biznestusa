@@ -32,7 +32,7 @@ export default function HeroSearchForm() {
 
   const tabPlaceholders = {
     businesses: 'Search businesses, contractors, services (e.g. Plumbers, Electricians)...',
-    professionals: 'Search independent professionals, licensed trades, consultants...',
+    professionals: 'Search independent professionals, skilled trades, consultants...',
     jobs: 'Search job titles, roles, or hiring companies...'
   }
 

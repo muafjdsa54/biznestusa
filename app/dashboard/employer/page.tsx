@@ -128,7 +128,7 @@ export default function EmployerDashboardPage() {
                     <div className="flex items-center gap-2">
                       <h3 className="font-extrabold text-slate-900 text-sm">{job.title}</h3>
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 uppercase">
-                        {job.status || 'approved'}
+                        {job.status || 'pending'}
                       </span>
                     </div>
                     <p className="text-xs text-slate-500">

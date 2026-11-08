@@ -4,23 +4,35 @@ import { useState } from 'react'
 import { Star, MessageSquare } from 'lucide-react'
 import { toast } from 'sonner'
 import { isValidPersonName, validatePersonName, filterPersonNameInput } from '@/lib/validation'
+import { submitBusinessReview } from '@/lib/review-service'
 
 interface ReviewModalProps {
   businessName: string
+  businessSlug?: string
+  businessId?: string
   isOpen: boolean
   onClose: () => void
-  onAddReview: (review: { userName: string; rating: number; date: string; comment: string }) => void
+  onAddReview: (review: { id?: string; userName: string; rating: number; date: string; comment: string; status?: 'pending' | 'approved' | 'rejected' }) => void
 }
 
-export default function ReviewModal({ businessName, isOpen, onClose, onAddReview }: ReviewModalProps) {
+function slugFromPathname(): string {
+  if (typeof window === 'undefined') return ''
+  const parts = window.location.pathname.split('/').filter(Boolean)
+  // Detail pages live at /business/<slug>/
+  return parts[0] === 'business' && parts[1] ? decodeURIComponent(parts[1]) : ''
+}
+
+export default function ReviewModal({ businessName, businessSlug, businessId, isOpen, onClose, onAddReview }: ReviewModalProps) {
   const [rating, setRating] = useState(5)
   const [userName, setUserName] = useState('')
   const [comment, setComment] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   if (!isOpen) return null
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (isSubmitting) return
     if (!userName.trim() || !comment.trim()) {
       toast.error('Please complete your name and review comment.')
       return
@@ -32,15 +44,40 @@ export default function ReviewModal({ businessName, isOpen, onClose, onAddReview
       return
     }
 
-    onAddReview({
-      userName: userName.trim(),
-      rating,
-      date: 'Just now',
-      comment: comment.trim()
-    })
+    const slug = (businessSlug || '').trim() || slugFromPathname()
+    if (!slug) {
+      toast.error('Could not determine which business this review is for. Please reload the page and try again.')
+      return
+    }
 
-    toast.success('Thank you! Your review has been added to BizNest USA.')
-    onClose()
+    setIsSubmitting(true)
+    try {
+      // Persist first — nothing is toasted and the modal stays open on failure.
+      // New reviews are saved as status 'pending' and are NOT public until
+      // an admin approves them.
+      const saved = await submitBusinessReview({
+        businessSlug: slug,
+        businessId,
+        businessName,
+        userName: userName.trim(),
+        rating,
+        comment: comment.trim(),
+      })
+      onAddReview({
+        id: saved.id,
+        userName: saved.userName,
+        rating: saved.rating,
+        date: 'Just now',
+        comment: saved.comment,
+        status: saved.status,
+      })
+      toast.success('Thank you! Your review has been submitted and is pending review.')
+      onClose()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not save your review. Please try again.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -113,9 +150,10 @@ export default function ReviewModal({ businessName, isOpen, onClose, onAddReview
             </button>
             <button
               type="submit"
-              className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md"
+              disabled={isSubmitting}
+              className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md disabled:opacity-50"
             >
-              Post Review
+              {isSubmitting ? 'Posting…' : 'Post Review'}
             </button>
           </div>
         </form>

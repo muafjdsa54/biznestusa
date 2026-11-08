@@ -13,13 +13,13 @@ export const revalidate = 604800 // Revalidate every 7 days
 
 export const metadata: Metadata = {
   title: 'Editorial Guides & Industry Resources | BizNest USA',
-  description: 'Expert research, local SEO strategies, contractor licensing guides, and hiring benchmarks for American businesses, independent professionals, and employers.',
+  description: 'Practical guides on verifying contractors, US business licensing, local SEO, and hiring — for small businesses, professionals, and employers.',
   alternates: {
     canonical: 'https://www.biznestusa.com/blog/',
   },
   openGraph: {
     title: 'Editorial Guides & Industry Resources | BizNest USA',
-    description: 'Expert research, local SEO strategies, contractor licensing guides, and hiring benchmarks across the United States.',
+    description: 'Practical guides on verifying contractors, US business licensing, local SEO, and hiring — for small businesses, professionals, and employers.',
     url: 'https://www.biznestusa.com/blog/',
     type: 'website',
   },
@@ -42,13 +42,13 @@ export default async function BlogIndexPage() {
             <div className="max-w-3xl space-y-4">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-semibold">
                 <BookOpen className="w-3.5 h-3.5" />
-                <span>Topical Authority &amp; Research</span>
+                <span>Practical Guides &amp; Research</span>
               </div>
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-slate-900 tracking-tight">
-                USA Directory Guides, Compliance &amp; Career Insights
+                Practical Guides for US Businesses, Professionals &amp; Employers
               </h1>
               <p className="text-base sm:text-lg text-slate-600 leading-relaxed">
-                In-depth educational resources researched to help American small businesses grow local prominence, professionals build standout portfolios, and employers recruit top US talent.
+                Six practical guides: how to verify a licensed contractor, meet US business licensing requirements, improve local search with directory listings, hire independent professionals and remote engineers, and build a professional profile that wins clients. The blog also publishes articles written by verified US businesses on the directory.
               </p>
             </div>
 
@@ -207,7 +207,7 @@ export default async function BlogIndexPage() {
                   Researched Guides &amp; Handbooks
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Editorial compliance guides, licensing checklists, and hiring benchmarks.
+                  Six guides: contractor checks, business licensing, local SEO, hiring, and professional profiles.
                 </p>
               </div>
               <span className="text-xs font-semibold text-slate-500">
@@ -283,7 +283,7 @@ export default async function BlogIndexPage() {
                   href="/add-business"
                   className="px-5 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition-all"
                 >
-                  List Your Business Free
+                  List Your Business
                 </Link>
                 <Link
                   href="/register/professional"

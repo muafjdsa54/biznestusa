@@ -1,14 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { submitPaymentProof } from '@/lib/payment-service'
+import { verifyUserToken } from '@/lib/server-auth'
+import {
+  checkRateLimit,
+  getClientIp,
+  rateLimitExceededResponse,
+  RATE_LIMITS,
+} from '@/lib/rate-limit'
 
 export async function POST(req: NextRequest) {
   try {
+    const limit = checkRateLimit(`submit:${getClientIp(req)}`, RATE_LIMITS.submit)
+    if (!limit.allowed) {
+      return rateLimitExceededResponse(limit.resetAfterSeconds)
+    }
+    // P1-1: signed-in users only. The owner identity comes from the
+    // verified ID token — `userId`/`uid` in the body is ignored, so nobody
+    // can attach a proof screenshot to someone else's payment record.
+    const auth = await verifyUserToken(req)
+    if (!auth.ok) {
+      return NextResponse.json(
+        { success: false, error: auth.error },
+        { status: auth.status }
+      )
+    }
+    const userId = auth.uid
+
     const body = await req.json()
     const paymentIdOrRef = body.paymentIdOrRef || body.paymentReference || body.payment_reference || body.businessId
     const screenshotDataUrl = body.screenshotDataUrl || body.paymentScreenshot || body.screenshot
     const payoneerTransactionId = body.payoneerTransactionId || body.payoneer_transaction_id || body.transactionId
     const customerNote = body.customerNote || body.customer_note
-    const userId = body.userId || body.uid
 
     if (!paymentIdOrRef) {
       return NextResponse.json(

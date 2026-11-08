@@ -1,11 +1,31 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Mail, Star, HelpCircle, MessageCircle, CheckCircle2, Send, Phone } from 'lucide-react'
 import { toast } from 'sonner'
-import { db } from '@/lib/firebase'
-import { doc, setDoc } from 'firebase/firestore'
 import { isValidPersonName, validatePersonName, filterPersonNameInput, isValidUsPhone, validateUsPhone, formatUsPhone, isValidEmail } from '@/lib/validation'
+import type { StoredProfessionalReview } from '@/lib/review-service'
+
+// Firestore is loaded on demand only (inside the submit handlers and the
+// viewport-gated reviews fetch below) so the ~373 KiB Firebase client chunk
+// stays out of the professional detail page's initial bundle.
+
+function usernameFromPathname(): string {
+  if (typeof window === 'undefined') return ''
+  const parts = window.location.pathname.split('/').filter(Boolean)
+  // Detail pages live at /professionals/<username>/
+  return parts[0] === 'professionals' && parts[1] ? decodeURIComponent(parts[1]) : ''
+}
+
+function toReviewItem(r: StoredProfessionalReview): ReviewItem {
+  return {
+    id: r.id,
+    userName: r.userName,
+    rating: r.rating,
+    date: new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+    comment: r.comment,
+  }
+}
 
 export interface ReviewItem {
   id: string
@@ -71,8 +91,11 @@ export function ProfessionalHeroActions({ proName, proUsername }: ProfessionalHe
     }
 
     try {
-      // 1. Direct Firestore write
+      // 1. Direct Firestore write — Firebase loaded on demand here, not in
+      // the page's initial bundle.
       try {
+        const { db } = await import('@/lib/firebase')
+        const { doc, setDoc } = await import('firebase/firestore')
         await setDoc(doc(db, 'professional_inquiries', inquiryPayload.id), inquiryPayload)
       } catch (firestoreErr) {
         console.warn('Direct Firestore save failed, fallback to API:', firestoreErr)
@@ -208,18 +231,79 @@ export function ProfessionalHeroActions({ proName, proUsername }: ProfessionalHe
 
 interface ProfessionalReviewsSectionProps {
   proName: string
+  proUsername?: string
   initialReviews: ReviewItem[]
 }
 
-export function ProfessionalReviewsSection({ proName, initialReviews }: ProfessionalReviewsSectionProps) {
+export function ProfessionalReviewsSection({ proName, proUsername: proUsernameProp, initialReviews }: ProfessionalReviewsSectionProps) {
   const [showReviewModal, setShowReviewModal] = useState(false)
   const [reviewerName, setReviewerName] = useState('')
   const [reviewerRating, setReviewerRating] = useState(5)
   const [reviewerComment, setReviewerComment] = useState('')
-  const [reviews, setReviews] = useState<ReviewItem[]>(initialReviews)
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false)
+  // initialReviews come from the APPROVED professional doc, so they are
+  // approved by construction. New reviews persist to professional_reviews
+  // as status 'pending' and must never join this public list until an
+  // admin approves them.
+  const [approvedExtraReviews, setApprovedExtraReviews] = useState<ReviewItem[]>([])
+  // The author's own pending reviews — shown to the author only, never public.
+  const [myPendingReviews, setMyPendingReviews] = useState<ReviewItem[]>([])
+  const [proUsername, setProUsername] = useState(proUsernameProp || '')
+  // Extra (Firestore) reviews load only once this section scrolls into
+  // view — most visitors never get here, so the Firebase chunk is not
+  // fetched for them at all.
+  const sectionRef = useRef<HTMLDivElement | null>(null)
+  const [reviewsVisible, setReviewsVisible] = useState(false)
 
-  const handleReviewSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    const el = sectionRef.current
+    if (!el) return
+    if (typeof IntersectionObserver === 'undefined') {
+      setReviewsVisible(true)
+      return
+    }
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setReviewsVisible(true)
+          obs.disconnect()
+        }
+      },
+      { rootMargin: '200px' }
+    )
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [])
+
+  useEffect(() => {
+    if (!proUsernameProp) {
+      const fromPath = usernameFromPathname()
+      if (fromPath) setProUsername(fromPath)
+    }
+  }, [proUsernameProp])
+
+  useEffect(() => {
+    if (!proUsername || !reviewsVisible) return
+    let cancelled = false
+    import('@/lib/review-service').then(({ getApprovedReviewsForProfessional, getMyPendingReviewsForProfessional }) => {
+      if (cancelled) return
+      getApprovedReviewsForProfessional(proUsername).then((list) => {
+        if (!cancelled) setApprovedExtraReviews(list.map(toReviewItem))
+      })
+      getMyPendingReviewsForProfessional(proUsername).then((list) => {
+        if (!cancelled) setMyPendingReviews(list.map(toReviewItem))
+      })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [proUsername, reviewsVisible])
+
+  const reviews = [...approvedExtraReviews, ...initialReviews]
+
+  const handleReviewSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (isSubmittingReview) return
     if (!reviewerName.trim() || !reviewerComment.trim()) {
       toast.error('Please complete all review fields.')
       return
@@ -231,24 +315,44 @@ export function ProfessionalReviewsSection({ proName, initialReviews }: Professi
       return
     }
 
-    const newRev: ReviewItem = {
-      id: 'rev-' + Date.now(),
-      userName: reviewerName.trim(),
-      rating: reviewerRating,
-      date: 'Just now',
-      comment: reviewerComment.trim(),
+    const username = (proUsername || '').trim() || usernameFromPathname()
+    if (!username) {
+      toast.error('Could not determine which professional this review is for. Please reload the page and try again.')
+      return
     }
-    setReviews([newRev, ...reviews])
-    setShowReviewModal(false)
-    setReviewerName('')
-    setReviewerComment('')
-    toast.success('Thank you! Your review has been recorded.')
+
+    setIsSubmittingReview(true)
+    try {
+      // Persist first — nothing is toasted and the modal stays open on failure.
+      // New reviews are saved as status 'pending' and are NOT public until
+      // an admin approves them. Review service loaded on demand.
+      const { submitProfessionalReview } = await import('@/lib/review-service')
+      const saved = await submitProfessionalReview({
+        professionalUsername: username,
+        professionalName: proName,
+        userName: reviewerName.trim(),
+        rating: reviewerRating,
+        comment: reviewerComment.trim(),
+      })
+      setMyPendingReviews((prev) => [
+        toReviewItem(saved),
+        ...prev.filter((r) => r.id !== saved.id),
+      ])
+      setShowReviewModal(false)
+      setReviewerName('')
+      setReviewerComment('')
+      toast.success('Thank you! Your review has been submitted and is pending review.')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not save your review. Please try again.')
+    } finally {
+      setIsSubmittingReview(false)
+    }
   }
 
   return (
     <>
       {/* Interactive Reviews Section */}
-      <div id="professional-reviews-section" className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xs space-y-6">
+      <div ref={sectionRef} id="professional-reviews-section" className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xs space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-lg font-extrabold text-slate-900">Ratings & Client Reviews</h2>
@@ -264,6 +368,32 @@ export function ProfessionalReviewsSection({ proName, initialReviews }: Professi
         </div>
 
         <div className="space-y-4">
+          {myPendingReviews.length > 0 && (
+            <div className="space-y-3">
+              <p className="text-xs font-bold text-amber-700">
+                Your review{myPendingReviews.length > 1 ? 's are' : ' is'} pending review — only you can see {myPendingReviews.length > 1 ? 'them' : 'it'} until our team approves {myPendingReviews.length > 1 ? 'them' : 'it'}.
+              </p>
+              {myPendingReviews.map((rev) => (
+                <div key={rev.id} className="p-4 bg-amber-50 rounded-2xl border border-amber-200 space-y-2">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-extrabold text-slate-900 flex items-center gap-1.5">
+                      <span>{rev.userName}</span>
+                      <span className="text-[10px] font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300">
+                        Pending review
+                      </span>
+                    </span>
+                    <span className="text-slate-400">{rev.date}</span>
+                  </div>
+                  <div className="flex items-center gap-1 text-amber-400">
+                    {Array.from({ length: rev.rating }).map((_, i) => (
+                      <Star key={i} className="w-3.5 h-3.5 fill-amber-400" />
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-700 leading-relaxed">{rev.comment}</p>
+                </div>
+              ))}
+            </div>
+          )}
           {reviews && reviews.length > 0 ? (
             reviews.map((rev) => (
               <div key={rev.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
@@ -345,9 +475,10 @@ export function ProfessionalReviewsSection({ proName, initialReviews }: Professi
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-md"
+                  disabled={isSubmittingReview}
+                  className="flex-1 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-md disabled:opacity-50"
                 >
-                  Submit Review
+                  {isSubmittingReview ? 'Submitting…' : 'Submit Review'}
                 </button>
               </div>
             </form>

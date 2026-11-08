@@ -2,14 +2,14 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import Navbar from '@/components/navbar'
 import Footer from '@/components/footer'
 import { Mail, Lock, UserPlus, Building2, Phone, ArrowRight, Eye, EyeOff, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { isValidPersonName, validatePersonName, isValidUsPhone, validateUsPhone, formatUsPhone, filterPersonNameInput, isValidEmail, isValidPassword } from '@/lib/validation'
 import { auth } from '@/lib/firebase'
-import { createUserWithEmailAndPassword, updateProfile, signInWithEmailAndPassword } from 'firebase/auth'
+import { checkClientRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
+import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification, signOut } from 'firebase/auth'
 
 export default function RegisterPage() {
   const [name, setName] = useState('')
@@ -22,7 +22,10 @@ export default function RegisterPage() {
   const [errorMsg, setErrorMsg] = useState('')
   const [nameError, setNameError] = useState('')
   const [phoneError, setPhoneError] = useState('')
-  const router = useRouter()
+  // Set on successful registration: no session is written and the user is
+  // NOT signed in — they must verify their email first, then sign in.
+  const [isRegistered, setIsRegistered] = useState(false)
+  const [verificationFailed, setVerificationFailed] = useState(false)
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const formatted = formatUsPhone(e.target.value)
@@ -75,52 +78,60 @@ export default function RegisterPage() {
       return
     }
 
+    // Client-side rate guard (5 attempts / 15 min per email), checked
+    // after validation so failed validation does not burn the budget,
+    // and before account creation. UX-level only — Firebase Auth's
+    // server-side throttling is the real enforcement. The account
+    // creation flow below is untouched.
+    const registerLimit = checkClientRateLimit(
+      `register:${email.trim().toLowerCase()}`,
+      RATE_LIMITS.register
+    )
+    if (!registerLimit.allowed) {
+      const err = 'Too many registration attempts. Please wait a few minutes and try again.'
+      setErrorMsg(err)
+      toast.error(err)
+      return
+    }
+
     setIsLoading(true)
 
     try {
-      let fbUid = ''
-      try {
-        const cred = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), password)
-        fbUid = cred.user.uid
-        if (name.trim()) {
-          await updateProfile(cred.user, { displayName: name.trim() }).catch(() => {})
-        }
-      } catch (authErr: any) {
-        if (authErr?.code === 'auth/email-already-in-use') {
-          // If already registered, sign in to link session
-          try {
-            const cred = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password)
-            fbUid = cred.user.uid
-          } catch (signInErr) {
-            console.warn('Sign-in with existing email warning:', signInErr)
-          }
-        } else {
-          console.warn('Firebase Auth creation notice:', authErr?.message)
-        }
+      // Account creation MUST succeed — any failure fails registration
+      // visibly. No session is written and there is no redirect on failure.
+      const cred = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), password)
+      if (name.trim()) {
+        await updateProfile(cred.user, { displayName: name.trim() }).catch(() => {})
       }
 
-      // Store user session for seamless flow
-      const userSession = JSON.stringify({
-        name: name.trim(),
-        email: email.trim().toLowerCase(),
-        phone: phone.trim(),
-        company: company.trim(),
-        role: 'business',
-        uid: fbUid || auth.currentUser?.uid || '',
-        userId: fbUid || auth.currentUser?.uid || ''
-      })
-
+      // Prove ownership of the email before the account can list anything
+      // (P0-2: unverified email must never confer ownership).
       try {
-        sessionStorage.setItem('biznestusa_user_session', userSession)
-        localStorage.setItem('biznestusa_user_session', userSession)
-      } catch {}
+        await sendEmailVerification(cred.user)
+      } catch (verifyErr) {
+        // The account exists; only the verification email failed to send.
+        // The user can resend it from the sign-in page.
+        console.warn('Verification email failed to send:', (verifyErr as any)?.message)
+        setVerificationFailed(true)
+      }
 
-      toast.success('BizNestUSA Business Account registered successfully!')
-      router.push('/add-business')
+      // createUserWithEmailAndPassword signs the user in automatically —
+      // sign back out so registration does not auto-sign-in. The user
+      // signs in via /login only after verifying their email.
+      try { await signOut(auth) } catch (_) {}
+
+      setIsRegistered(true)
+      toast.success('Account created! Please verify your email before listing your business.')
     } catch (err: any) {
-      console.error('Registration error:', err)
-      setErrorMsg(err.message || 'Registration failed. Please try again.')
-      toast.error(err.message || 'Registration failed.')
+      if (err?.code === 'auth/email-already-in-use') {
+        const msg = 'That email is already registered. Please sign in or reset your password.'
+        setErrorMsg(msg)
+        toast.error(msg)
+      } else {
+        console.error('Registration error:', err)
+        setErrorMsg(err.message || 'Registration failed. Please try again.')
+        toast.error(err.message || 'Registration failed.')
+      }
     } finally {
       setIsLoading(false)
     }
@@ -146,6 +157,20 @@ export default function RegisterPage() {
             </div>
           )}
 
+          {isRegistered && (
+            <div className="mb-4 p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 space-y-2">
+              <p className="font-bold text-sm">Account created — please verify your email.</p>
+              <p className="leading-relaxed">
+                We sent a verification link to <strong>{email.trim().toLowerCase()}</strong>. Click the link in that email, then sign in to list your business.
+                {verificationFailed && ' The verification email could not be sent — you can request a new one from the sign-in page.'}
+              </p>
+              <Link href="/login" className="inline-block px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl">
+                Go to Sign In
+              </Link>
+            </div>
+          )}
+
+          {!isRegistered && (
           <form onSubmit={handleRegister} className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">Full Name *</label>
@@ -250,6 +275,7 @@ export default function RegisterPage() {
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
+          )}
 
           <div className="mt-6 pt-6 border-t border-slate-100 text-center text-xs text-slate-500">
             Already have an account?{' '}

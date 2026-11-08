@@ -4,10 +4,9 @@ import Footer from '@/components/footer'
 import { CATEGORIES } from '@/lib/data'
 import { getAllBusinesses } from '@/lib/db-service'
 import Link from 'next/link'
-import Image from 'next/image'
 import { 
-  ShieldCheck, Star, ArrowRight, ArrowLeft, MapPin, Building2, 
-  CheckCircle2, HelpCircle, Sparkles, ChevronRight, Phone, ExternalLink 
+  ShieldCheck, ArrowRight, MapPin, Building2, 
+  CheckCircle2, HelpCircle, Sparkles, ChevronRight 
 } from 'lucide-react'
 import { Metadata } from 'next'
 import { notFound } from 'next/navigation'
@@ -23,10 +22,12 @@ import {
 import { getCmsCategoryBySlug } from '@/lib/admin-cms-service'
 import { getServicesByCategory } from '@/lib/services-data'
 import { Wrench } from 'lucide-react'
-import CategoryListingsView from '@/components/business/category-listings-view'
+import CategoryListingsPaginated from '@/components/business/category-listings-paginated'
+import { paginate } from '@/lib/pagination'
+import { toPublicBusiness } from '@/lib/listings-api'
 
 export const revalidate = 604800 // 7-day ISR revalidation
-export const dynamicParams = false
+export const dynamicParams = true
 
 export async function generateStaticParams() {
   return CATEGORIES.map((cat) => ({
@@ -36,13 +37,11 @@ export async function generateStaticParams() {
 
 function formatCategoryTitle(name: string): string {
   const candidates = [
+    `${name} Businesses & Services in USA | BizNestUSA`,
     `${name} Businesses in the USA | BizNestUSA`,
-    `${name} Directory & Businesses in USA | BizNestUSA`,
-    `${name} Businesses & Directory in USA | BizNestUSA`,
-    `${name} in the United States | BizNestUSA Directory`,
-    `Verified ${name} Businesses in USA | BizNestUSA`,
-    `${name} Directory | BizNestUSA Directory`,
-    `${name} | BizNestUSA Business Directory`
+    `Find ${name} Businesses Near You | BizNestUSA`,
+    `${name} Directory: Local Companies USA | BizNestUSA`,
+    `${name} Business Directory USA | BizNestUSA`
   ]
 
   for (const c of candidates) {
@@ -54,14 +53,15 @@ function formatCategoryTitle(name: string): string {
       if (truncated.length >= 50 && truncated.length <= 60) return truncated
     }
   }
-  return `${name} – Official Directory | BizNestUSA`.slice(0, 60)
+  return `${name} Businesses in the USA | BizNestUSA`.slice(0, 60)
 }
 
 function formatCategoryDescription(name: string): string {
+  const lc = name.toLowerCase()
   const templates = [
-    `Browse verified ${name.toLowerCase()} businesses across the USA. Compare top local companies, service specialties, contact details, and addresses on BizNestUSA.`,
-    `Find verified ${name.toLowerCase()} providers across the USA. Explore local company ratings, verified contact numbers, addresses, and profiles on BizNestUSA.`,
-    `Discover top-rated ${name.toLowerCase()} companies across the USA. Compare verified local business profiles, services, phone contacts, and details on BizNestUSA.`
+    `Find ${lc} businesses across the USA on BizNestUSA. Compare services, contact details, addresses, and hours — free to browse and search.`,
+    `Browse ${lc} businesses across the USA. Compare services, locations, phone numbers, and hours on BizNestUSA — free to search.`,
+    `Looking for ${lc} businesses? Browse providers across the USA on BizNestUSA — services, contact details, and locations in one place.`
   ]
 
   for (const t of templates) {
@@ -77,6 +77,10 @@ function formatCategoryDescription(name: string): string {
   return templates[0]
 }
 
+// Static page: NO searchParams here. Reading ?page= in this file made
+// the route dynamic (ƒ) and killed prerendering. Page 1 is the only
+// server-rendered slice; pages 2+ are fetched client-side from
+// /api/listings by CategoryListingsPaginated and are not indexed.
 export async function generateMetadata(props: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const params = await props.params
   const cat = CATEGORIES.find(c => c.id === params.slug)
@@ -90,7 +94,7 @@ export async function generateMetadata(props: { params: Promise<{ slug: string }
   const title = cmsCat?.seoTitle || formatCategoryTitle(cat.name)
   const description = cmsCat?.metaDescription || formatCategoryDescription(cat.name)
   const canonicalUrl = toCanonicalUrl(`category/${cat.id}`)
-  const shouldIndex = cmsCat?.noIndex ? false : true
+  const shouldIndex = !cmsCat?.noIndex
 
   return {
     title,
@@ -123,6 +127,10 @@ export default async function CategoryDetailPage(props: { params: Promise<{ slug
 
   const allApproved = await getAllBusinesses(false)
   const businesses = filterBusinessesByCategory(allApproved, cat.id)
+  // Static page 1 only (24 items): subcategory counts, city links and
+  // the schema below use the full filtered total; pages 2+ are fetched
+  // client-side from /api/listings.
+  const bizPage = paginate(businesses, 1)
   const activeCities = getCitiesWithListingsForCategory(allApproved, cat.id)
   const relatedCategories = CATEGORIES.filter(c => c.id !== cat.id).slice(0, 8)
   const seoCopy = getCategorySeoCopy(cat.id)
@@ -133,9 +141,9 @@ export default async function CategoryDetailPage(props: { params: Promise<{ slug
 
   const displayH1 = cmsCat?.h1 || `${cat.name} Businesses in the USA`
   const displayIntro = cmsCat?.introContent || seoCopy?.intro || cat.desc
-  const displayWhatIs = cmsCat?.longDescription || seoCopy?.whatIs || `This directory connects American consumers, business owners, and project managers with verified ${cat.name.toLowerCase()} providers across the country.`
+  const displayWhatIs = cmsCat?.longDescription || seoCopy?.whatIs || `This directory lists ${cat.name.toLowerCase()} providers across the country, so consumers, business owners, and project managers can compare services, contact details, and locations in one place.`
   const ctaHeading = cmsCat?.ctaHeading || seoCopy?.ctaHeading || `Own a ${cat.name} Business?`
-  const ctaText = cmsCat?.ctaText || seoCopy?.ctaText || `Create your verified business profile on BizNest USA and make it easy for local customers to discover your services.`
+  const ctaText = cmsCat?.ctaText || seoCopy?.ctaText || `Create your business profile on BizNestUSA and make it easy for local customers to find your ${cat.name.toLowerCase()} services.`
 
   // Category subcategories list
   const categorySubcategories = (cat as any).subcategories || []
@@ -144,12 +152,12 @@ export default async function CategoryDetailPage(props: { params: Promise<{ slug
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
     name: `${cat.name} Directory in the United States`,
-    description: `Find verified ${cat.name.toLowerCase()} providers across the United States. Browse local businesses, official contact info, and services on BizNest USA.`,
+    description: `Find ${cat.name.toLowerCase()} providers across the United States. Browse local businesses, contact info, and services on BizNestUSA.`,
     url: canonicalUrl,
-    isPartOf: { '@type': 'WebSite', name: 'BizNest USA', url: 'https://biznestusa.com/' },
+    isPartOf: { '@type': 'WebSite', name: 'BizNestUSA', url: 'https://biznestusa.com/' },
     mainEntity: {
       '@type': 'ItemList',
-      itemListElement: businesses.map((biz, idx) => ({
+      itemListElement: bizPage.pageItems.map((biz, idx) => ({
         '@type': 'ListItem',
         position: idx + 1,
         name: biz.name,
@@ -229,7 +237,7 @@ export default async function CategoryDetailPage(props: { params: Promise<{ slug
               </h1>
 
               <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
-                {displayIntro} Browse verified {cat.name.toLowerCase()} businesses across America by location, specialties, verified credentials, and direct contact details.
+                {displayIntro} Browse {cat.name.toLowerCase()} businesses across the USA by location, services, and contact details.
               </p>
             </div>
 
@@ -243,7 +251,7 @@ export default async function CategoryDetailPage(props: { params: Promise<{ slug
                 <ArrowRight className="w-4 h-4" />
               </Link>
               <span className="text-[11px] text-slate-500 text-center">
-                Free standard review or $5 priority exposure
+                Listings from $1 · $5 Standard · $10 Authoritative
               </span>
             </div>
           </div>
@@ -276,7 +284,7 @@ export default async function CategoryDetailPage(props: { params: Promise<{ slug
                     </h2>
                   </div>
                   <p className="text-xs sm:text-sm text-slate-500">
-                    Explore specialized {cat.name.toLowerCase()} sectors, verified providers, and service details:
+                    Explore specialized {cat.name.toLowerCase()} services and the providers listed in each one:
                   </p>
                 </div>
 
@@ -361,7 +369,7 @@ export default async function CategoryDetailPage(props: { params: Promise<{ slug
                   What is BizNest USA and how does it help {cat.name.toLowerCase()} businesses?
                 </h4>
                 <p className="leading-relaxed text-blue-900/90 font-normal">
-                  {seoCopy?.brandBenefit || `BizNest USA gives verified businesses an authoritative public business profile with contact details, services, operating hours, and location coverage. Create a complete business profile that gives customers another trusted place to discover your services online.`}
+                  {seoCopy?.brandBenefit || `BizNestUSA gives businesses a public profile with contact details, services, operating hours, and location coverage — another trusted place for customers to discover your services online.`}
                 </p>
               </div>
             </section>
@@ -397,7 +405,15 @@ export default async function CategoryDetailPage(props: { params: Promise<{ slug
             )}
 
             {/* BUSINESS LISTINGS (LIST VIEW & GRID VIEW SUPPORTING $1, $5, $10 PLANS) */}
-            <CategoryListingsView businesses={businesses} categoryName={cat.name} />
+            <CategoryListingsPaginated
+              kind="category"
+              basePath={`/category/${cat.id}`}
+              categorySlug={cat.id}
+              initialItems={bizPage.pageItems.map(toPublicBusiness)}
+              total={bizPage.total}
+              totalPages={bizPage.totalPages}
+              categoryName={cat.name}
+            />
 
             {/* FREQUENTLY ASKED QUESTIONS SECTION */}
             {seoCopy?.faqs && seoCopy.faqs.length > 0 && (
@@ -469,7 +485,7 @@ export default async function CategoryDetailPage(props: { params: Promise<{ slug
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>$1 Review plan or $5 Priority queue</span>
+                  <span>$1 Basic, $5 Standard or $10 Authoritative plans</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -482,7 +498,7 @@ export default async function CategoryDetailPage(props: { params: Promise<{ slug
                   href="/add-business"
                   className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer text-center"
                 >
-                  <span>List Your Business Free</span>
+                  <span>List Your Business · From $1</span>
                   <ArrowRight className="w-4 h-4" />
                 </Link>
               </div>
@@ -497,7 +513,7 @@ export default async function CategoryDetailPage(props: { params: Promise<{ slug
                 Are you an independent {cat.name.toLowerCase()} contractor or specialist?
               </h4>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Build a certified professional profile with verified credentials and portfolio samples on BizNest USA.
+                Build a professional profile with your credentials and portfolio samples on BizNestUSA.
               </p>
               <Link
                 href="/register/professional"
@@ -521,7 +537,7 @@ export default async function CategoryDetailPage(props: { params: Promise<{ slug
               {ctaHeading}
             </p>
             <p className="text-[10px] text-slate-500 truncate">
-              List on America&apos;s verified directory
+              List on BizNestUSA — from $1
             </p>
           </div>
           <Link

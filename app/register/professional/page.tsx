@@ -2,13 +2,12 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import Navbar from '@/components/navbar'
 import Footer from '@/components/footer'
 import { Mail, Lock, User, ShieldCheck, ArrowRight, CheckCircle2, AlertCircle, Eye, EyeOff } from 'lucide-react'
 import { toast } from 'sonner'
 import { auth } from '@/lib/firebase'
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth'
+import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification, signOut } from 'firebase/auth'
 import { isValidPersonName, validatePersonName, filterPersonNameInput, isValidUsPhone, validateUsPhone, formatUsPhone, isValidEmail } from '@/lib/validation'
 import { Phone } from 'lucide-react'
 
@@ -24,7 +23,10 @@ export default function ProfessionalRegisterPage() {
   const [errorMsg, setErrorMsg] = useState('')
   const [fullNameError, setFullNameError] = useState('')
   const [phoneError, setPhoneError] = useState('')
-  const router = useRouter()
+  // Set on successful registration: no session is written and the user is
+  // NOT signed in — they must verify their email first, then sign in.
+  const [isRegistered, setIsRegistered] = useState(false)
+  const [verificationFailed, setVerificationFailed] = useState(false)
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -65,39 +67,37 @@ export default function ProfessionalRegisterPage() {
 
     setIsLoading(true)
     try {
-      // Create Firebase Auth user or session
-      try {
-        const cred = await createUserWithEmailAndPassword(auth, email.trim(), password)
-        if (cred.user) {
-          await updateProfile(cred.user, { displayName: fullName.trim() })
-        }
-      } catch (authErr: any) {
-        // If Firebase Auth fails (e.g., in offline or client mode), store session
-        console.warn('Firebase Auth fallback:', authErr?.message)
-        if (authErr?.code === 'auth/email-already-in-use') {
-          setErrorMsg('An account with this email address already exists. Please login.')
-          setIsLoading(false)
-          return
-        }
+      // Account creation MUST succeed — any failure fails registration
+      // visibly. No session is written and there is no redirect on failure.
+      const cred = await createUserWithEmailAndPassword(auth, email.trim(), password)
+      if (cred.user) {
+        await updateProfile(cred.user, { displayName: fullName.trim() })
       }
 
-      // Store professional user session
-      const proSession = JSON.stringify({
-        name: fullName.trim(),
-        email: email.trim(),
-        phone: phone.trim(),
-        role: 'professional',
-        hasProfile: false
-      })
-      sessionStorage.setItem('biznestusa_user_session', proSession)
-      localStorage.setItem('biznestusa_user_session', proSession)
+      // Prove ownership of the email before the account can list anything
+      // (P0-2: unverified email must never confer ownership).
+      try {
+        await sendEmailVerification(cred.user)
+      } catch (verifyErr) {
+        // The account exists; only the verification email failed to send.
+        // The user can resend it from the sign-in page.
+        console.warn('Verification email failed to send:', (verifyErr as any)?.message)
+        setVerificationFailed(true)
+      }
 
-      toast.success('Professional account created successfully! Redirecting to profile setup...')
-      setTimeout(() => {
-        router.push(`/add-professional?name=${encodeURIComponent(fullName.trim())}&email=${encodeURIComponent(email.trim())}&phone=${encodeURIComponent(phone.trim())}`)
-      }, 700)
+      // createUserWithEmailAndPassword signs the user in automatically —
+      // sign back out so registration does not auto-sign-in. The user
+      // signs in via /login only after verifying their email.
+      try { await signOut(auth) } catch (_) {}
+
+      setIsRegistered(true)
+      toast.success('Professional account created! Please verify your email before setting up your profile.')
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Failed to create account. Please try again.')
+      if (err?.code === 'auth/email-already-in-use') {
+        setErrorMsg('That email is already registered. Please sign in or reset your password.')
+      } else {
+        setErrorMsg(err?.message || 'Failed to create account. Please try again.')
+      }
     } finally {
       setIsLoading(false)
     }
@@ -125,6 +125,20 @@ export default function ProfessionalRegisterPage() {
             </div>
           )}
 
+          {isRegistered && (
+            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 space-y-2">
+              <p className="font-bold text-sm">Account created — please verify your email.</p>
+              <p className="leading-relaxed">
+                We sent a verification link to <strong>{email.trim()}</strong>. Click the link in that email, then sign in to set up your professional profile.
+                {verificationFailed && ' The verification email could not be sent — you can request a new one from the sign-in page.'}
+              </p>
+              <Link href="/login?role=professional" className="inline-block px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl">
+                Go to Sign In
+              </Link>
+            </div>
+          )}
+
+          {!isRegistered && (
           <form onSubmit={handleRegister} className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5">Full Name *</label>
@@ -247,6 +261,7 @@ export default function ProfessionalRegisterPage() {
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
+          )}
 
           <div className="pt-4 border-t border-slate-100 text-center space-y-3">
             <p className="text-xs text-slate-500">

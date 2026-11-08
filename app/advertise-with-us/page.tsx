@@ -6,13 +6,13 @@ import { Megaphone, Target, BarChart3, CheckCircle2, TrendingUp, Users, ArrowRig
 
 export const metadata: Metadata = {
   title: 'Advertise With Us | Targeted USA Business Media Hub',
-  description: 'Reach thousands of active commercial buyers, employers, and local consumers across the United States with high-impact targeted advertising on BizNest USA.',
+  description: 'Reach active commercial buyers, employers, and local consumers across the United States with high-impact targeted advertising on BizNest USA.',
   alternates: {
     canonical: 'https://www.biznestusa.com/advertise-with-us/',
   },
   openGraph: {
     title: 'Advertise With Us | Targeted USA Business Media Hub',
-    description: 'Reach thousands of active commercial buyers, employers, and local consumers across the United States with high-impact targeted advertising on BizNest USA.',
+    description: 'Reach active commercial buyers, employers, and local consumers across the United States with high-impact targeted advertising on BizNest USA.',
     url: 'https://www.biznestusa.com/advertise-with-us/',
     type: 'website',
   },
@@ -45,7 +45,7 @@ export default function AdvertiseWithUsPage() {
               Targeted Directory Advertising Across the USA
             </h1>
             <p className="mt-4 text-slate-300 text-sm sm:text-base max-w-2xl mx-auto leading-relaxed">
-              Connect directly with qualified homeowners, enterprise purchasers, and hiring managers actively seeking verified commercial services across all 50 states.
+              Connect directly with qualified homeowners, enterprise purchasers, and hiring managers actively seeking commercial services across 39 states and Washington, D.C.
             </p>
           </div>
         </section>

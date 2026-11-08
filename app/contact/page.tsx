@@ -5,6 +5,9 @@ import Navbar from '@/components/navbar'
 import Footer from '@/components/footer'
 import { Mail, MapPin, MessageSquare, MessageCircle, ShieldCheck, AlertCircle, ExternalLink, Sparkles } from 'lucide-react'
 import { saveContactMessage } from '@/lib/db-service'
+import TurnstileWidget from '@/components/turnstile-widget'
+import { isTurnstileWidgetEnabled, verifyTurnstileTokenClient } from '@/lib/turnstile'
+import { sendContactEmail } from '@/lib/email-service'
 import { isValidPersonName, validatePersonName, filterPersonNameInput, isValidUsPhone, validateUsPhone, formatUsPhone, isValidEmail } from '@/lib/validation'
 import { toast } from 'sonner'
 
@@ -18,6 +21,7 @@ export default function ContactPage() {
     message: ''
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
   const [submitted, setSubmitted] = useState(false)
   const [formError, setFormError] = useState('')
 
@@ -57,6 +61,25 @@ export default function ContactPage() {
       return
     }
 
+    // Cloudflare Turnstile: when keys are set (user's job), a completed
+    // check is required and verified server-side via /api/turnstile/verify.
+    // With no keys configured the check is skipped and submit proceeds.
+    if (isTurnstileWidgetEnabled()) {
+      if (!turnstileToken) {
+        const err = 'Please complete the security check before submitting.'
+        setFormError(err)
+        toast.error(err)
+        return
+      }
+      const check = await verifyTurnstileTokenClient(turnstileToken)
+      if (!check.success) {
+        const err = 'Security check failed. Please try again.'
+        setFormError(err)
+        toast.error(err)
+        return
+      }
+    }
+
     setIsSubmitting(true)
     try {
       await saveContactMessage({
@@ -65,6 +88,17 @@ export default function ContactPage() {
         phone: formData.phone,
         subject: `${formData.subject} (${formData.city || 'USA'})`,
         message: formData.message
+      })
+      // Email the support inbox via Brevo (fire-and-forget — the message is
+      // already saved, so a mail failure must never fail the submission).
+      sendContactEmail({
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        subject: `${formData.subject} (${formData.city || 'USA'})`,
+        message: formData.message
+      }).then(sent => {
+        if (!sent) console.warn('[brevo] Contact email not sent (see above) — message is saved in Firestore.')
       })
       setIsSubmitting(false)
       setSubmitted(true)
@@ -302,6 +336,7 @@ export default function ContactPage() {
                   />
                 </div>
 
+                <TurnstileWidget onToken={setTurnstileToken} className="flex justify-center" />
                 <button
                   type="submit"
                   disabled={isSubmitting}

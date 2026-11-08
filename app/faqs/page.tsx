@@ -20,11 +20,11 @@ export const metadata: Metadata = {
 const faqs = [
   {
     q: "What is BizNest USA?",
-    a: "BizNest USA is a unified national platform connecting verified American local businesses, licensed professionals, and hiring employers across all 50 states."
+    a: "BizNest USA is a unified national platform connecting American local businesses, skilled professionals, and hiring employers across 39 states and Washington, D.C."
   },
   {
     q: "Is submitting a business listing on BizNest USA free?",
-    a: "Yes! Submitting a business listing on BizNest USA is completely free. It includes your business name, address, contact phone, website, business category, service catalog, and business description with zero hidden fees."
+    a: "No — searching and browsing the directory is free, but listing a business is a paid submission starting at $1 (Basic plan). Your listing includes your business name, address, contact phone, website, business category, service catalog, and business description."
   },
   {
     q: "How long does it take for my business to appear in search results?",

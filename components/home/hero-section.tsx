@@ -9,7 +9,7 @@ export default function HeroSection() {
     >
       <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
         <p className="inline-flex items-center gap-2 text-blue-600 font-bold text-xs mb-3 tracking-wider uppercase bg-blue-50 px-3.5 py-1 rounded-full border border-blue-200">
-          America&apos;s Verified Business &amp; Talent Directory
+          America&apos;s Business &amp; Talent Directory
         </p>
 
         <h1
@@ -19,7 +19,7 @@ export default function HeroSection() {
           Find Businesses, Professionals &amp; Jobs Across the USA
         </h1>
         <p className="text-slate-600 font-normal text-base sm:text-lg mb-8 max-w-2xl mx-auto">
-          Connect directly with licensed contractors, verified companies, skilled professionals, and career opportunities across all 50 states.
+          Connect directly with local contractors, companies, skilled professionals, and career opportunities across 39 states and Washington, D.C.
         </p>
 
         {/* Search Bar */}
@@ -32,7 +32,7 @@ export default function HeroSection() {
             href="/add-business"
             className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 sm:px-8 py-3.5 rounded-xl transition-all text-sm sm:text-base shadow-md hover:shadow-lg text-center"
           >
-            List Your Business for Free
+            List Your Business — From $1
           </Link>
           <Link
             id="hero-about-btn"
@@ -48,8 +48,8 @@ export default function HeroSection() {
             BizNest USA connects American business owners, home-service pros, and employers with customers and candidates nationwide.
           </p>
           <div className="mt-3 flex flex-wrap justify-center gap-2 text-xs text-slate-600 font-medium">
-            <span className="bg-white px-3 py-1 rounded-full border border-slate-200">Free Business Listing</span>
-            <span className="bg-white px-3 py-1 rounded-full border border-slate-200">Verified Credentials</span>
+            <span className="bg-white px-3 py-1 rounded-full border border-slate-200">Listings From $1</span>
+            <span className="bg-white px-3 py-1 rounded-full border border-slate-200">Reviewed Listings</span>
             <span className="bg-white px-3 py-1 rounded-full border border-slate-200">Direct Customer Inquiries</span>
           </div>
         </div>

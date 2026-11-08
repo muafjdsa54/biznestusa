@@ -10,14 +10,13 @@ import {
   getPopulatedCategoryCityPairs,
   getPopulatedCategorySubcategoryPairs,
   normalizeCitySlug,
-  normalizeSubcategorySlug,
   isUsCity,
   isPakistaniCity,
   isPakistaniEntity
 } from '@/lib/directory-helpers'
-import { POPULAR_SERVICES, getSubcategoryHref } from '@/lib/services-data'
+import { POPULAR_SERVICES, getServiceBySlug, getSubcategoryHref } from '@/lib/services-data'
 
-export const revalidate = 3600 // Revalidate sitemap XML every hour
+export const revalidate = 86400 // Revalidate sitemap XML every 24h (ISR budget: was hourly)
 
 function safeDate(input?: string | null, fallback: Date = new Date()): Date {
   if (!input) return fallback
@@ -168,37 +167,23 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.85,
     }))
 
-  // 6b. All Subcategory Landing Pages (e.g. /category/automotive/auto-repair/)
-  const allSubcategoryRoutes: MetadataRoute.Sitemap = []
-  for (const cat of BUSINESS_CATEGORIES) {
-    for (const sub of cat.subcategories) {
-      allSubcategoryRoutes.push({
-        url: canonicalUrl(`/category/${cat.id}/${normalizeSubcategorySlug(sub)}`),
-        lastModified: currentDate,
-        changeFrequency: 'weekly' as const,
-        priority: 0.85,
-      })
-    }
-  }
-
+  // 6b. Subcategory Landing Pages — populated only (a subcategory route is
+  // emitted only when at least one approved listing exists for it, so the
+  // sitemap never points at an empty subcategory page).
   const populatedCategorySubcategoryPairs = getPopulatedCategorySubcategoryPairs(rawBusinesses)
-  const categorySubcategoryRoutes = [
-    ...allSubcategoryRoutes,
-    ...populatedCategorySubcategoryPairs.map((pair) => ({
-      url: canonicalUrl(`/category/${pair.categorySlug}/${pair.subcategorySlug}`),
-      lastModified: currentDate,
-      changeFrequency: 'weekly' as const,
-      priority: 0.85,
-    }))
-  ]
+  const categorySubcategoryRoutes = populatedCategorySubcategoryPairs.map((pair) => ({
+    url: canonicalUrl(`/category/${pair.categorySlug}/${pair.subcategorySlug}`),
+    lastModified: currentDate,
+    changeFrequency: 'weekly' as const,
+    priority: 0.85,
+  }))
 
   // 7. Approved Business Pages (Strict USA Only)
   const approvedBusinesses = rawBusinesses.filter(b => 
-    (b.status || 'approved') === 'approved' && 
+    b.status === 'approved' && 
     Boolean(b.slug && b.slug.trim()) &&
     b.slug !== 'verified-business' &&
     b.hasSinglePage !== false &&
-    (b.plan !== 'review_1' || b.source_type === 'seed_research') &&
     !isPakistaniEntity(b)
   )
   const businessRoutes = approvedBusinesses.map((biz) => ({
@@ -210,7 +195,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   // 8. Active Approved Job Openings (Strict USA Only)
   const approvedJobs = rawJobs.filter((job) => 
-    (job.status || 'approved') === 'approved' && 
+    job.status === 'approved' && 
     Boolean(job.slug || job.id) &&
     !isPakistaniEntity(job)
   )
@@ -223,7 +208,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   // 9. Approved Companies (Strict USA Only)
   const approvedCompanies = rawCompanies.filter((comp) => 
-    (comp.status || 'approved') === 'approved' && 
+    comp.status === 'approved' && 
     Boolean(comp.slug && comp.slug.trim()) &&
     !isPakistaniEntity(comp)
   )
@@ -236,7 +221,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   // 10. Approved Professional Profiles (Strict USA Only)
   const approvedPros = rawProfessionals.filter((pro) => 
-    (pro.status || 'approved') === 'approved' && 
+    pro.status === 'approved' && 
     (pro.profileStatus || 'APPROVED') === 'APPROVED' && 
     Boolean(pro.username || pro.slug) &&
     !isPakistaniEntity(pro)
@@ -265,6 +250,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }))
 
   // 12. Specialized Sub-Services Landing Pages (Plumbers, Roofers, Electricians, Dog Groomers, etc.)
+  // Populated only: a service slug is emitted only when its page would show
+  // at least one listing, mirroring app/services/[slug]/page.tsx — keyword
+  // match against the business/professional text blob. (The page's
+  // parent-category fallback compares biz.category — a display name — to the
+  // parent slug, so it never fires for seed or form-submitted listings and
+  // is not relied on here.) rawBusinesses/rawProfessionals are
+  // approved-only, so the approved-only filter is unchanged.
   const allServiceSlugs = new Set<string>()
   POPULAR_SERVICES.forEach((srv) => allServiceSlugs.add(srv.slug))
   BUSINESS_CATEGORIES.forEach((cat) => {
@@ -275,6 +267,23 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     })
   })
 
+  const populatedServiceSlugs = Array.from(allServiceSlugs).filter((slug) => {
+    const service = getServiceBySlug(slug)
+    if (!service) return false
+    const keywords = service.searchKeywords.map((k) => k.toLowerCase())
+    const bizMatch = rawBusinesses.some((biz) => {
+      if (isPakistaniEntity(biz)) return false
+      const textBlob = `${biz.name} ${biz.category} ${biz.description || ''} ${(biz.services || []).join(' ')} ${(biz.detailedServices || []).join(' ')}`.toLowerCase()
+      return keywords.some((kw) => textBlob.includes(kw))
+    })
+    if (bizMatch) return true
+    return rawProfessionals.some((pro) => {
+      if (isPakistaniEntity(pro)) return false
+      const textBlob = `${pro.name} ${pro.title} ${pro.category} ${pro.bio || ''} ${(pro.skills || []).join(' ')}`.toLowerCase()
+      return keywords.some((kw) => textBlob.includes(kw))
+    })
+  })
+
   const serviceRoutes = [
     {
       url: canonicalUrl('/services'),
@@ -282,7 +291,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: 'daily' as const,
       priority: 0.9,
     },
-    ...Array.from(allServiceSlugs).map((slug) => ({
+    ...populatedServiceSlugs.map((slug) => ({
       url: canonicalUrl(`/services/${slug}`),
       lastModified: currentDate,
       changeFrequency: 'weekly' as const,

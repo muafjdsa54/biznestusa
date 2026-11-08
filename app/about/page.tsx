@@ -8,14 +8,14 @@ import {
 } from 'lucide-react'
 
 export const metadata: Metadata = {
-  title: "About BizNestUSA | Verified USA Business Directory",
-  description: "Learn about BizNestUSA, our mission to connect local businesses, skilled independent professionals, and career opportunities across all 50 US states.",
+  title: "About BizNestUSA | USA Business Directory Platform",
+  description: "Learn about BizNestUSA, our mission to connect local businesses, skilled professionals, and career opportunities across 39 states and Washington, D.C.",
   alternates: {
     canonical: 'https://www.biznestusa.com/about/',
   },
   openGraph: {
-    title: "About BizNestUSA | Verified USA Business Directory",
-    description: "Learn about BizNestUSA, our mission to connect local businesses, skilled independent professionals, and career opportunities across all 50 US states.",
+    title: "About BizNestUSA | USA Business Directory Platform",
+    description: "Learn about BizNestUSA, our mission to connect local businesses, skilled professionals, and career opportunities across 39 states and Washington, D.C.",
     url: 'https://www.biznestusa.com/about/',
     siteName: 'BizNestUSA',
     locale: 'en_US',
@@ -23,8 +23,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: "About BizNestUSA | Verified USA Business Directory",
-    description: "Connecting local businesses, skilled professionals, and career opportunities across all 50 US states.",
+    title: "About BizNestUSA | USA Business Directory Platform",
+    description: "Connecting local businesses, skilled professionals, and career opportunities across 39 states and Washington, D.C.",
   },
 }
 
@@ -41,12 +41,12 @@ const CORE_VALUES = [
   },
   { 
     title: "A Connected Ecosystem", 
-    desc: "Companies post open jobs, professionals showcase their verified skills and portfolios, and customers discover trusted local services.", 
+    desc: "Companies post open jobs, professionals showcase their skills and portfolios, and customers discover trusted local services.", 
     icon: HeartHandshake 
   },
   { 
-    title: "Nationwide Discovery Across All 50 States", 
-    desc: "From local family-owned trades in Dallas and Atlanta to venture-backed engineering startups in Austin and Seattle, we support all 50 states.", 
+    title: "Nationwide Discovery Across 39 States and D.C.", 
+    desc: "From local family-owned trades in Dallas and Atlanta to venture-backed engineering startups in Austin and Seattle, we list businesses across 39 states and Washington, D.C.", 
     icon: Globe 
   }
 ]
@@ -112,7 +112,7 @@ export default function AboutPage() {
               </div>
               <h3 className="font-bold text-slate-900 text-base">3. Job Opportunities</h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Companies post remote, hybrid, and local on-site vacancies with upfront salary indications and direct application routes. Job seekers can apply directly or connect their verified professional profiles.
+                Companies post remote, hybrid, and local on-site vacancies with upfront salary indications and direct application routes. Job seekers can apply directly or connect their professional profiles.
               </p>
               <Link href="/jobs" className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 hover:underline pt-2">
                 <span>Search open jobs</span>

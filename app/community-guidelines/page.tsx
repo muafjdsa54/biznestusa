@@ -47,7 +47,7 @@ export default function CommunityGuidelinesPage() {
             <section className="space-y-3">
               <h2 className="text-xl font-bold text-slate-900">1. Building a Trusted American Commercial Network</h2>
               <p>
-                <strong>BizNestUSA</strong> connects millions of consumers, commercial purchasers, job seekers, and recruiters with verified enterprises and certified independent professionals across all 50 states. To maintain an environment grounded in mutual respect, transparency, and consumer protection, all platform participants must adhere to these Community Guidelines.
+                <strong>BizNestUSA</strong> connects consumers, commercial purchasers, job seekers, and recruiters with enterprises and independent professionals across 39 states and Washington, D.C. To maintain an environment grounded in mutual respect, transparency, and consumer protection, all platform participants must adhere to these Community Guidelines.
               </p>
             </section>
 

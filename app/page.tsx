@@ -23,18 +23,19 @@ import { getAllJobs } from '@/lib/job-service'
 import { getAllProfessionals } from '@/lib/professional-service'
 import { getPublicJobPath } from '@/lib/job-url'
 import { getSubcategoryHref } from '@/lib/services-data'
+import { normalizeBusinessCategoryId } from '@/lib/directory-helpers'
 
 export const revalidate = 604800
 
 export const metadata: Metadata = {
-  title: "BizNestUSA | USA Business, Professional & Jobs Directory Platform",
-  description: "Discover verified local businesses, skilled professionals, and career opportunities across all 50 US states. Search by category, profession, city, or state.",
+  title: "Find Local Businesses, Professionals & Jobs in the USA",
+  description: "Search approved local businesses, skilled professionals, and open jobs in New York, Chicago, Austin, and 150+ US cities. Free to browse, no sign-up needed.",
   alternates: {
     canonical: 'https://www.biznestusa.com/',
   },
   openGraph: {
-    title: "BizNestUSA | USA Business, Professional & Jobs Directory Platform",
-    description: "Discover verified local businesses, skilled professionals, and career opportunities across all 50 US states.",
+    title: "Find Local Businesses, Professionals & Jobs in the USA",
+    description: "Search approved local businesses, skilled professionals, and open jobs in New York, Chicago, Austin, and 150+ US cities. Free to browse, no sign-up needed.",
     url: 'https://www.biznestusa.com/',
     siteName: 'BizNestUSA',
     locale: 'en_US',
@@ -42,33 +43,41 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: "BizNestUSA | USA Business, Professional & Jobs Directory Platform",
-    description: "Discover verified local businesses, skilled professionals, and career opportunities across all 50 US states.",
+    title: "Find Local Businesses, Professionals & Jobs in the USA",
+    description: "Search approved local businesses, skilled professionals, and open jobs in New York, Chicago, Austin, and 150+ US cities. Free to browse, no sign-up needed.",
   },
 }
 
 const FAQS = [
   {
     question: 'What is BizNestUSA?',
-    answer: 'BizNestUSA is a unified American directory platform connecting businesses, licensed professionals, and career opportunities across all 50 US states.'
+    answer: 'BizNestUSA is a US business directory where you can find local businesses, skilled professionals, and open jobs in 158 cities across 39 states and Washington, D.C. Search is free — no sign-up needed to browse listings.'
   },
   {
-    question: 'How do businesses list their company?',
-    answer: 'Companies can use the "List Your Business" workflow to create a public profile including contact information, addresses, services, hours, and open job postings.'
+    question: 'How do I find a business near me?',
+    answer: 'Type what you need — for example "plumber", "dentist", or "restaurant" — then pick your city or state. You can also browse by category, such as Home Services, Technology, Food & Restaurants, or Automotive, and by city pages like New York, Chicago, or Austin.'
+  },
+  {
+    question: 'How much does it cost to list a business?',
+    answer: 'Listings start at $1 for a Basic submission. Standard is $5 and adds profile edits plus 5 blog posts; Authoritative is $10 and adds a photo gallery, 10 blog posts for 60 days, and a featured spot. Every submission is reviewed before it goes live, and only paid submissions are approved.'
+  },
+  {
+    question: 'Are the businesses on BizNestUSA verified?',
+    answer: 'Every listing is reviewed by our team before it is published, and listings with no review stay hidden. The Verified badge is separate: an admin awards it only after checking a business or professional. A listing without the badge is approved, not verified.'
   },
   {
     question: 'How can individual professionals create a profile?',
-    answer: 'Professionals across technology, healthcare, design, finance, legal, and skilled trades can create a public profile showcasing their skills, portfolio, experience, and open-to-work status.'
+    answer: 'Professionals in technology, healthcare, design, finance, legal, and skilled trades can create a public profile showing their skills, experience, and open-to-work status, so clients and employers in their city can find them.'
   },
   {
     question: 'How do job postings work on the platform?',
-    answer: 'Employers can post verified job vacancies with job type, remote/on-site status, salary ranges, and direct application methods for job seekers.'
+    answer: 'Employers post open roles linked to their business profile, with job type, remote, hybrid, or on-site status, salary ranges, and a direct application link. Job seekers can filter by state, city, and workplace type — for example, remote software jobs.'
   }
 ]
 
 const POPULAR_SEARCH_TERMS = [
   { label: 'Plumbers in Texas', query: 'Plumber', state: 'Texas' },
-  { label: 'Roofers in Florida', query: 'Roofer', state: 'Florida' },
+  { label: 'Restaurants in New York', query: 'Restaurant', state: 'New York' },
   { label: 'Dentists in New York', query: 'Dentist', state: 'New York' },
   { label: 'Software Developers in California', query: 'Software Developer', state: 'California' },
   { label: 'Attorneys in Illinois', query: 'Attorney', state: 'Illinois' },
@@ -106,9 +115,43 @@ export default async function HomePage() {
     getAllProfessionals().catch(() => [] as ProfessionalItem[])
   ])
 
-  const approvedBusinesses = (allBusinesses || []).filter(b => b.status === 'approved' || !b.status).slice(0, 6)
-  const approvedJobs = (allJobs || []).filter(j => j.status === 'approved' || !j.status).slice(0, 4)
-  const approvedProfessionals = (allProfessionals || []).filter(p => p.status === 'approved' || !p.status).slice(0, 4)
+  // Live counts — computed from the approved listings actually loaded above,
+  // never hardcoded. getAllBusinesses/getAllJobs/getAllProfessionals already
+  // return approved-only records by default.
+  const allApprovedBusinesses = (allBusinesses || []).filter(b => b.status === 'approved' || !b.status)
+  const allApprovedJobs = (allJobs || []).filter(j => j.status === 'approved' || !j.status)
+  const allApprovedProfessionals = (allProfessionals || []).filter(p => p.status === 'approved' || !p.status)
+
+  const businessCount = allApprovedBusinesses.length
+  const jobCount = allApprovedJobs.length
+  const professionalCount = allApprovedProfessionals.length
+  const citiesCovered = new Set(
+    allApprovedBusinesses.flatMap(b => [b.city, ...(b.cities || [])].filter(Boolean)),
+  ).size
+
+  const businessCountByCategory = new Map<string, number>()
+  for (const b of allApprovedBusinesses) {
+    const id = normalizeBusinessCategoryId(b)
+    businessCountByCategory.set(id, (businessCountByCategory.get(id) || 0) + 1)
+  }
+  const businessCountByCity = new Map<string, number>()
+  for (const b of allApprovedBusinesses) {
+    const cities = new Set([b.city, ...(b.cities || [])].filter(Boolean))
+    for (const c of cities) {
+      const key = (c as string).toLowerCase()
+      businessCountByCity.set(key, (businessCountByCity.get(key) || 0) + 1)
+    }
+  }
+
+  // "Recently added" means most recently approved/submitted first.
+  const byRecency = (a: { approvedAt?: string; submittedAt?: string; createdAt?: string; created_at?: string }, b: { approvedAt?: string; submittedAt?: string; createdAt?: string; created_at?: string }) =>
+    +new Date(b.approvedAt || b.submittedAt || b.createdAt || b.created_at || 0) -
+    +new Date(a.approvedAt || a.submittedAt || a.createdAt || a.created_at || 0)
+  const approvedBusinesses = [...allApprovedBusinesses].sort(byRecency).slice(0, 6)
+  const approvedJobs = [...allApprovedJobs].sort((a, b) =>
+    +new Date(b.postedAt || b.postedDate || b.approvedAt || 0) -
+    +new Date(a.postedAt || a.postedDate || a.approvedAt || 0)).slice(0, 4)
+  const approvedProfessionals = [...allApprovedProfessionals].sort(byRecency).slice(0, 4)
 
   const structuredData = {
     '@context': 'https://schema.org',
@@ -120,7 +163,7 @@ export default async function HomePage() {
       target: 'https://www.biznestusa.com/search?q={search_term_string}',
       'query-input': 'required name=search_term_string'
     },
-    description: 'USA business directory, professional network, and jobs platform'
+    description: 'Search approved local businesses, skilled professionals, and open jobs across 39 states and Washington, D.C. — free to browse.'
   }
 
   const faqSchema = {
@@ -156,16 +199,16 @@ export default async function HomePage() {
             
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200/80 text-blue-700 text-xs font-semibold">
               <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-              <span>United States Business & Professional Ecosystem</span>
+              <span>Free to search · Businesses, pros &amp; jobs in 39 states + D.C.</span>
             </div>
 
             <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold text-slate-900 tracking-tight leading-tight">
-              Businesses, Professionals & Jobs <br className="hidden sm:inline" />
-              <span className="text-blue-600">Across the USA</span>
+              Find a Plumber, Dentist, or Local Business <br className="hidden sm:inline" />
+              <span className="text-blue-600">Near You</span>
             </h1>
 
             <p className="text-slate-600 text-sm sm:text-base max-w-2xl mx-auto leading-relaxed">
-              Explore trusted local companies, connect with verified skilled professionals, and discover career opportunities across all 50 states.
+              Search approved local businesses, skilled professionals, and open jobs in New York, Chicago, Austin, San Francisco, and Seattle — 158 cities across 39 states and Washington, D.C. Free to browse, no sign-up needed to search.
             </p>
 
             {/* Global Hero Search */}
@@ -199,7 +242,7 @@ export default async function HomePage() {
                         <option key={c} value={c}>{c}</option>
                       ))}
                     </optgroup>
-                    <optgroup label="All 50 US States">
+                    <optgroup label="Browse by State">
                       {US_STATES.map(st => (
                         <option key={st} value={st}>{st}</option>
                       ))}
@@ -247,7 +290,7 @@ export default async function HomePage() {
                 </div>
                 <div>
                   <h3 className="text-xs font-bold text-slate-900 group-hover:text-blue-600">List Your Business</h3>
-                  <p className="text-xs text-slate-600 font-medium">Publish your company listing</p>
+                  <p className="text-xs text-slate-600 font-medium">List your business from $1 — reviewed before it goes live</p>
                 </div>
               </Link>
 
@@ -260,7 +303,7 @@ export default async function HomePage() {
                 </div>
                 <div>
                   <h3 className="text-xs font-bold text-slate-900 group-hover:text-blue-600">Create Profile</h3>
-                  <p className="text-xs text-slate-600 font-medium">Showcase your skills & portfolio</p>
+                  <p className="text-xs text-slate-600 font-medium">Get found by clients looking for your skills</p>
                 </div>
               </Link>
 
@@ -273,11 +316,34 @@ export default async function HomePage() {
                 </div>
                 <div>
                   <h3 className="text-xs font-bold text-slate-900 group-hover:text-blue-600">Post a Job</h3>
-                  <p className="text-xs text-slate-600 font-medium">Recruit qualified talent</p>
+                  <p className="text-xs text-slate-600 font-medium">Reach job seekers across the USA</p>
                 </div>
               </Link>
             </div>
 
+          </div>
+        </section>
+
+        {/* LIVE DIRECTORY STATS — real counts computed from the approved
+            listings loaded above; nothing here is a hardcoded literal. */}
+        <section aria-label="Directory statistics" className="bg-slate-900 text-white px-4 sm:px-6 lg:px-8 py-8">
+          <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+            <div>
+              <p className="text-2xl sm:text-3xl font-extrabold">{businessCount.toLocaleString()}</p>
+              <p className="text-xs text-slate-300 font-medium mt-1">Approved Businesses</p>
+            </div>
+            <div>
+              <p className="text-2xl sm:text-3xl font-extrabold">{professionalCount.toLocaleString()}</p>
+              <p className="text-xs text-slate-300 font-medium mt-1">Professional Profiles</p>
+            </div>
+            <div>
+              <p className="text-2xl sm:text-3xl font-extrabold">{jobCount.toLocaleString()}</p>
+              <p className="text-xs text-slate-300 font-medium mt-1">Open Job Postings</p>
+            </div>
+            <div>
+              <p className="text-2xl sm:text-3xl font-extrabold">{citiesCovered.toLocaleString()}</p>
+              <p className="text-xs text-slate-300 font-medium mt-1">Cities With Listings</p>
+            </div>
           </div>
         </section>
 
@@ -287,7 +353,7 @@ export default async function HomePage() {
             <span className="text-xs font-bold uppercase tracking-wider text-blue-600">Integrated Platform</span>
             <h2 className="text-2xl font-bold text-slate-900">One Connected Ecosystem</h2>
             <p className="text-xs text-slate-600">
-              Businesses post open jobs, professionals showcase their skills, and customers discover trusted services.
+              Search by service and city, compare real businesses and professionals, and apply to open jobs — all in one place.
             </p>
           </div>
 
@@ -296,12 +362,12 @@ export default async function HomePage() {
               <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
                 <Building2 className="w-5 h-5" />
               </div>
-              <h3 className="text-base font-bold text-slate-900">A. Business Directory</h3>
+              <h3 className="text-base font-bold text-slate-900">Find a Local Business</h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Create comprehensive business listings with address, multiple branches, operating hours, phone, email, and services.
+                Search plumbers, dentists, restaurants, contractors, and more by city and service. Every listing is reviewed before it goes live.
               </p>
               <Link href="/search" className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:underline pt-1">
-                <span>Explore Businesses</span>
+                <span>Find a Business Near You</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>
@@ -310,12 +376,12 @@ export default async function HomePage() {
               <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
                 <Users className="w-5 h-5" />
               </div>
-              <h3 className="text-base font-bold text-slate-900">B. Professional Profiles</h3>
+              <h3 className="text-base font-bold text-slate-900">Hire a Skilled Professional</h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Individual public profiles for developers, designers, doctors, accountants, attorneys, and tradespeople with open-to-work status.
+                Find developers, designers, doctors, accountants, attorneys, and tradespeople — with skills, experience, and open-to-work status.
               </p>
               <Link href="/professionals" className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:underline pt-1">
-                <span>Browse Professionals</span>
+                <span>Find a Professional</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>
@@ -324,12 +390,12 @@ export default async function HomePage() {
               <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
                 <Briefcase className="w-5 h-5" />
               </div>
-              <h3 className="text-base font-bold text-slate-900">C. Jobs Across the USA</h3>
+              <h3 className="text-base font-bold text-slate-900">Find a Job Near You</h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Companies post openings directly linked to their corporate profile. Filter remote, hybrid, or on-site opportunities by state and city.
+                Open roles from real employers — Amazon, Walmart, Google, Pfizer, and more. Filter remote, hybrid, or on-site jobs by state and city.
               </p>
               <Link href="/jobs" className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:underline pt-1">
-                <span>Search Open Jobs</span>
+                <span>Browse Open Jobs</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>
@@ -342,7 +408,7 @@ export default async function HomePage() {
             <div>
               <span className="text-xs font-bold uppercase tracking-wider text-blue-600">Local Services</span>
               <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
-                Browse Business Categories
+                Find a Business by Category
               </h2>
             </div>
             <Link href="/categories" className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1">
@@ -352,7 +418,9 @@ export default async function HomePage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {BUSINESS_CATEGORIES.map((cat) => (
+            {BUSINESS_CATEGORIES.map((cat) => {
+              const catCount = businessCountByCategory.get(cat.id) || 0
+              return (
               <div
                 key={cat.id}
                 className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs hover:border-slate-300 transition-all space-y-3"
@@ -366,9 +434,9 @@ export default async function HomePage() {
                       {cat.name}
                     </Link>
                   </div>
-                  <Link href={`/category/${cat.id}`} className="text-slate-400 hover:text-blue-600">
-                    <ChevronRight className="w-4 h-4" />
-                  </Link>
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100 shrink-0">
+                    {catCount} {catCount === 1 ? 'listing' : 'listings'}
+                  </span>
                 </div>
 
                 <p className="text-xs text-slate-500 line-clamp-1">{cat.desc}</p>
@@ -393,7 +461,8 @@ export default async function HomePage() {
                   )}
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
         </section>
 
@@ -403,7 +472,7 @@ export default async function HomePage() {
             <div>
               <span className="text-xs font-bold uppercase tracking-wider text-indigo-600">Individual Talent</span>
               <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
-                Explore Professional Categories
+                Hire a Professional by Skill
               </h2>
             </div>
             <Link href="/professionals" className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1">
@@ -413,7 +482,12 @@ export default async function HomePage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {PROFESSIONAL_CATEGORIES.map((proCat) => (
+            {PROFESSIONAL_CATEGORIES.map((proCat) => {
+              const proCount = allApprovedProfessionals.filter((p) =>
+                (p.category || '').toLowerCase() === proCat.name.toLowerCase() ||
+                proCat.professions.some((pr) => pr.toLowerCase() === (p.profession || '').toLowerCase()),
+              ).length
+              return (
               <div
                 key={proCat.id}
                 className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs hover:border-slate-300 transition-all space-y-3"
@@ -422,10 +496,13 @@ export default async function HomePage() {
                   <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
                     <Users className="w-4 h-4" />
                   </div>
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <h3 className="font-bold text-slate-900 text-sm">{proCat.name}</h3>
                     <p className="text-[11px] text-slate-500">{proCat.desc}</p>
                   </div>
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100 shrink-0">
+                    {proCount} {proCount === 1 ? 'profile' : 'profiles'}
+                  </span>
                 </div>
 
                 <div className="flex flex-wrap gap-1.5 pt-1">
@@ -448,7 +525,8 @@ export default async function HomePage() {
                   )}
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
         </section>
 
@@ -458,17 +536,19 @@ export default async function HomePage() {
             <div>
               <span className="text-xs font-bold uppercase tracking-wider text-emerald-600">National Reach</span>
               <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
-                Explore Top US Locations
+                Find Businesses in Your City
               </h2>
             </div>
             <Link href="/cities" className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1">
-              <span>View All 50 States</span>
+              <span>View All Cities</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
-            {TOP_CITIES.map((city) => (
+            {TOP_CITIES.map((city) => {
+              const cityCount = businessCountByCity.get(city.toLowerCase()) || 0
+              return (
               <Link
                 key={city}
                 href={`/city/${city.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
@@ -478,9 +558,12 @@ export default async function HomePage() {
                   <MapPin className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 shrink-0" />
                   <span className="truncate">{city}</span>
                 </div>
-                <ChevronRight className="w-3 h-3 text-slate-400 group-hover:translate-x-0.5 transition-transform shrink-0" />
+                <span className="text-[11px] font-bold text-slate-500 group-hover:text-blue-600 shrink-0">
+                  {cityCount} {cityCount === 1 ? 'listing' : 'listings'}
+                </span>
               </Link>
-            ))}
+              )
+            })}
           </div>
         </section>
 
@@ -488,7 +571,7 @@ export default async function HomePage() {
         <section className="py-10 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-6">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-2 border-b border-slate-200 pb-4">
             <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-blue-600">Live Database</span>
+              <span className="text-xs font-bold uppercase tracking-wider text-blue-600">Live Directory</span>
               <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
                 Recently Added Businesses
               </h2>
@@ -555,7 +638,7 @@ export default async function HomePage() {
             <div>
               <span className="text-xs font-bold uppercase tracking-wider text-emerald-600">Career Opportunities</span>
               <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
-                Recent Job Postings
+                Jobs Hiring Now Across the USA
               </h2>
             </div>
             {approvedJobs.length > 0 && (
@@ -621,9 +704,9 @@ export default async function HomePage() {
         <section className="py-10 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-6">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-2 border-b border-slate-200 pb-4">
             <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-indigo-600">Verified Talent</span>
+              <span className="text-xs font-bold uppercase tracking-wider text-indigo-600">Skilled Talent</span>
               <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
-                Recent Professional Profiles
+                Professionals Open to Work
               </h2>
             </div>
             {approvedProfessionals.length > 0 && (
@@ -685,8 +768,8 @@ export default async function HomePage() {
         {/* 9. PLATFORM FAQS */}
         <section className="py-12 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto space-y-6">
           <div className="text-center space-y-1">
-            <h2 className="text-xl font-bold text-slate-900">Frequently Asked Questions</h2>
-            <p className="text-xs text-slate-500">Everything you need to know about navigating and listing on BizNestUSA.</p>
+            <h2 className="text-xl font-bold text-slate-900">Business Search, Listing &amp; Jobs — FAQs</h2>
+            <p className="text-xs text-slate-500">How to find a business, list your company, and apply for jobs on BizNestUSA.</p>
           </div>
 
           <div className="divide-y divide-slate-200 bg-white rounded-xl border border-slate-200 px-6 shadow-xs">
@@ -696,6 +779,32 @@ export default async function HomePage() {
                 <p className="text-xs text-slate-600 leading-relaxed">{faq.answer}</p>
               </div>
             ))}
+          </div>
+        </section>
+
+        {/* 10. FINAL CTA — list from $1, or keep searching free */}
+        <section className="py-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+          <div className="bg-blue-600 rounded-2xl px-6 py-10 sm:px-10 text-center space-y-4">
+            <h2 className="text-xl sm:text-2xl font-bold text-white">
+              Own a Business? Get Found by Customers Searching in Your City
+            </h2>
+            <p className="text-sm text-blue-100 max-w-2xl mx-auto leading-relaxed">
+              List your business from $1. Submit in minutes — we review every listing before it goes live. Searching is always free.
+            </p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+              <Link
+                href="/add-business"
+                className="px-5 py-2.5 bg-white text-blue-700 font-semibold text-sm rounded-xl shadow-xs hover:bg-blue-50 transition-colors"
+              >
+                List Your Business — From $1
+              </Link>
+              <Link
+                href="/search"
+                className="px-5 py-2.5 bg-blue-700 text-white font-semibold text-sm rounded-xl border border-blue-500 hover:bg-blue-800 transition-colors"
+              >
+                Search Businesses Free
+              </Link>
+            </div>
           </div>
         </section>
       </main>

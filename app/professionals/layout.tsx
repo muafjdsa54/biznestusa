@@ -1,12 +1,12 @@
 import { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Verified US Professionals Directory | BizNestUSA Hub',
-  description: 'Discover skilled professionals, software engineers, doctors, attorneys, designers, accountants, and trade experts across all 50 US states on BizNestUSA.',
+  title: 'US Professionals Directory & Experts | BizNestUSA Hub',
+  description: 'Discover skilled professionals, software engineers, doctors, attorneys, designers, accountants, and trade experts across 39 states and D.C. on BizNestUSA.',
   alternates: { canonical: 'https://www.biznestusa.com/professionals/' },
   openGraph: {
-    title: 'Verified US Professionals Directory | BizNestUSA Hub',
-    description: 'Discover skilled professionals, software engineers, doctors, attorneys, designers, accountants, and trade experts across all 50 US states on BizNestUSA.',
+    title: 'US Professionals Directory & Experts | BizNestUSA Hub',
+    description: 'Discover skilled professionals, software engineers, doctors, attorneys, designers, accountants, and trade experts across 39 states and D.C. on BizNestUSA.',
     url: 'https://www.biznestusa.com/professionals/',
     type: 'website',
   },

@@ -7,17 +7,17 @@ export default function AboutSection() {
         <div className="text-center mb-10 sm:mb-12">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 text-blue-700 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide mb-4 border border-blue-200">
             <Globe className="w-3.5 h-3.5" />
-            Verified American Business Ecosystem
+            American Business & Professional Directory
           </span>
           <h2 id="what-is-biznest" className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-slate-900 mb-3 tracking-tight">
             What is BizNest USA?
           </h2>
           <p className="text-base sm:text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
-            BizNest USA is an American business and professional directory built for connecting clients with verified local services. Find verified <strong>local businesses by city</strong> and{' '}
+            BizNest USA is an American business and professional directory built for connecting clients with local services. Find verified <strong>local businesses by city</strong> and{' '}
             <a className="text-blue-600 font-medium hover:underline" href="/categories/" title="Browse all business categories in the USA">
               business categories across the United States
             </a>
-            , or list your own enterprise at no cost.
+            , or list your own business from $1.
           </p>
         </div>
         
@@ -37,8 +37,8 @@ export default function AboutSection() {
               <Users className="w-5 h-5 text-emerald-600" />
             </div>
             <div>
-              <h3 className="font-bold text-slate-900 mb-1">Free Listing</h3>
-              <p className="text-xs text-slate-600 leading-relaxed">Submit your business profile free with complete NAP details and website link.</p>
+              <h3 className="font-bold text-slate-900 mb-1">Listings From $1</h3>
+              <p className="text-xs text-slate-600 leading-relaxed">List your business from $1 with complete NAP details and website link.</p>
             </div>
           </div>
           
@@ -47,7 +47,7 @@ export default function AboutSection() {
               <MapPin className="w-5 h-5 text-indigo-600" />
             </div>
             <div>
-              <h3 className="font-bold text-slate-900 mb-1">All 50 States</h3>
+              <h3 className="font-bold text-slate-900 mb-1">39 States &amp; D.C.</h3>
               <p className="text-xs text-slate-600 leading-relaxed">Covering top metros from New York and Los Angeles to Austin and Chicago.</p>
             </div>
           </div>
@@ -58,7 +58,7 @@ export default function AboutSection() {
             </div>
             <div>
               <h3 className="font-bold text-slate-900 mb-1">Verified Badging</h3>
-              <p className="text-xs text-slate-600 leading-relaxed">Earn verified credibility through verified license and phone verification.</p>
+              <p className="text-xs text-slate-600 leading-relaxed">Earn a verified badge once our team reviews and approves your listing.</p>
             </div>
           </div>
         </div>
@@ -67,10 +67,10 @@ export default function AboutSection() {
           <div className="inline-flex flex-col items-center gap-3 sm:gap-4">
             <a 
               href="/add-business/"
-              title="Add your business listing for free on BizNest USA"
+              title="Add your business listing on BizNest USA"
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-3.5 text-sm font-bold text-white shadow-md hover:bg-blue-700 transition-colors"
             >
-              Add Your Business Free
+              Add Your Business
             </a>
           </div>
         </div>

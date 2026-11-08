@@ -297,7 +297,7 @@ const CATEGORY_COPY: Record<string, DirectorySeoCopy> = {
     ],
     brandBenefit: 'BizNest USA connects pet care facilities and veterinarians with local pet owners actively searching for trusted animal care services.',
     ctaHeading: 'Own a Veterinary Clinic, Grooming Salon, or Pet Boarding Facility?',
-    ctaText: 'List your pet business on BizNest USA to reach thousands of local pet owners looking for trusted veterinary care and pet services.',
+    ctaText: 'List your pet business on BizNest USA to reach local pet owners looking for trusted veterinary care and pet services.',
     faqs: [
       {
         question: 'What is AAHA accreditation for veterinary clinics?',

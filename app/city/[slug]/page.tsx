@@ -11,22 +11,22 @@ import Image from 'next/image'
 import {
   MapPin,
   ShieldCheck,
-  Star,
   ArrowRight,
   ArrowLeft,
   Building2,
   Briefcase,
   Users,
-  Phone,
   HelpCircle,
-  CheckCircle2,
   DollarSign,
   FileText,
   BadgeCheck
 } from 'lucide-react'
 import { Metadata } from 'next'
-import { notFound } from 'next/navigation'
+import { notFound, permanentRedirect } from 'next/navigation'
 import { BreadcrumbSchema } from '@/components/seo/breadcrumb-schema'
+import CityListingsPaginated from '@/components/city-listings-paginated'
+import { paginate } from '@/lib/pagination'
+import { toPublicBusiness } from '@/lib/listings-api'
 import { getCitySeoCopy } from '@/lib/seo-directory-content'
 import {
   filterBusinessesByCity,
@@ -71,12 +71,14 @@ export async function generateStaticParams() {
 
 function formatCityTitle(cityName: string): string {
   const candidates = [
-    `Top Businesses in ${cityName}, USA | BizNestUSA`,
-    `Businesses in ${cityName}, USA | BizNestUSA Directory`,
-    `Local Businesses in ${cityName}, USA | BizNestUSA`,
-    `Verified Businesses in ${cityName}, USA | BizNestUSA`,
+    `Local Businesses, Jobs & Professionals in ${cityName} | BizNestUSA`,
+    `Find Businesses, Jobs & Pros in ${cityName}, USA | BizNestUSA`,
+    `Find Local Businesses in ${cityName}, USA | BizNestUSA`,
+    `Local Businesses & Services in ${cityName} | BizNestUSA`,
+    `Explore Businesses in ${cityName}, USA | BizNestUSA`,
     `${cityName}, USA Business Directory | BizNestUSA`,
-    `Explore Businesses in ${cityName}, USA | BizNestUSA`
+    `Businesses, Jobs & Pros in ${cityName}, USA | BizNestUSA`,
+    `Businesses in ${cityName}, USA | BizNestUSA`
   ]
 
   for (const c of candidates) {
@@ -90,17 +92,17 @@ function formatCityTitle(cityName: string): string {
     }
   }
 
-  const padded = `Verified Top Businesses in ${cityName}, USA | BizNestUSA`
+  const padded = `${cityName} Business Directory | BizNestUSA`
   if (padded.length >= 50 && padded.length <= 60) return padded
 
-  return `Businesses in ${cityName}, USA | BizNestUSA Directory`.slice(0, 60)
+  return `Businesses in ${cityName}, USA | BizNestUSA`.slice(0, 60)
 }
 
 function formatCityDescription(cityName: string): string {
   const templates = [
-    `Explore verified local businesses, licensed trade contractors, active jobs, and skilled professionals in ${cityName}, USA on BizNestUSA.`,
-    `Find verified local businesses, licensed contractors, open career vacancies, and independent professionals in ${cityName}, USA on BizNestUSA.`,
-    `Discover verified local businesses, licensed trade specialists, jobs, and commercial services in ${cityName}, USA on the BizNestUSA directory.`
+    `Find businesses, jobs, and professionals in ${cityName}, USA. Browse local listings by category, with contact details, on BizNestUSA — free to search.`,
+    `Explore local businesses in ${cityName}, USA — services, shops, jobs, and professionals. Search by category on BizNestUSA.`,
+    `Businesses in ${cityName}, USA: browse local companies, open jobs, and professionals by category on BizNestUSA — free to search.`
   ]
 
   for (const t of templates) {
@@ -111,13 +113,17 @@ function formatCityDescription(cityName: string): string {
     if (t.length > 160) {
       const trimmed = t.slice(0, 156)
       const lastSpace = trimmed.lastIndexOf(' ')
-      return trimmed.slice(0, lastSpace) + ' on BizNest.'
+      return trimmed.slice(0, lastSpace) + '...'
     }
   }
 
-  return templates[0].padEnd(142, '.')
+  return templates[0]
 }
 
+// Static page: NO searchParams here. Reading ?page= in this file made
+// the route dynamic (ƒ) and killed prerendering. Page 1 is the only
+// server-rendered slice; pages 2+ are fetched client-side from
+// /api/listings by CityListingsPaginated and are not indexed.
 export async function generateMetadata(props: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const params = await props.params
   const citySlug = params.slug.toLowerCase()
@@ -130,23 +136,27 @@ export async function generateMetadata(props: { params: Promise<{ slug: string }
   }
 
   const cityName = getCityDisplayName(citySlug)
+  // Alias-aware: jobs/pros compare their alias-normalized city against the
+  // canonical slug (see filterBusinessesByCity) — 'new-york' must resolve
+  // to 'new-york-city' here too, or aliased city pages show no jobs/pros.
+  const normCitySlug = normalizeCitySlug(citySlug)
 
   const allApproved = await getAllBusinesses(false)
   const cityBusinesses = filterBusinessesByCity(allApproved, citySlug)
 
   const allJobs = await getAllJobs(false)
   const cityJobs = allJobs.filter(
-    (job) => normalizeCitySlug(job.city) === citySlug || job.cities?.some(c => normalizeCitySlug(c) === citySlug)
+    (job) => normalizeCitySlug(job.city) === normCitySlug || job.cities?.some(c => normalizeCitySlug(c) === normCitySlug)
   )
 
   const allPros = await getAllProfessionals(false)
-  const cityPros = allPros.filter(p => normalizeCitySlug(p.city) === citySlug)
+  const cityPros = allPros.filter(p => normalizeCitySlug(p.city) === normCitySlug)
 
   const hasData = cityBusinesses.length > 0 || cityJobs.length > 0 || cityPros.length > 0
 
   const title = formatCityTitle(cityName)
   const description = formatCityDescription(cityName)
-  const canonicalUrl = toCanonicalUrl(`city/${citySlug}`)
+  const canonicalUrl = toCanonicalUrl(`city/${normCitySlug}`)
 
   return {
     title,
@@ -181,21 +191,32 @@ export default async function CityDetailPage(props: { params: Promise<{ slug: st
   }
 
   const cityName = getCityDisplayName(citySlug)
+  // Alias slugs 301 to the canonical city URL (e.g. /city/new-york/ →
+  // /city/new-york-city/) so aliased and canonical URLs never serve the
+  // same content under two URLs. The canonical slug is what the sitemap
+  // lists and what generateStaticParams emits.
+  const normCitySlug = normalizeCitySlug(citySlug)
+  if (normCitySlug !== citySlug) {
+    permanentRedirect(`/city/${normCitySlug}/`)
+  }
 
   const allApproved = await getAllBusinesses(false)
   const cityBusinesses = filterBusinessesByCity(allApproved, citySlug)
+  // Static page 1 only (24 items): counts and headings use the full
+  // filtered total; pages 2+ are fetched client-side from /api/listings.
+  const bizPage = paginate(cityBusinesses, 1)
 
   const allJobs = await getAllJobs(false)
   const cityJobs = allJobs.filter(
-    (job) => normalizeCitySlug(job.city) === citySlug || job.cities?.some(c => normalizeCitySlug(c) === citySlug)
+    (job) => normalizeCitySlug(job.city) === normCitySlug || job.cities?.some(c => normalizeCitySlug(c) === normCitySlug)
   )
 
   const allPros = await getAllProfessionals(false)
-  const cityPros = allPros.filter(p => normalizeCitySlug(p.city) === citySlug)
+  const cityPros = allPros.filter(p => normalizeCitySlug(p.city) === normCitySlug)
 
   const activeCategories = getCategoriesWithListingsForCity(allApproved, citySlug)
   const seoCopy = getCitySeoCopy(citySlug)
-  const currentPath = `city/${citySlug}`
+  const currentPath = `city/${normCitySlug}`
   const canonicalUrl = toCanonicalUrl(currentPath)
 
   const collectionSchema = {
@@ -207,7 +228,7 @@ export default async function CityDetailPage(props: { params: Promise<{ slug: st
     isPartOf: { '@type': 'WebSite', name: 'BizNestUSA', url: 'https://www.biznestusa.com/' },
     mainEntity: {
       '@type': 'ItemList',
-      itemListElement: cityBusinesses.map((biz, idx) => ({
+      itemListElement: bizPage.pageItems.map((biz, idx) => ({
         '@type': 'ListItem',
         position: idx + 1,
         name: biz.name,
@@ -347,55 +368,19 @@ export default async function CityDetailPage(props: { params: Promise<{ slug: st
 
           {cityBusinesses.length === 0 ? (
             <div className="bg-white rounded-2xl p-8 text-center border border-slate-200 space-y-3">
-              <p className="text-slate-600 text-sm">No businesses currently listed in {cityName} yet.</p>
-              <p className="text-slate-400 text-xs">Are you a business owner in {cityName}? List your company free for local visibility.</p>
+              <p className="text-slate-600 text-sm">No businesses are listed in {cityName} yet — listings appear here as businesses in {cityName} join BizNestUSA.</p>
+              <p className="text-slate-400 text-xs">Run a business in {cityName}? List it from $1 — Basic $1 is submit-only, Standard $5 adds editing and 5 posts, Authoritative $10 adds a gallery, 10 posts, and featured placement.</p>
               <Link href="/add-business" className="inline-block mt-2 px-4 py-2 bg-orange-500 text-white text-xs font-bold rounded-xl">
-                Add Your {cityName} Business Free
+                Add Your {cityName} Business · From $1
               </Link>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {cityBusinesses.map((biz) => (
-                <div key={biz.id} className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs flex flex-col justify-between">
-                  <div className="space-y-2">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <Image src={biz.logo} alt={biz.name} width={48} height={48} loading="lazy" sizes="48px" className="w-12 h-12 rounded-xl object-cover border border-slate-100 shrink-0" />
-                        <div>
-                          <Link href={`/business/${biz.slug}`} className="font-bold text-slate-900 text-base flex items-center gap-1.5 hover:text-blue-600 transition-colors">
-                            <span>{biz.name}</span>
-                            {biz.verified && (
-                              <span title="Verified Business">
-                                <ShieldCheck className="w-4 h-4 text-emerald-500" />
-                              </span>
-                            )}
-                          </Link>
-                          <p className="text-xs text-slate-500">{biz.category}</p>
-                        </div>
-                      </div>
-                      <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-lg shrink-0">
-                        {biz.reviewCount > 0 && biz.rating > 0 ? `★ ${biz.rating}` : 'Active'}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">{biz.description}</p>
-                  </div>
-                  <div className="pt-3 mt-3 border-t border-slate-100 flex justify-between items-center text-xs">
-                    {biz.phone ? (
-                      <span className="text-slate-500 flex items-center gap-1">
-                        <Phone className="w-3.5 h-3.5 text-slate-400" />
-                        <span>{biz.phone}</span>
-                      </span>
-                    ) : (
-                      <span></span>
-                    )}
-                    <Link href={`/business/${biz.slug}`} className="text-xs font-bold text-blue-600 flex items-center gap-1 hover:text-blue-700">
-                      <span>View Listing</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </Link>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <CityListingsPaginated
+              citySlug={citySlug}
+              initialItems={bizPage.pageItems.map(toPublicBusiness)}
+              total={bizPage.total}
+              totalPages={bizPage.totalPages}
+            />
           )}
         </div>
 
@@ -477,10 +462,10 @@ export default async function CityDetailPage(props: { params: Promise<{ slug: st
               City Business Ecosystem
             </span>
             <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-              Commercial Directory &amp; Economic Guide for {cityName}, USA
+              Business Directory &amp; Local Guide for {cityName}, USA
             </h2>
             <p className="text-slate-600 text-sm leading-relaxed">
-              {cityName} represents a key regional economic hub supporting diverse industries including residential contracting, skilled trade services, healthcare practices, legal firms, and commercial retail. Sourcing local service providers in {cityName} ensures faster response times, accountability, and adherence to municipal safety standards.
+              This page lists the businesses, jobs, and professionals in {cityName} that are on BizNestUSA, grouped by category above. Use the listings to find a local provider, compare what each business offers, and contact it directly.
             </p>
           </div>
 
@@ -491,7 +476,7 @@ export default async function CityDetailPage(props: { params: Promise<{ slug: st
               </div>
               <h3 className="text-sm font-bold text-slate-900">Local Licensing Boards</h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Operating businesses in {cityName} are subject to state registration and local city licensing requirements. Always verify trade licenses with state regulatory boards before contracting major work.
+                Where a license applies to the work, ask for the number and check it with the state or city office that issued it. A listing on BizNestUSA is not proof of a license.
               </p>
             </div>
 
@@ -499,9 +484,9 @@ export default async function CityDetailPage(props: { params: Promise<{ slug: st
               <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
                 <FileText className="w-4 h-4" />
               </div>
-              <h3 className="text-sm font-bold text-slate-900">Permits &amp; Building Codes</h3>
+              <h3 className="text-sm font-bold text-slate-900">Permits &amp; Local Rules</h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Home renovations and commercial developments in {cityName} require official permits from the municipal building department to maintain structural integrity and property insurability.
+                Some work needs a city permit before it starts — building work, for example. Ask the provider whether a permit applies to your job and who is responsible for pulling it.
               </p>
             </div>
 
@@ -537,7 +522,7 @@ export default async function CityDetailPage(props: { params: Promise<{ slug: st
                 How do I verify a local business or contractor license in {cityName}?
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                You can verify credentials through state licensing portals and the {cityName} municipal clerk or department of regulatory agencies. On BizNestUSA, verified badges highlight businesses that have completed documentary review.
+                Check the license number with the state licensing board or the {cityName} clerk&apos;s office. A BizNestUSA verification badge means the profile completed our basic validation — it does not confirm every license or claim.
               </p>
             </div>
 
@@ -546,7 +531,7 @@ export default async function CityDetailPage(props: { params: Promise<{ slug: st
                 What are the benefits of hiring local {cityName} service providers?
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Local providers possess direct familiarity with regional building codes, climate considerations, and municipal permit protocols in {cityName}, enabling timely project completion and accessible follow-up warranty service.
+                Local providers are nearby, so they can respond faster and follow up in person. They also know the local rules and suppliers in {cityName}.
               </p>
             </div>
 
@@ -555,7 +540,7 @@ export default async function CityDetailPage(props: { params: Promise<{ slug: st
                 How can {cityName} business owners register or claim their company listing?
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Business owners in {cityName} can add their company profile or claim an existing directory entry for free using the &apos;Add Your Business&apos; portal on BizNestUSA to reach local customers across the metropolitan area.
+                Business owners in {cityName} can add their company profile (listings start at $1) or claim an existing directory entry using the &apos;Add Your Business&apos; portal on BizNestUSA. Basic ($1) is submit-only, Standard ($5) adds editing and 5 posts, and Authoritative ($10) adds a gallery, 10 posts over 60 days, and featured placement.
               </p>
             </div>
           </div>

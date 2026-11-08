@@ -1,4 +1,5 @@
 import { Suspense } from 'react'
+import type { Metadata } from 'next'
 import Link from 'next/link'
 import Navbar from '@/components/navbar'
 import Footer from '@/components/footer'
@@ -8,25 +9,45 @@ import { Building2, Plus, ShieldCheck, HelpCircle } from 'lucide-react'
 
 export const revalidate = 604800
 
+export const metadata: Metadata = {
+  title: 'US Companies Directory: Employers & Open Jobs | BizNestUSA',
+  description: 'Browse US company profiles, from Apple and Microsoft to Walmart and JPMorgan Chase. Search employers by industry and city, and view open jobs.',
+  alternates: {
+    canonical: 'https://www.biznestusa.com/companies/',
+  },
+  openGraph: {
+    title: 'US Companies Directory: Employers & Open Jobs | BizNestUSA',
+    description: 'Browse US company profiles, from Apple and Microsoft to Walmart and JPMorgan Chase. Search employers by industry and city, and view open jobs.',
+    url: 'https://www.biznestusa.com/companies/',
+    siteName: 'BizNestUSA',
+    locale: 'en_US',
+    type: 'website',
+  },
+}
+
 export default async function CompaniesPage() {
   const companies = await getAllCompanies(false)
 
   const faqItems = [
     {
       q: 'How does BizNestUSA verify hiring employers and company profiles?',
-      a: 'We corroborate corporate entity filings with state Secretaries of State, confirm official corporate domains and HR email routes, and verify active headquarters addresses before awarding Verified status to employer profiles.'
+      a: 'There is no self-serve verification process: a company cannot apply for Verified status or award it to itself. The Verified badge appears on a company profile only when a BizNestUSA admin marks that profile verified, and approving a listing for publication does not automatically add the badge.'
     },
     {
-      q: 'How can our company list open vacancies and claim our profile?',
-      a: 'Corporate HR representatives and talent acquisition teams can register through our Register Company portal. Once verified, managers can update company overviews, post active job openings, and feature employee benefits.'
+      q: 'What information does a company profile show?',
+      a: 'Each profile shows the company’s industry, headquarters city, background, and HR contact, plus any open jobs it has listed on BizNestUSA. Use the directory search and filters to narrow profiles by industry or city.'
     },
     {
-      q: 'What workplace transparency standards are supported on BizNestUSA?',
-      a: 'We promote full transparency regarding Equal Employment Opportunity (EEO) policies, transparent wage and salary bands, employee healthcare options, remote flexibility terms, and workplace safety compliance.'
+      q: 'How much does it cost to list a company on BizNestUSA?',
+      a: 'Company listings are paid, starting at $1 for the Basic plan. Submit your company through the Register Company Profile page; a BizNestUSA admin reviews every submission before it is published.'
+    },
+    {
+      q: 'How do I find companies hiring in my city?',
+      a: 'Start with the city in the directory search. Atlanta employers listed here include Coca-Cola, Home Depot, UPS, and Delta Air Lines; Seattle includes Amazon and Starbucks; New York includes JPMorgan Chase and Pfizer. Open a profile to see that employer’s current job postings on BizNestUSA.'
     },
     {
       q: 'Can job seekers apply directly to companies listed in the directory?',
-      a: 'Yes. Each verified company profile provides direct links to the employer’s official careers portal, listed application emails, and current job postings active on BizNestUSA.'
+      a: 'Yes. Each approved company profile lists the employer’s current job postings active on BizNestUSA, and each posting links to its own page with the application route. The profile also shows the employer’s listed HR contact email.'
     }
   ]
 
@@ -81,7 +102,7 @@ export default async function CompaniesPage() {
                 Top Hiring Companies &amp; Employers in the USA
               </h1>
               <p className="text-slate-400 text-xs sm:text-sm max-w-2xl">
-                Explore verified technology companies, corporate employers, healthcare institutions, and commercial organizations across the United States.
+                Search US employer profiles by industry and city — technology, banking and finance, healthcare, retail, energy, logistics, airlines, and more — including Apple, Microsoft, Amazon, Google, Walmart, and JPMorgan Chase. Open a profile to see open jobs and HR contacts.
               </p>
             </div>
 
@@ -107,10 +128,10 @@ export default async function CompaniesPage() {
           <div className="max-w-3xl">
             <span className="text-xs font-bold uppercase tracking-wider text-blue-600">Employer Ecosystem Guide</span>
             <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1">
-              Evaluating Corporate Employers, Growth Startups &amp; Enterprise Teams
+              How to Evaluate Large US Employers
             </h2>
             <p className="text-sm text-slate-600 mt-2 leading-relaxed">
-              When evaluating potential employers in the United States, prospective candidates and business partners look for established track records of organizational stability, competitive benefits, diversity commitments, and transparent corporate governance. BizNestUSA provides a verified index of employers operating across key commercial sectors, from enterprise software and engineering to healthcare delivery and manufacturing.
+              When evaluating a large US employer, job seekers usually weigh the same things: the industry it works in, where it is headquartered, what its open roles look like, and how to reach its hiring team. This directory lists established employers across technology, banking and finance, healthcare, retail, energy, logistics, airlines, and automotive — use each profile’s industry, headquarters city, and open jobs to compare them side by side.
             </p>
           </div>
 
@@ -149,10 +170,10 @@ export default async function CompaniesPage() {
           <div className="p-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border border-blue-200/80 space-y-3">
             <div className="flex items-center gap-2 text-blue-800 font-bold text-sm">
               <ShieldCheck className="w-5 h-5 text-blue-600" />
-              <span>BizNestUSA Corporate Entity Validation Standard</span>
+              <span>BizNestUSA Company Review Process</span>
             </div>
             <p className="text-xs text-blue-950/80 leading-relaxed">
-              Every employer registered on BizNestUSA undergoes review to confirm valid commercial incorporation, active state filings, and legitimate hiring practices. This standard prevents phantom listings, ensures accurate employee headcounts, and protects candidates during their career search.
+              Every company submission is reviewed by a BizNestUSA admin before it appears in the directory. Admins approve or reject each submission; approval publishes the listing, but it does not award Verified status, which only an admin can apply. This review keeps phantom listings out and protects candidates during their job search.
             </p>
           </div>
 

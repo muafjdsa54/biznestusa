@@ -24,14 +24,14 @@ import {
 export const revalidate = 604800
 
 export const metadata: Metadata = {
-  title: 'Professional & Home Services in USA | BizNestUSA Guide',
-  description: 'Explore verified home and professional services in the USA. Compare local trade contractor costs, state licensing standards, and hiring guides on BizNestUSA.',
+  title: 'Plumbers, Electricians & Services Near You | BizNestUSA',
+  description: 'Find a plumber, electrician, roofer, or cleaner near you. Search US service businesses by city, compare profiles, and contact a pro directly. Free to browse.',
   alternates: {
     canonical: toCanonicalUrl('services'),
   },
   openGraph: {
-    title: 'Professional & Home Services in USA | BizNestUSA Guide',
-    description: 'Explore verified home and professional services in the USA. Compare local trade contractor costs, state licensing standards, and hiring guides on BizNestUSA.',
+    title: 'Plumbers, Electricians & Services Near You | BizNestUSA',
+    description: 'Find a plumber, electrician, roofer, or cleaner near you. Search US service businesses by city, compare profiles, and contact a pro directly. Free to browse.',
     url: toCanonicalUrl('services'),
     siteName: 'BizNestUSA',
     locale: 'en_US',
@@ -113,11 +113,11 @@ export default function AllServicesIndexPage() {
             </div>
 
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-white leading-tight">
-              Specialized Professional &amp; Home Services in the USA
+              Find Plumbers, Electricians, Roofers &amp; Local Pros Near You
             </h1>
 
             <p className="text-base sm:text-lg text-slate-200 leading-relaxed font-normal">
-              Find dedicated landing pages for licensed contractors, skilled trades, and certified specialists across all 50 states. Compare US average pricing, credentialing standards, and verified companies.
+              Browse 45 service guides — from plumbers and electricians to dentists and web designers — and find local businesses in 39 states and Washington, D.C. Search by city, compare profiles, and contact a provider directly.
             </p>
           </div>
         </div>
@@ -179,8 +179,8 @@ export default function AllServicesIndexPage() {
 
                   <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
                     <span className="flex items-center gap-1 text-slate-700 font-semibold truncate max-w-[190px]">
-                      <DollarSign className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                      {srv.typicalCost.split('(')[0]}
+                      <Building2 className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                      {group.name}
                     </span>
                     <span className="text-[11px] text-blue-600 font-bold group-hover:underline">
                       View Page →
@@ -203,14 +203,14 @@ export default function AllServicesIndexPage() {
               Do You Offer Professional Services in the USA?
             </h2>
             <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              Create your verified business listing today on BizNestUSA. Reach thousands of American clients seeking licensed plumbers, roofers, electricians, and certified local professionals.
+              List your business on BizNestUSA from $1 and reach customers searching for plumbers, roofers, electricians, and local professionals in their city.
             </p>
             <div className="pt-3">
               <Link
                 href="/add-business"
                 className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-lg shadow-blue-600/30 transition-all"
               >
-                Register Your Business Free
+                List Your Business — from $1
                 <ArrowRight className="w-4 h-4" />
               </Link>
             </div>

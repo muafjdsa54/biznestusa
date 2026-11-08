@@ -6,9 +6,11 @@ import Footer from '@/components/footer'
 import { ProfessionalItem, MOCK_PROFESSIONALS, ProfessionalInquiry } from '@/lib/data'
 import { getAllProfessionals, getProfessionalInquiries } from '@/lib/professional-service'
 import { db, auth } from '@/lib/firebase'
+import { getAuthHeaders } from '@/lib/client-auth'
 import { collection, onSnapshot } from 'firebase/firestore'
-import { signInWithEmailAndPassword, signOut } from 'firebase/auth'
+import { signOut, onAuthStateChanged } from 'firebase/auth'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   User, Briefcase, MapPin, Phone, Mail, Globe, ShieldCheck, Sparkles, Star,
   Linkedin, Github, Edit3, Plus, Trash2, CheckCircle2, Save, FileText, ExternalLink,
@@ -19,6 +21,7 @@ import { toast } from 'sonner'
 import { isValidPersonName, validatePersonName, filterPersonNameInput, isValidUsPhone, validateUsPhone, formatUsPhone } from '@/lib/validation'
 
 export default function ProfessionalDashboardPage() {
+  const router = useRouter()
   const [profile, setProfile] = useState<ProfessionalItem | null>(null)
   const [allProfiles, setAllProfiles] = useState<ProfessionalItem[]>([])
   const [activeTab, setActiveTab] = useState<'profile' | 'experience' | 'socials' | 'reviews' | 'inquiries'>('profile')
@@ -30,14 +33,10 @@ export default function ProfessionalDashboardPage() {
   const [loadingInquiries, setLoadingInquiries] = useState(false)
   const [skillInput, setSkillInput] = useState('')
 
-  // Inline Authentication State
+  // Identity comes from Firebase Auth only (onAuthStateChanged).
+  // Display-only snapshot of the Firebase user (email/name); never read
+  // from storage and never used as proof of identity.
   const [userSession, setUserSession] = useState<{ email?: string; name?: string; username?: string; role?: string } | null>(null)
-  const [loginEmail, setLoginEmail] = useState('')
-  const [loginPassword, setLoginPassword] = useState('')
-  const [showLoginPassword, setShowLoginPassword] = useState(false)
-  const [isLoggingIn, setIsLoggingIn] = useState(false)
-  const [loginError, setLoginError] = useState('')
-
   const fetchInquiries = async (targetUsername?: string) => {
     try {
       setLoadingInquiries(true)
@@ -91,30 +90,19 @@ export default function ProfessionalDashboardPage() {
       const all = await getAllProfessionals(true)
       setAllProfiles(all)
 
-      let targetUsername = ''
-      let targetEmail = ''
-      const session = sessionStorage.getItem('biznestusa_user_session') || localStorage.getItem('biznestusa_user_session') || sessionStorage.getItem('listpak_user_session') || localStorage.getItem('listpak_user_session')
-      if (session) {
-        try {
-          const parsed = JSON.parse(session)
-          targetUsername = parsed.username || ''
-          targetEmail = parsed.email || ''
-          setUserSession(parsed)
-        } catch (e) { }
-      }
-      if (!targetEmail && auth.currentUser?.email) {
-        targetEmail = auth.currentUser.email
-        setUserSession({ email: targetEmail, name: auth.currentUser.displayName || '' })
+      // Identity comes ONLY from Firebase Auth — never from storage JSON.
+      const fbUser = auth.currentUser
+      const targetEmail = fbUser?.email || ''
+      if (fbUser) {
+        setUserSession({ email: targetEmail, name: fbUser.displayName || '' })
       }
 
       let selectedPro: ProfessionalItem | null = null
-      if (targetEmail || targetUsername || auth.currentUser?.uid) {
-        const currentUid = auth.currentUser?.uid
+      if (fbUser) {
+        const currentUid = fbUser.uid
         const matched = all.find(p =>
           (currentUid && p.userId && p.userId === currentUid) ||
-          (targetEmail && p.email && p.email.toLowerCase().trim() === targetEmail.toLowerCase().trim()) ||
-          (targetUsername && p.username && p.username.toLowerCase().trim() === targetUsername.toLowerCase().trim()) ||
-          (targetUsername && p.slug && p.slug.toLowerCase().trim() === targetUsername.toLowerCase().trim())
+          (targetEmail && p.email && p.email.toLowerCase().trim() === targetEmail.toLowerCase().trim())
         )
         if (matched) {
           selectedPro = matched
@@ -137,54 +125,20 @@ export default function ProfessionalDashboardPage() {
   }
 
   useEffect(() => {
-    loadData()
-  }, [])
-
-  const handleInlineLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoginError('')
-    setIsLoggingIn(true)
-
-    try {
-      try {
-        await signInWithEmailAndPassword(auth, loginEmail.trim(), loginPassword)
-      } catch (authErr: any) {
-        console.warn('Firebase auth attempt:', authErr?.message)
-      }
-
-      const all = await getAllProfessionals(true)
-      const matched = all.find(p =>
-        (p.email && p.email.toLowerCase().trim() === loginEmail.trim().toLowerCase()) ||
-        (p.username && p.username.toLowerCase().trim() === loginEmail.trim().toLowerCase())
-      )
-
-      const sessionObj = {
-        name: matched?.name || matched?.fullName || loginEmail.split('@')[0],
-        email: loginEmail.trim(),
-        role: 'professional',
-        hasProfile: Boolean(matched),
-        username: matched?.username || loginEmail.split('@')[0],
-        userId: matched?.userId || auth.currentUser?.uid || ''
-      }
-
-      sessionStorage.setItem('biznestusa_user_session', JSON.stringify(sessionObj))
-      localStorage.setItem('biznestusa_user_session', JSON.stringify(sessionObj))
-      setUserSession(sessionObj)
-
-      if (matched) {
-        setProfile(matched)
-        toast.success(`Welcome back, ${matched.name}!`)
+    // Signed-out users are redirected to /login; identity is derived
+    // from onAuthStateChanged only, never from storage JSON.
+    const unsubscribe = onAuthStateChanged(auth, (fbUser) => {
+      if (fbUser) {
+        loadData()
       } else {
-        toast.success('Logged in successfully. Please complete your professional profile setup.')
+        setUserSession(null)
+        setProfile(null)
+        setLoading(false)
+        router.push('/login?role=professional')
       }
-
-      await loadData()
-    } catch (err: any) {
-      setLoginError('Invalid credentials. Please verify your email and password.')
-    } finally {
-      setIsLoggingIn(false)
-    }
-  }
+    })
+    return () => unsubscribe()
+  }, [])
 
   const handleLogout = async () => {
     try {
@@ -199,7 +153,7 @@ export default function ProfessionalDashboardPage() {
     toast.success('Logged out successfully.')
   }
 
-  const isApproved = profile ? ((profile.status || 'approved') === 'approved' && (profile.profileStatus || 'APPROVED') === 'APPROVED') : false
+  const isApproved = profile ? (profile.status === 'approved' && (profile.profileStatus || 'APPROVED') === 'APPROVED') : false
   const isPending = profile ? (profile.status === 'pending' || profile.profileStatus === 'PENDING') : false
   const isRejected = profile ? (profile.status === 'rejected' || profile.profileStatus === 'REJECTED') : false
   const isVerified = profile ? (profile.verified === true || profile.verificationStatus === 'VERIFIED') : false
@@ -249,7 +203,7 @@ export default function ProfessionalDashboardPage() {
     try {
       const res = await fetch('/api/professionals/update', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
         body: JSON.stringify({
           idOrUsername: profile.username || profile.id,
           updates: {
@@ -318,90 +272,19 @@ export default function ProfessionalDashboardPage() {
     )
   }
 
-  // State A: User is not logged in
+  // Signed-out users are redirected to /login?role=professional by the
+  // onAuthStateChanged listener above — this is only a fallback while
+  // the redirect lands.
   if (!userSession && !auth.currentUser) {
     return (
       <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans">
         <Navbar />
-        <main className="max-w-md mx-auto px-4 py-16 flex-1 flex flex-col items-center justify-center w-full">
-          <div className="w-full bg-white border border-slate-200 rounded-3xl p-8 shadow-xl space-y-6 animate-in zoom-in-95">
-            <div className="text-center space-y-2">
-              <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
-                <LogIn className="w-7 h-7" />
-              </div>
-              <h1 className="text-2xl font-extrabold text-slate-900">Professional Dashboard Login</h1>
-              <p className="text-xs text-slate-500">
-                Log in to check your profile approval status, view client inquiries, and manage your public portfolio.
-              </p>
-            </div>
-
-            {loginError && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
-                <span>{loginError}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleInlineLogin} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Email Address</label>
-                <div className="relative">
-                  <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="email"
-                    required
-                    value={loginEmail}
-                    onChange={(e) => setLoginEmail(e.target.value)}
-                    placeholder="e.g. john@professional.com"
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Password</label>
-                <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type={showLoginPassword ? 'text' : 'password'}
-                    required
-                    value={loginPassword}
-                    onChange={(e) => setLoginPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowLoginPassword(!showLoginPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-1"
-                  >
-                    {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isLoggingIn}
-                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-              >
-                {isLoggingIn ? <span>Signing In...</span> : <><span>Sign In to Dashboard</span><ArrowRight className="w-4 h-4" /></>}
-              </button>
-            </form>
-
-            <div className="pt-4 border-t border-slate-100 text-center space-y-2">
-              <p className="text-xs text-slate-500">
-                Don&apos;t have a professional profile yet?
-              </p>
-              <Link
-                href="/add-professional"
-                className="inline-flex items-center gap-1 text-xs text-blue-600 font-extrabold hover:underline"
-              >
-                <span>Register Professional Profile Free</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-          </div>
+        <main className="max-w-md mx-auto px-4 py-16 flex-1 flex flex-col items-center justify-center text-center space-y-4">
+          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <h2 className="text-lg font-bold text-slate-800">Redirecting to Sign In...</h2>
+          <p className="text-xs text-slate-500">
+            <Link href="/login?role=professional" className="text-blue-600 font-bold hover:underline">Click here to sign in</Link>
+          </p>
         </main>
         <Footer />
       </div>
@@ -747,16 +630,16 @@ export default function ProfessionalDashboardPage() {
                   <span>BizNest USA Career Booster</span>
                 </span>
                 <span className="px-2.5 py-1 rounded-xl bg-emerald-500/30 text-emerald-300 border border-emerald-400/40 text-[11px] font-extrabold uppercase tracking-wider shadow-xs">
-                  100% Free Website
+                  Complete Your Profile
                 </span>
               </div>
 
               <h3 className="font-extrabold text-white text-base sm:text-lg">
-                Don&apos;t Have a Portfolio Website? Get One for FREE! 🌐
+                Don&apos;t Have a Portfolio Website or Portfolio Links Yet?
               </h3>
 
               <p className="text-xs text-slate-300 leading-relaxed">
-                A personal portfolio website gives you <strong className="text-blue-300">10x higher credibility</strong> with corporate clients, HR recruiters, and US companies. BizNest USA connects registered professionals with modern portfolio profile tools.
+                Adding your website and portfolio links to your profile helps corporate clients, HR recruiters, and US companies reach you directly. BizNest USA connects registered professionals with modern portfolio profile tools.
               </p>
 
               <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-300 pt-1">

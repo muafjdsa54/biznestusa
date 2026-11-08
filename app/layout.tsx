@@ -3,6 +3,7 @@ import { Plus_Jakarta_Sans } from 'next/font/google'
 import Script from 'next/script'
 import './globals.css'
 import ClientProviders from '@/components/client-providers'
+import { GoogleTagManager, GoogleTagManagerNoscript } from '@/components/gtm'
 
 const plusJakartaSans = Plus_Jakarta_Sans({
   subsets: ['latin'],
@@ -17,7 +18,7 @@ export const metadata: Metadata = {
   keywords: [
     'BizNestUSA United States',
     'United States business directory',
-    'free business listing United States',
+    'business listing United States',
     'jobs in United States',
     'USA professionals',
     'verified companies across the United States',
@@ -88,10 +89,11 @@ export default function RootLayout({
   return (
     <html lang="en" className={plusJakartaSans.variable}>
       <head>
-        <meta name="google-site-verification" content="j0hBai_GiUhcTsm3fJPgN5izwzEMxIbXjUWHdayOPbo" />
-        <meta name="msvalidate.01" content="32107703ABE97F472472231CBA07F2E5" />
         <link rel="preconnect" href="https://images.unsplash.com" crossOrigin="anonymous" />
         <link rel="preconnect" href="https://firebasestorage.googleapis.com" crossOrigin="anonymous" />
+        {/* Perf: Microsoft Clarity loads lazyOnload via next/script below; a
+            dns-prefetch lets its DNS resolve early without blocking LCP. */}
+        <link rel="dns-prefetch" href="https://www.clarity.ms" />
         <link rel="alternate" type="text/plain" href="/llms.txt" title="LLM Context" />
         <link rel="alternate" type="text/plain" href="/llms-full.txt" title="LLM Full Context" />
         <script
@@ -107,8 +109,32 @@ export default function RootLayout({
             })(window, document, "clarity", "script", "yqal7ky4hx");
           `}
         </Script>
+        {/* GA4 slot: set NEXT_PUBLIC_GA_ID (format G-XXXXXXXXXX) in the
+            Vercel dashboard env. The gtag scripts render only when the id
+            is set, so the id drops in via env with no code change later. */}
+        {process.env.NEXT_PUBLIC_GA_ID ? (
+          <>
+            <Script
+              src={`https://www.googletagmanager.com/gtag/js?id=${process.env.NEXT_PUBLIC_GA_ID}`}
+              strategy="afterInteractive"
+            />
+            <Script id="google-analytics" strategy="afterInteractive">
+              {`
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', '${process.env.NEXT_PUBLIC_GA_ID}');
+              `}
+            </Script>
+          </>
+        ) : null}
+        {/* Google Tag Manager (container GTM-TC32SRS6; public id, env-overridable
+            via NEXT_PUBLIC_GTM_ID). GA4 — if configured — fires from inside
+            the container, so no direct gtag loading is added here. */}
+        <GoogleTagManager />
       </head>
       <body className="font-sans antialiased bg-slate-50/50 text-slate-900 pb-16 md:pb-0 min-h-screen selection:bg-blue-600 selection:text-white">
+        <GoogleTagManagerNoscript />
         {children}
         <ClientProviders />
       </body>

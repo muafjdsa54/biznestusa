@@ -96,9 +96,9 @@ export async function createBusinessBlogPost(input: {
     content: cleanContent,
     excerpt,
     keywords: Array.isArray(input.keywords) ? input.keywords.map(k => sanitizeText(k).trim()).filter(Boolean) : [],
-    status: 'published',
+    status: 'pending',
     createdAt: nowIso,
-    publishedAt: nowIso,
+    publishedAt: undefined,
     seoTitle: `${cleanTitle} | ${bizData.name} on BizNest USA`,
     metaDescription: excerpt,
     authorName: input.authorName || bizData.ownerName || bizData.name
@@ -135,8 +135,55 @@ export async function getBusinessBlogPosts(businessId: string): Promise<UserBlog
 }
 
 /**
- * Fetch published posts for a business to showcase on their public business profile.
+ * Fetch pending posts awaiting admin moderation.
  */
+export async function getPendingBusinessPosts(limitCount = 50): Promise<UserBlogPost[]> {
+  if (!db) return []
+  try {
+    const q = query(
+      collection(db, COLLECTION_NAME),
+      where('status', '==', 'pending'),
+      limit(limitCount)
+    )
+    const snapshot = await getDocs(q)
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as UserBlogPost))
+  } catch (err) {
+    console.warn('Failed to fetch pending business posts:', err)
+    return []
+  }
+}
+
+/**
+ * Admin: approve a pending post (publishes it). Returns false on failure.
+ */
+export async function approveBusinessPost(postId: string): Promise<boolean> {
+  if (!db) return false
+  try {
+    await updateDoc(doc(db, COLLECTION_NAME, postId), {
+      status: 'published',
+      publishedAt: new Date().toISOString()
+    })
+    return true
+  } catch (err) {
+    console.error('Firestore approveBusinessPost error:', err)
+    return false
+  }
+}
+
+/**
+ * Admin: reject a pending post. Returns false on failure.
+ */
+export async function rejectBusinessPost(postId: string): Promise<boolean> {
+  if (!db) return false
+  try {
+    await updateDoc(doc(db, COLLECTION_NAME, postId), { status: 'rejected' })
+    return true
+  } catch (err) {
+    console.error('Firestore rejectBusinessPost error:', err)
+    return false
+  }
+}
+
 export async function getPublishedPostsByBusinessId(businessId: string): Promise<UserBlogPost[]> {
   if (!db) return []
   try {
@@ -174,6 +221,13 @@ export async function getAllPublishedBusinessPosts(limitCount = 50): Promise<Use
 
 /**
  * Fetch a single user business post by slug.
+ * Public detail pages only: restricted to status=='published' so a
+ * pending/rejected post never renders to anyone who knows (or is sent)
+ * its slug — posts become public content only once an admin approves
+ * them. This filter is also what a future tightening of the
+ * business_blog_posts read rule requires: an unfiltered slug query run
+ * unauthenticated would be denied outright by Firestore (rules are not
+ * filters), 404-ing even published posts.
  */
 export async function getBusinessPostBySlug(slug: string): Promise<UserBlogPost | null> {
   if (!db || !slug) return null
@@ -181,6 +235,7 @@ export async function getBusinessPostBySlug(slug: string): Promise<UserBlogPost 
     const q = query(
       collection(db, COLLECTION_NAME),
       where('slug', '==', slug),
+      where('status', '==', 'published'),
       limit(1)
     )
     const snapshot = await getDocs(q)

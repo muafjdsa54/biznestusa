@@ -36,13 +36,13 @@ export async function generateMetadata(props: { params: Promise<{ slug: string }
     title = `${rawName.slice(0, 58 - ' | BizNestUSA'.length).trim()} | BizNestUSA`
   }
   if (title.length < 50) {
-    title = `${rawName} Careers & Overview | BizNestUSA`
-    if (title.length > 60) title = `${rawName} Profile | BizNestUSA`
+    title = `${rawName} Company Profile, Jobs and Careers | BizNestUSA`
+    if (title.length > 60) title = `${rawName} Company Profile & Open Jobs | BizNestUSA`
   }
 
   let description = company?.description 
-    ? `Explore ${rawName} careers, office locations, and verified company background on BizNestUSA. View hiring status, employee size, and direct contact details.`
-    : `Explore ${rawName} company profile, office location, verified employee credentials, and open job vacancies across the United States on BizNestUSA.`
+    ? `Explore the ${rawName} company profile on BizNestUSA, based in ${company.city} and working in ${company.industry || company.category}. View open jobs, headquarters details, and HR contact information.`
+    : `View the ${rawName} company profile on BizNestUSA, with its office location, industry background, and open job vacancies across the United States.`
   if (description.length > 160) {
     description = description.slice(0, 157) + '...'
   } else if (description.length < 140) {
@@ -176,7 +176,7 @@ export default async function CompanyDetailPage(props: { params: Promise<{ slug:
         
         {/* Company Overview */}
         <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xs space-y-4">
-          <h2 className="text-lg font-extrabold text-slate-900">Company Overview & Culture</h2>
+          <h2 className="text-lg font-extrabold text-slate-900">About {company.name}</h2>
           <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line">
             {company.description}
           </p>
@@ -216,7 +216,7 @@ export default async function CompanyDetailPage(props: { params: Promise<{ slug:
           </div>
 
           {activeJobs.length === 0 ? (
-            <p className="text-xs text-slate-500 italic py-4">No active job vacancies published at this time.</p>
+            <p className="text-xs text-slate-500 italic py-4">No open roles from {company.name} are listed on BizNestUSA right now. Check back later, or browse other employers based in {company.city}.</p>
           ) : (
             <div className="space-y-3">
               {activeJobs.map((job) => (
@@ -242,7 +242,7 @@ export default async function CompanyDetailPage(props: { params: Promise<{ slug:
         {/* Similar Hiring Companies */}
         {similarCompanies.length > 0 && (
           <div className="space-y-4">
-            <h2 className="text-base font-extrabold text-slate-900">Similar Hiring Companies</h2>
+            <h2 className="text-base font-extrabold text-slate-900">More US Companies to Explore</h2>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {similarCompanies.map((sim) => (
                 <Link

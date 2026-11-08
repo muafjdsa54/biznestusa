@@ -60,7 +60,7 @@ export default function CategoriesIndexPage() {
             Browse Businesses by Category
           </h1>
           <p className="text-slate-600 text-sm max-w-2xl mx-auto leading-relaxed">
-            Explore verified businesses, licensed contractors, certified specialists, pet care providers, legal counsel, and employers across the United States.
+            Explore local businesses, contractors, specialists, pet care providers, legal counsel, and employers across the United States.
           </p>
         </div>
       </section>

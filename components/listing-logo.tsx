@@ -28,6 +28,7 @@ export function ListingLogo({ name, src, size = 40, className, priority = false 
         alt={name}
         width={size}
         height={size}
+        sizes={`${size}px`}
         priority={priority}
         className={className}
       />

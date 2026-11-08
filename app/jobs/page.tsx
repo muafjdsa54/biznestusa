@@ -8,25 +8,39 @@ import { Briefcase, Plus, ShieldCheck, CheckCircle2, HelpCircle } from 'lucide-r
 
 export const revalidate = 604800
 
+export const metadata = {
+  title: 'Jobs in USA: Amazon, Google, Walmart & More Hiring',
+  description:
+    "Search open jobs in the USA at Amazon, Google, Walmart and FedEx. Browse by city, category and job type, then apply on the employer's own careers page.",
+}
+
 export default async function JobsPage() {
   const jobs = await getAllJobs(false)
 
   const faqItems = [
     {
-      q: 'How does BizNestUSA verify hiring employers and active job vacancies?',
-      a: 'BizNestUSA cross-references employer listings against registered state corporate registries, validates employer domains and corporate email addresses, and screens job postings against anti-spam protocols to ensure job seekers connect with genuine American employers.'
+      q: 'How do I apply for a job listed on BizNestUSA?',
+      a: "Open the job to read the role details, requirements and salary. You can apply through BizNestUSA, or follow the careers link on the listing to the hiring employer's own careers site — for example, the Amazon Lead Associate role links to amazon.jobs — and apply directly with the employer."
     },
     {
-      q: 'Are remote work opportunities available for job seekers nationwide?',
-      a: 'Yes. Our job directory features both on-site roles across major metropolitan hubs—such as New York, Austin, Chicago, and Los Angeles—and fully remote positions that accept applicants located anywhere in the United States.'
+      q: 'Are there remote jobs listed on BizNestUSA?',
+      a: 'Not in the current listings: 22 of the 23 jobs are on-site and one — a Senior Claims Adjuster role at Progressive in Houston — is hybrid. Use the workplace filter to check for remote or hybrid roles as new jobs are added.'
     },
     {
-      q: 'What should job applicants review regarding compensation and benefits transparency?',
-      a: 'Under various state laws (including regulations in California, New York, Colorado, and Washington), employers are required to disclose wage scales and salary ranges. We encourage applicants to evaluate total compensation, including 401(k) matching, health benefits, and paid time off.'
+      q: 'What salary will I earn in these jobs?',
+      a: "The salary on each listing is the figure the employer provided — for example, $18.40 - $22.00 per hour for the FedEx Package Handler role in Cedar Rapids, or $35.84 - $58.84 per hour for the Mayo Clinic Registered Nurse role in Rochester. Listings that show 'Competitive Package' carry no figure from the employer, so check the employer's careers page for details."
     },
     {
-      q: 'Can employers and recruiters post jobs for free on BizNestUSA?',
-      a: 'Yes. Verified US companies, local enterprises, and recruiting teams can submit job postings directly through our Post a Job portal. Listings undergo standard editorial and compliance screening before going live to our national audience.'
+      q: 'Which employers are hiring on BizNestUSA?',
+      a: 'Amazon, Walmart, Google, FedEx, UPS, Pfizer, Mayo Clinic, HCA Healthcare, Delta Air Lines, Bank of America, McDonald’s, Chipotle, Caterpillar, Progressive, Hyatt, Lowe’s, Walgreens, UnitedHealth Group and Concord Hospitality — 19 employers across 16 states.'
+    },
+    {
+      q: 'Which cities have open jobs?',
+      a: 'Atlanta, Chicago, Houston, Kansas City, Las Vegas, Mountain View, Nashville, Phoenix, Rochester and 14 more — 23 cities in total. Use the city filter above to find jobs near you.'
+    },
+    {
+      q: 'Can employers post jobs on BizNestUSA?',
+      a: "Yes. Employers can submit a job posting through the Post a Job page. Each listing links applicants to the employer's own careers page to apply."
     }
   ]
 
@@ -78,10 +92,10 @@ export default async function JobsPage() {
                 <span>USA Employment Portal</span>
               </span>
               <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-                Find Jobs in USA: Career Vacancies &amp; Hiring Employers
+                Jobs in USA: Open Roles at Amazon, Google, Walmart &amp; More
               </h1>
               <p className="text-slate-400 text-sm mt-2 max-w-2xl leading-relaxed">
-                Connect directly with verified American companies, local employers, and growing teams hiring across New York, Los Angeles, Chicago, and nationwide.
+                Browse 23 open jobs in 23 cities from Amazon, Google, Walmart, FedEx, Pfizer, Mayo Clinic and more. Search by city, category or job type, then apply on the employer&apos;s own careers page.
               </p>
             </div>
 
@@ -90,7 +104,7 @@ export default async function JobsPage() {
               className="px-5 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white text-sm font-bold shadow-lg shadow-emerald-500/20 transition-all inline-flex items-center gap-2 shrink-0 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
-              <span>Post a Job Free</span>
+              <span>Post a Job</span>
             </Link>
           </div>
         </div>
@@ -107,10 +121,10 @@ export default async function JobsPage() {
           <div className="max-w-3xl">
             <span className="text-xs font-bold uppercase tracking-wider text-emerald-600">Employment Resources</span>
             <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1">
-              Navigating the United States Job Market &amp; Career Opportunities
+              Open Jobs in the USA: What Is Listed Here
             </h2>
             <p className="text-sm text-slate-600 mt-2 leading-relaxed">
-              The modern American employment ecosystem is marked by rapid technological advancement, evolving labor standards, and a strong preference for workplace flexibility. Whether you are pursuing a specialized technology career in Silicon Valley, healthcare administration in Boston, construction project management in Dallas, or remote executive consulting, understanding regional hiring practices and regulatory frameworks is critical to career advancement.
+              This page lists open jobs from 19 employers hiring across 16 states — from a Senior Software Engineer role at Google in Mountain View to a Package Handler role at FedEx in Cedar Rapids. Most roles are full-time and on-site, with one hybrid role in Houston. Salaries are shown exactly as listed with each job; where an employer did not list a figure, the listing shows &lsquo;Competitive Package&rsquo; instead. Open a job to see its requirements, then follow the link to apply on the employer&apos;s own careers page.
             </p>
           </div>
 
@@ -119,9 +133,9 @@ export default async function JobsPage() {
               <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold">
                 01
               </div>
-              <h3 className="text-base font-bold text-slate-900">High-Demand Sectors &amp; Roles</h3>
+              <h3 className="text-base font-bold text-slate-900">Categories With Open Roles</h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Key industries driving job creation nationwide include enterprise software engineering, cloud architecture, clinical healthcare, certified trades (electrical, HVAC, plumbing), renewable energy installation, and financial analysis. Employers prioritize verifiable project accomplishments and certified industry credentials.
+                The largest groups in this directory are Transportation &amp; Logistics (5 jobs), Hospitality &amp; Tourism (4), Healthcare &amp; Medical (3) and Finance &amp; Accounting (3), alongside software, IT, sales and customer support roles. Use the category filter above to narrow the list.
               </p>
             </div>
 
@@ -129,9 +143,9 @@ export default async function JobsPage() {
               <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
                 02
               </div>
-              <h3 className="text-base font-bold text-slate-900">Worker Rights &amp; Standards</h3>
+              <h3 className="text-base font-bold text-slate-900">How to Apply</h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Federal and state statutes—such as the Fair Labor Standards Act (FLSA), Title VII of the Civil Rights Act, and the Americans with Disabilities Act (ADA)—protect workers against unlawful discrimination, enforce minimum wage floors, and guarantee overtime compensation for non-exempt employment classifications.
+                Open a job listing to read its description, requirements and salary. You can apply through BizNestUSA, or use the employer&apos;s careers link on the page to apply directly with the employer — the Amazon listing, for example, links to amazon.jobs. No legitimate employer will ever ask you to pay a fee to apply.
               </p>
             </div>
 
@@ -139,9 +153,9 @@ export default async function JobsPage() {
               <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
                 03
               </div>
-              <h3 className="text-base font-bold text-slate-900">Total Compensation &amp; Benefits</h3>
+              <h3 className="text-base font-bold text-slate-900">Salaries Shown As Listed</h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Comprehensive US compensation packages extend well beyond base hourly or annualized wages. Candidates must evaluate employer-sponsored medical, dental, and vision insurance coverage, 401(k) employer matching plans, paid family leave allowances, tuition reimbursement, and flexible remote work stipends.
+                Salaries are shown exactly as listed with each job — for example, $24.50 - $26.50 per hour for Amazon&apos;s Lead Associate role in Kansas City, $90,000 - $180,000 per year for Walmart&apos;s Staff, Technology Operations role in Bentonville, and $174,000 - $252,000 per year for Google&apos;s Senior Software Engineer role in Mountain View. Listings that show &lsquo;Competitive Package&rsquo; carry no figure from the employer.
               </p>
             </div>
           </div>
@@ -149,10 +163,10 @@ export default async function JobsPage() {
           <div className="p-6 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl border border-emerald-200/80 space-y-3">
             <div className="flex items-center gap-2 text-emerald-800 font-bold text-sm">
               <ShieldCheck className="w-5 h-5 text-emerald-600" />
-              <span>BizNestUSA Job Trust &amp; Anti-Scam Protocol</span>
+              <span>Stay Safe When Applying for Jobs</span>
             </div>
             <p className="text-xs text-emerald-950/80 leading-relaxed">
-              Every job listing on BizNestUSA is screened to safeguard applicants from phishing schemes, upfront fee scams, and fake check processing operations. Legitimate employers will never ask candidates to pay for training materials, purchase equipment with unauthorized checks, or surrender sensitive tax details prior to an official job offer letter.
+              Apply only through the employer&apos;s own careers page linked on each listing, or through BizNestUSA. Legitimate employers will never ask candidates to pay for training materials, purchase equipment with unauthorized checks, or surrender sensitive tax details prior to an official job offer letter.
             </p>
           </div>
 

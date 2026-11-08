@@ -4,14 +4,24 @@ import { useState } from 'react'
 import { ShieldCheck, Upload, FileText, CheckCircle2, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { isValidPersonName, validatePersonName, filterPersonNameInput, isValidUsPhone, validateUsPhone, formatUsPhone } from '@/lib/validation'
+import { submitBusinessClaim } from '@/lib/review-service'
 
 interface ClaimBusinessModalProps {
   businessName: string
+  businessSlug?: string
+  businessId?: string
   isOpen: boolean
   onClose: () => void
 }
 
-export default function ClaimBusinessModal({ businessName, isOpen, onClose }: ClaimBusinessModalProps) {
+function slugFromPathname(): string {
+  if (typeof window === 'undefined') return ''
+  const parts = window.location.pathname.split('/').filter(Boolean)
+  // Detail pages live at /business/<slug>/
+  return parts[0] === 'business' && parts[1] ? decodeURIComponent(parts[1]) : ''
+}
+
+export default function ClaimBusinessModal({ businessName, businessSlug, businessId, isOpen, onClose }: ClaimBusinessModalProps) {
   const [submitted, setSubmitted] = useState(false)
   const [ownerName, setOwnerName] = useState('')
   const [taxIdOrLicense, setTaxIdOrLicense] = useState('')
@@ -19,11 +29,13 @@ export default function ClaimBusinessModal({ businessName, isOpen, onClose }: Cl
   const [proofFile, setProofFile] = useState<File | null>(null)
   const [proofPreview, setProofPreview] = useState<string | null>(null)
   const [formError, setFormError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   if (!isOpen) return null
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (isSubmitting) return
     setFormError('')
 
     const nameVal = validatePersonName(ownerName)
@@ -49,8 +61,37 @@ export default function ClaimBusinessModal({ businessName, isOpen, onClose }: Cl
       return
     }
 
-    setSubmitted(true)
-    toast.success('Ownership claim submitted! Our compliance team will review within 24 hours.')
+    const slug = (businessSlug || '').trim() || slugFromPathname()
+    if (!slug) {
+      const err = 'Could not determine which business this claim is for. Please reload the page and try again.'
+      setFormError(err)
+      toast.error(err)
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      // Persist first (status 'pending', claimant + admin only). The proof
+      // document is stored as a data URL in the claim doc — the same pattern
+      // payment proofs use. Nothing is toasted until the write succeeds.
+      await submitBusinessClaim({
+        businessSlug: slug,
+        businessId,
+        businessName,
+        claimantName: ownerName.trim(),
+        claimantPhone: phone.trim(),
+        taxIdOrLicense: taxIdOrLicense.trim(),
+        proofFile,
+      })
+      setSubmitted(true)
+      toast.success('Ownership claim submitted! Our compliance team will review within 24 hours.')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Could not save your ownership claim. Please try again.'
+      setFormError(msg)
+      toast.error(msg)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -188,9 +229,10 @@ export default function ClaimBusinessModal({ businessName, isOpen, onClose }: Cl
               </button>
               <button
                 type="submit"
-                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md"
+                disabled={isSubmitting}
+                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md disabled:opacity-50"
               >
-                Submit Ownership Claim
+                {isSubmitting ? 'Submitting…' : 'Submit Ownership Claim'}
               </button>
             </div>
           </form>

@@ -35,7 +35,7 @@ export default function Footer() {
               </div>
               <div className="flex items-center gap-2">
                 <Globe className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span><strong>Coverage:</strong> All 50 states and Washington, D.C.</span>
+                <span><strong>Coverage:</strong> 39 states and Washington, D.C.</span>
               </div>
             </div>
           </div>
@@ -84,7 +84,7 @@ export default function Footer() {
               <span>Locations &amp; Metros</span>
             </h3>
             <ul className="space-y-2 text-xs text-slate-300">
-              <li className="pb-1"><Link href="/cities/" className="font-bold text-emerald-300 hover:text-white transition-colors flex items-center gap-1">All 50 States &amp; Cities &rarr;</Link></li>
+              <li className="pb-1"><Link href="/cities/" className="font-bold text-emerald-300 hover:text-white transition-colors flex items-center gap-1">States &amp; Cities &rarr;</Link></li>
               <li><Link href="/city/new-york-city/" className="hover:text-emerald-400 transition-colors">New York Directory</Link></li>
               <li><Link href="/city/los-angeles/" className="hover:text-emerald-400 transition-colors">Los Angeles Directory</Link></li>
               <li><Link href="/city/chicago/" className="hover:text-emerald-400 transition-colors">Chicago Directory</Link></li>

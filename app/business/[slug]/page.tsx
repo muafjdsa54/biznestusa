@@ -9,6 +9,8 @@ import Footer from '@/components/footer'
 import { getAllBusinesses, getBusinessBySlug } from '@/lib/db-service'
 import { getPublishedPostsByBusinessId } from '@/lib/user-post-service'
 import LazyMap from '@/components/business/lazy-map'
+import ListingLogo from '@/components/listing-logo'
+import { OpenNowBadge } from './business-detail-client'
 import BusinessFaqsSection from '@/components/business/business-faqs'
 import { BusinessHeroActions, BusinessReviewsSection } from './business-interactive-actions'
 import {
@@ -27,7 +29,7 @@ export const revalidate = 604800
 export async function generateStaticParams() {
   const businesses = await getAllBusinesses()
   return businesses
-    .filter(b => b.slug && b.slug !== 'verified-business' && b.hasSinglePage !== false && (b.plan !== 'review_1' || b.source_type === 'seed_research') && !isPakistaniEntity(b))
+    .filter(b => b.slug && b.slug !== 'verified-business' && b.hasSinglePage !== false && !isPakistaniEntity(b))
     .map((biz) => ({
       slug: biz.slug,
     }))
@@ -50,9 +52,7 @@ function formatBusinessTitle(biz: any, fallbackName: string): string {
     `${name} in ${loc} | BizNestUSA Directory`,
     `${name} in ${loc} – BizNestUSA Directory`,
     `${name} in ${loc} | BizNestUSA`,
-    `${name} – Official Business Profile | BizNestUSA`,
     `${name} – Directory Profile | BizNestUSA`,
-    `${name} – Verified Business | BizNestUSA`,
     `${name} | BizNestUSA Business Directory`,
     `${name} | BizNestUSA Directory Profile`,
     `${name} – Local Business Directory | BizNestUSA`
@@ -67,15 +67,20 @@ function formatBusinessTitle(biz: any, fallbackName: string): string {
       const withUSA = c.replace(' | BizNestUSA', ' in the USA | BizNestUSA')
       if (withUSA.length >= 50 && withUSA.length <= 60) return withUSA
 
-      const withOfficial = c.replace(`${name} – `, `${name} – Official `)
-      if (withOfficial.length >= 50 && withOfficial.length <= 60) return withOfficial
-
-      const withVerified = c.replace(`${name} – `, `${name} – Verified `)
-      if (withVerified.length >= 50 && withVerified.length <= 60) return withVerified
-
       const withDirectory = c.replace(' | BizNestUSA', ' | BizNestUSA Directory')
       if (withDirectory.length >= 50 && withDirectory.length <= 60) return withDirectory
     }
+  }
+
+  // Long names: truncate at a word boundary so the title never ends
+  // mid-word (e.g. a dangling "– H"). The full business name is kept and
+  // the subcategory dropped when it no longer fits.
+  const truncateAtWord = (text: string, max: number): string => {
+    if (text.length <= max) return text
+    const cut = text.slice(0, max).trimEnd()
+    const lastSpace = cut.lastIndexOf(' ')
+    const shortened = lastSpace > 20 ? cut.slice(0, lastSpace) : cut
+    return shortened.replace(/\s*[–-]\s*$/, '').trimEnd()
   }
 
   for (const c of candidates) {
@@ -83,10 +88,10 @@ function formatBusinessTitle(biz: any, fallbackName: string): string {
       const brand = ' | BizNestUSA'
       const maxPrefixLen = 60 - brand.length
       if (name.length <= maxPrefixLen) {
-        const title = `${name} – ${subOrCat}`.slice(0, maxPrefixLen).trim() + brand
+        const title = truncateAtWord(`${name} – ${subOrCat}`, maxPrefixLen) + brand
         if (title.length >= 50 && title.length <= 60) return title
       } else {
-        const title = name.slice(0, maxPrefixLen - 3).trim() + '...' + brand
+        const title = truncateAtWord(name, maxPrefixLen - 3) + '...' + brand
         if (title.length >= 50 && title.length <= 60) return title
       }
     }
@@ -95,7 +100,7 @@ function formatBusinessTitle(biz: any, fallbackName: string): string {
   const base = `${name} | BizNestUSA Directory`
   if (base.length >= 50 && base.length <= 60) return base
   if (base.length < 50) {
-    return `${name} – Official USA Business Profile | BizNestUSA`.slice(0, 60)
+    return `${name} – USA Business Profile | BizNestUSA`.slice(0, 60)
   }
   return base.slice(0, 46).trim() + ' | BizNestUSA'
 }
@@ -106,11 +111,11 @@ function formatBusinessDescription(biz: any, fallbackName: string): string {
   const loc = biz?.city ? `in ${biz.city}${biz?.state_code || biz?.state ? `, ${biz.state_code || biz.state}` : ''}` : 'in the USA'
 
   const templates = [
-    `Explore directory details for ${name}, offering professional ${subOrCat} ${loc}. View verified address, phone contact, and services on BizNestUSA.`,
+    `Explore directory details for ${name}, offering professional ${subOrCat} ${loc}. View address, phone contact, and services on BizNestUSA.`,
     `Find ${name} ${loc}. View public contact details, address, ${subOrCat} services, and directory listing information on BizNestUSA.`,
-    `Discover ${name} offering trusted ${subOrCat} ${loc}. Access verified address, phone number, operating details, and public profile on BizNestUSA.`,
-    `Looking for ${subOrCat} ${loc}? Browse directory profile, verified address, phone number, and services for ${name} on BizNestUSA.`,
-    `Connect with ${name} for ${subOrCat} ${loc}. View verified business contact numbers, address, operating hours, and profile on BizNestUSA.`
+    `Discover ${name} offering ${subOrCat} ${loc}. View address, phone number, and public profile on BizNestUSA.`,
+    `Looking for ${subOrCat} ${loc}? Browse directory profile, address, phone number, and services for ${name} on BizNestUSA.`,
+    `Connect with ${name} for ${subOrCat} ${loc}. View contact details, address, services, and listing information on BizNestUSA.`
   ]
 
   for (const t of templates) {
@@ -249,8 +254,22 @@ export default async function BusinessPage(props: { params: Promise<{ slug: stri
   const subcategorySlug = subDef?.slug || (biz.subcategory_slug ? normalizeSubcategorySlug(biz.subcategory_slug) : null)
   const subcategoryName = subDef?.name || biz.subcategory || biz.subCategory || null
 
+  // A listing is a seed only when the data says so (source_type /
+  // ownership_status) — never infer it from being unclaimed. An approved
+  // owner listing (isClaimed / claim_status 'claimed') is claimed even if a
+  // stale claim_status value is still stored.
   const isSeed = biz.source_type === 'seed_research' || biz.ownership_status === 'directory_seed'
-  const isUnclaimed = isSeed || biz.claim_status === 'unclaimed' || !biz.isClaimed
+  const isClaimedOwner = biz.isClaimed === true || biz.claim_status === 'claimed'
+  const isUnclaimed = isSeed || !isClaimedOwner
+
+  // The normalizer fills generic placeholder "highlights" when a listing has
+  // none (seeds: 'Public Directory Listing' / 'Unclaimed Profile'; owners:
+  // 'Verified Profile'). Those are not highlights — render the section only
+  // when real highlight data exists.
+  const GENERIC_HIGHLIGHTS = new Set(['Public Directory Listing', 'Unclaimed Profile', 'Verified Profile'])
+  const realHighlights = (biz.features || []).filter(
+    (feat: string) => feat && !GENERIC_HIGHLIGHTS.has(feat.trim()),
+  )
 
   // Related businesses in same category or city
   const relatedBusinesses = allBiz
@@ -277,8 +296,8 @@ export default async function BusinessPage(props: { params: Promise<{ slug: stri
     address: {
       '@type': 'PostalAddress',
       ...(biz.address ? { streetAddress: biz.address } : {}),
-      addressLocality: biz.city || 'United States',
-      addressRegion: biz.state_code || biz.state || 'US',
+      ...(biz.city ? { addressLocality: biz.city } : {}),
+      ...(biz.state_code || biz.state ? { addressRegion: biz.state_code || biz.state } : {}),
       ...(biz.zipCode || biz.zip ? { postalCode: biz.zipCode || biz.zip } : {}),
       addressCountry: 'US',
     },
@@ -435,6 +454,7 @@ export default async function BusinessPage(props: { params: Promise<{ slug: stri
       {/* Hero Cover Banner */}
       <section className="relative bg-slate-900 text-white overflow-hidden mt-3">
         <div className="h-64 sm:h-80 w-full relative">
+          {biz.coverImage ? (
           <Image
             src={biz.coverImage}
             alt={biz.name}
@@ -445,6 +465,7 @@ export default async function BusinessPage(props: { params: Promise<{ slug: stri
             quality={80}
             className="object-cover opacity-40"
           />
+          ) : null}
           <div className="absolute inset-0 bg-gradient-to-t from-[#0F172A] via-[#0F172A]/60 to-transparent"></div>
         </div>
 
@@ -452,6 +473,7 @@ export default async function BusinessPage(props: { params: Promise<{ slug: stri
           <div className="flex flex-col md:flex-row items-start md:items-end justify-between gap-6">
             <div className="flex flex-col sm:flex-row items-start sm:items-end gap-5">
               <div className="relative w-28 h-28 sm:w-36 sm:h-36 rounded-3xl overflow-hidden border-4 border-white shadow-2xl bg-white shrink-0">
+                {biz.logo ? (
                 <Image
                   src={biz.logo}
                   alt={biz.name}
@@ -463,6 +485,11 @@ export default async function BusinessPage(props: { params: Promise<{ slug: stri
                   quality={85}
                   className="w-full h-full object-cover"
                 />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-slate-900 text-white text-4xl sm:text-5xl font-extrabold">
+                    {(biz.name || 'B').charAt(0).toUpperCase()}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -480,12 +507,9 @@ export default async function BusinessPage(props: { params: Promise<{ slug: stri
                       <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
                       <span>Unclaimed Listing</span>
                     </span>
-                  ) : biz.operatingHours && Object.keys(biz.operatingHours).length > 0 ? (
-                    <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>Open Now</span>
-                    </span>
-                  ) : null}
+                  ) : (
+                    <OpenNowBadge operatingHours={biz.operatingHours} state={biz.state} stateCode={biz.state_code} />
+                  )}
                 </div>
 
                 <h1 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight flex items-center gap-2">
@@ -555,14 +579,18 @@ export default async function BusinessPage(props: { params: Promise<{ slug: stri
               <div className="space-y-1">
                 <p className="font-bold text-slate-900 text-sm">Unclaimed Directory Listing</p>
                 <p className="text-slate-600 leading-relaxed">
-                  This public directory record was independently added to BizNestUSA using publicly available business information. If you are the owner or authorized representative, you can claim this listing to verify details and manage inquiries.
+                  This public directory record was independently added to BizNestUSA using publicly available business information. If you are the owner or authorized representative, you can claim this listing to verify details and manage inquiries. Claims are reviewed by our team before approval.
                 </p>
               </div>
             </div>
             <div className="shrink-0">
-              <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-800 bg-amber-100/90 px-3 py-1.5 rounded-lg border border-amber-300">
-                Directory Seed Record
-              </span>
+              {/* "Directory Seed Record" renders only for actual seed listings,
+                  never for an approved owner listing. */}
+              {isSeed && (
+                <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-800 bg-amber-100/90 px-3 py-1.5 rounded-lg border border-amber-300">
+                  Directory Seed Record
+                </span>
+              )}
             </div>
           </div>
         ) : biz.verified && (
@@ -590,18 +618,46 @@ export default async function BusinessPage(props: { params: Promise<{ slug: stri
             
             {/* About Section */}
             <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200/80 shadow-xs space-y-4">
-              <h2 className="text-xl font-extrabold text-slate-900">About {biz.name}</h2>
+              <h2 className="text-xl font-extrabold text-slate-900">About {biz.name}{biz.city ? ` in ${biz.city}` : ''}</h2>
               <div className="text-sm text-slate-700 leading-relaxed space-y-3 whitespace-pre-line">
                 {biz.description}
               </div>
             </div>
 
+            {/* Photo Gallery — $10 Authoritative benefit (up to 5 photos) */}
+            {biz.gallery && biz.gallery.length > 0 && (
+              <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200/80 shadow-xs space-y-4">
+                <h2 className="text-xl font-extrabold text-slate-900">Photos of {biz.name}</h2>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {biz.gallery.slice(0, 5).map((photo: string, idx: number) => (
+                    <div key={idx} className="relative w-full aspect-[4/3] rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
+                      <Image
+                        src={photo}
+                        alt={`${biz.name} photo ${idx + 1}`}
+                        fill
+                        sizes="(max-width: 640px) 50vw, 33vw"
+                        unoptimized={typeof photo === 'string' && photo.startsWith('data:')}
+                        className="object-cover"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Detailed Products & Services Offered */}
             {biz.detailedServices && biz.detailedServices.length > 0 ? (
               <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200/80 shadow-xs space-y-5">
                 <div>
-                  <h2 className="text-xl font-extrabold text-slate-900">Products & Services Offered</h2>
-                  <p className="text-xs text-slate-500 mt-1">Specialized real estate and construction solutions provided in Sargodha.</p>
+                  <h2 className="text-xl font-extrabold text-slate-900">Services Offered by {biz.name}{biz.city ? ` in ${biz.city}` : ''}</h2>
+                  {/* Real service-area description only — never a hardcoded city. */}
+                  {(biz.service_area || biz.city) && (
+                    <p className="text-xs text-slate-500 mt-1">
+                      {biz.service_area
+                        ? `Services provided in ${biz.service_area}.`
+                        : `Services provided in ${biz.city}${biz.state_code || biz.state ? `, ${biz.state_code || biz.state}` : ''}.`}
+                    </p>
+                  )}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {biz.detailedServices.map((service, idx) => (
@@ -620,7 +676,7 @@ export default async function BusinessPage(props: { params: Promise<{ slug: stri
             ) : (
               biz.services && biz.services.length > 0 && (
                 <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200/80 shadow-xs space-y-4">
-                  <h2 className="text-xl font-extrabold text-slate-900">Products & Services Offered</h2>
+                  <h2 className="text-xl font-extrabold text-slate-900">Services Offered by {biz.name}{biz.city ? ` in ${biz.city}` : ''}</h2>
                   <div className="flex flex-wrap gap-2 pt-1">
                     {biz.services.map((service) => (
                       <span key={service} className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-slate-100 text-slate-800">
@@ -721,7 +777,7 @@ export default async function BusinessPage(props: { params: Promise<{ slug: stri
                     </div>
 
                     <p className="text-xs text-slate-700 leading-relaxed font-medium">
-                      {loc.address || 'Street address available on inquiry.'}
+                      {loc.address || 'Street address not listed for this location.'}
                     </p>
 
                     <a
@@ -748,7 +804,7 @@ export default async function BusinessPage(props: { params: Promise<{ slug: stri
                       <span>Articles by {biz.name}</span>
                     </h2>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Expert advice and informational resources published by this business.
+                      Articles and resources published by this business.
                     </p>
                   </div>
                   <span className="text-xs font-bold text-purple-700 bg-purple-50 px-3 py-1 rounded-full border border-purple-200">
@@ -847,7 +903,7 @@ export default async function BusinessPage(props: { params: Promise<{ slug: stri
                   <div className="pt-3 border-t border-slate-100 space-y-2">
                     <span className="text-[11px] font-extrabold text-slate-600 uppercase tracking-wider block flex items-center gap-1.5">
                       <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-                      <span>Brand Authority Profiles</span>
+                      <span>Business Profiles</span>
                     </span>
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       {biz.googleBusinessProfile && (
@@ -900,15 +956,16 @@ export default async function BusinessPage(props: { params: Promise<{ slug: stri
               </div>
             </div>
 
-            {/* Key Business Highlights */}
-            {biz.features && biz.features.length > 0 && (
+            {/* Key Business Highlights — real data only; the section is
+                omitted entirely when the listing has no real highlights. */}
+            {realHighlights.length > 0 && (
               <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-3">
                 <h2 className="font-bold text-slate-900 text-sm uppercase tracking-wider flex items-center gap-2">
                   <Award className="w-4 h-4 text-blue-600" />
                   <span>Business Highlights</span>
                 </h2>
                 <div className="space-y-2 text-xs">
-                  {biz.features.map((feat, fIdx) => (
+                  {realHighlights.map((feat: string, fIdx: number) => (
                     <div key={fIdx} className="flex items-center gap-2 text-slate-700 py-1 border-b border-slate-50 last:border-0">
                       <CheckCircle2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                       <span>{feat}</span>
@@ -918,8 +975,10 @@ export default async function BusinessPage(props: { params: Promise<{ slug: stri
               </div>
             )}
 
-            {/* Operating Hours (Only when verified data exists) */}
-            {biz.operatingHours && Object.keys(biz.operatingHours).length > 0 && (
+            {/* Operating Hours — shown only when the listing provides them;
+                when hours are missing the card says so instead of implying
+                hours exist. */}
+            {biz.operatingHours && Object.keys(biz.operatingHours).length > 0 ? (
               <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-3">
                 <h2 className="font-bold text-slate-900 text-sm uppercase tracking-wider flex items-center gap-2">
                   <Clock className="w-4 h-4 text-blue-600" />
@@ -933,6 +992,20 @@ export default async function BusinessPage(props: { params: Promise<{ slug: stri
                     </div>
                   ))}
                 </div>
+                <p className="text-[11px] text-slate-500 pt-1">
+                  Hours are shown in the business&apos;s local time
+                  {biz.state ? ` (${biz.state})` : ''}. No timezone is stored with the listing.
+                </p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-3">
+                <h2 className="font-bold text-slate-900 text-sm uppercase tracking-wider flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-blue-600" />
+                  <span>Operating Hours</span>
+                </h2>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Hours are not listed for {biz.name} yet. Contact the business directly to confirm opening times.
+                </p>
               </div>
             )}
 
@@ -989,7 +1062,7 @@ export default async function BusinessPage(props: { params: Promise<{ slug: stri
             <div className="flex justify-between items-center">
               <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
                 <Building2 className="w-5 h-5 text-blue-600" />
-                <span>Related Businesses in {biz.city} & {biz.category}</span>
+                <span>More {biz.category}{biz.city ? ` in ${biz.city}` : ' Nearby'}</span>
               </h2>
               <Link href={`/category/${catId}/${citySlug}`} className="text-xs font-bold text-blue-600 hover:underline">
                 View All in {biz.city} &rarr;
@@ -1004,13 +1077,13 @@ export default async function BusinessPage(props: { params: Promise<{ slug: stri
                 >
                   <div className="space-y-2">
                     <div className="flex items-center gap-2.5">
-                      <Image
+                      {/* Route through ListingLogo: a real uploaded logo renders
+                          as the image; a stored generic Unsplash URL renders
+                          as an initial-letter tile instead. */}
+                      <ListingLogo
+                        name={rel.name}
                         src={rel.logo}
-                        alt={rel.name}
-                        width={36}
-                        height={36}
-                        loading="lazy"
-                        sizes="36px"
+                        size={36}
                         className="w-9 h-9 rounded-lg object-cover border border-slate-100 shrink-0"
                       />
                       <div className="min-w-0">
@@ -1030,7 +1103,7 @@ export default async function BusinessPage(props: { params: Promise<{ slug: stri
 
                   <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
                     <span className="text-amber-600 font-bold">
-                      {rel.reviewCount > 0 && rel.rating > 0 ? `★ ${rel.rating}` : 'Active'}
+                      {rel.reviewCount > 0 && rel.rating > 0 ? `★ ${rel.rating}` : 'No reviews yet'}
                     </span>
                     <Link
                       href={`/business/${rel.slug}`}

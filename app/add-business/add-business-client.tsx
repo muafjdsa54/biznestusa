@@ -12,20 +12,47 @@ import {
 } from 'lucide-react'
 import Navbar from '@/components/navbar'
 import Footer from '@/components/footer'
-import { BUSINESS_CATEGORIES, CATEGORIES, STATE_CITIES, US_STATES, BusinessItem, BUSINESS_PLANS, BusinessPlan } from '@/lib/data'
+import { BUSINESS_CATEGORIES, CATEGORIES, STATE_CITIES, US_STATES, BUSINESS_PLANS, BusinessItem, BusinessPlan } from '@/lib/data'
 import { loadStates, loadCities, stateCodeForName, searchCities, type GeoState, type GeoCity } from '@/lib/geo-data'
-import { saveBusinessToDatabase, getUserBusinesses, updateBusinessPaymentProof, normalizeSlug } from '@/lib/db-service'
+import { saveBusinessToDatabase, getUserBusinesses, updateBusinessPaymentProof } from '@/lib/db-service'
 import StickyWebsiteBanner from '@/components/business/sticky-website-banner'
 import { auth } from '@/lib/firebase'
+import { getAuthHeaders } from '@/lib/client-auth'
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
+  sendEmailVerification,
   signOut, 
   onAuthStateChanged, 
   updateProfile 
 } from 'firebase/auth'
 import { isValidPersonName, validatePersonName, filterPersonNameInput, isValidUsPhone, validateUsPhone, formatUsPhone, isValidEmail, validateEmail } from '@/lib/validation'
 import { toast } from 'sonner'
+import TurnstileWidget from '@/components/turnstile-widget'
+import { isTurnstileWidgetEnabled, verifyTurnstileTokenClient } from '@/lib/turnstile'
+import dynamic from 'next/dynamic'
+
+// Wizard step panels are lazy-loaded: the 4,545-line add-business
+// client no longer ships every step panel in the initial bundle.
+// Steps render on demand (step 1 on first paint, the rest when the
+// user navigates, the payment screen only at submit time). The
+// screenshot gate (validateStep(5) + handleSubmit re-check) lives
+// in this file and is untouched by the split.
+const StepIdentityPanel = dynamic(() => import('./steps/step-identity'), {
+  loading: () => <div className="py-12 text-center text-sm text-slate-500">Loading step…</div>,
+})
+const StepLocationsPanel = dynamic(() => import('./steps/step-locations'), {
+  loading: () => <div className="py-12 text-center text-sm text-slate-500">Loading step…</div>,
+})
+const StepHoursPanel = dynamic(() => import('./steps/step-hours'), {
+  loading: () => <div className="py-12 text-center text-sm text-slate-500">Loading step…</div>,
+})
+const StepDetailsPanel = dynamic(() => import('./steps/step-details'), {
+  loading: () => <div className="py-12 text-center text-sm text-slate-500">Loading step…</div>,
+})
+const PaymentScreenPanel = dynamic(() => import('./steps/payment-screen'), {
+  loading: () => <div className="py-12 text-center text-sm text-slate-500">Loading payment…</div>,
+})
 
 const US_PAYMENT_CHANNELS = [
   {
@@ -60,8 +87,8 @@ BUSINESS_CATEGORIES.forEach(c => {
 
 const FAQS = [
   {
-    q: 'Is it free to submit a business?',
-    a: 'Yes. Business submissions are reviewed for completeness and spam before they can appear publicly. There is no payment required to submit a listing.'
+    q: 'Is it free to search and browse businesses on BizNestUSA?',
+    a: 'Yes — searching and browsing the directory is completely free. Listing a business is a paid submission: choose the $1 Basic, $5 Standard, or $10 Authoritative tier, complete the payment, and upload your payment screenshot. Only listings with a verified payment are approved and published.'
   },
   {
     q: 'How long does review take?',
@@ -77,6 +104,7 @@ export interface FormLocation {
   city: string
   state: string
   address: string
+  zipCode: string
   isPrimary: boolean
   citySearchQuery?: string
   isCityDropdownOpen?: boolean
@@ -88,6 +116,7 @@ export interface UserSessionData {
   uid?: string
   name?: string
   email?: string
+  emailVerified?: boolean
   phone?: string
   role?: string
 }
@@ -97,6 +126,8 @@ export default function AddBusinessClient() {
 
   // Authentication State
   const [currentUser, setCurrentUser] = useState<UserSessionData | null>(null)
+  // Cloudflare Turnstile token (null until the widget completes; skipped when keys unset)
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
   const [authChecking, setAuthChecking] = useState(true)
   const [authTab, setAuthTab] = useState<'login' | 'signup'>('login')
   
@@ -125,6 +156,8 @@ export default function AddBusinessClient() {
   // Payment & Plan Selection State
   const [activePaymentBiz, setActivePaymentBiz] = useState<BusinessItem | null>(null)
   const [selectedPlan, setSelectedPlan] = useState<BusinessPlan>('priority_5')
+  // Single source of truth for the selected tier's name/price (3 tiers).
+  const selectedPlanConfig = BUSINESS_PLANS[selectedPlan]
   const [submittedPlan, setSubmittedPlan] = useState<BusinessPlan>('priority_5')
   const [selectedChannel, setSelectedChannel] = useState<string>('card')
   const [paymentRefNumber, setPaymentRefNumber] = useState('')
@@ -172,13 +205,22 @@ export default function AddBusinessClient() {
     return () => { isMounted = false }
   }, [selectedPlan])
 
-  // Wizard Step State (5 Steps: Identity, Locations, Operating Hours, Details, Verify & Pay)
+  // Wizard Step State (4 Steps: Identity, Locations, Operating Hours, Details).
+  // Payment is NOT a wizard step: it appears only at submit time (see showPaymentScreen).
   const [currentStep, setCurrentStep] = useState(1)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submittedSlug, setSubmittedSlug] = useState<string | null>(null)
   const [submittedBizName, setSubmittedBizName] = useState<string>('')
   const [openFaq, setOpenFaq] = useState<number | null>(null)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
+
+  // Submit-time payment screen: client-side state ONLY — no route, no URL,
+  // nothing in the sitemap, never submitted to IndexNow. It renders only
+  // after the user fills the form and initiates submit (handleInitiateSubmit).
+  const [showPaymentScreen, setShowPaymentScreen] = useState(false)
+  // Shown when a signed-in user has not verified their email yet.
+  const [showVerifyNotice, setShowVerifyNotice] = useState(false)
+  const [isResendingVerification, setIsResendingVerification] = useState(false)
 
   // Operating Hours State
   const [operatingHoursState, setOperatingHoursState] = useState<Record<string, { isOpen: boolean; openTime: string; closeTime: string; is24Hours: boolean }>>({
@@ -257,13 +299,10 @@ export default function AddBusinessClient() {
     subcategory: '',
     logo: '',
     locations: [
-      { city: '', state: '', address: '', isPrimary: true, citySearchQuery: '', isCityDropdownOpen: false, isCustomCity: false, customCityName: '' }
+      { city: '', state: '', address: '', zipCode: '', isPrimary: true, citySearchQuery: '', isCityDropdownOpen: false, isCustomCity: false, customCityName: '' }
     ] as FormLocation[],
-    faqs: [
-      { question: 'What specific products or services do you offer?', answer: 'We provide licensed and certified services tailored to residential and commercial clients across the United States.' },
-      { question: 'What areas and cities do you serve in the United States?', answer: 'We serve all local communities within our designated metro area, with responsive scheduling and customer support.' },
-      { question: 'How can clients request an estimate or schedule a consultation?', answer: 'Clients can reach us directly via our verified phone line, email, or through our directory listing to arrange an appointment.' }
-    ] as Array<{ question: string; answer: string }>,
+    // FAQs start EMPTY — no pre-filled canned answers (they would publish as fake content).
+    faqs: [] as Array<{ question: string; answer: string }>,
     ownerName: '',
     phone: '',
     whatsapp: '',
@@ -271,16 +310,16 @@ export default function AddBusinessClient() {
     website: '',
     description: '',
     services: '',
+    yearEstablished: '',
+    priceRange: '',
+    serviceArea: '',
+    gallery: [] as string[],
     proofDoc: '',
     googleBusinessProfile: '',
     facebookUrl: '',
     instagramUrl: '',
     linkedinUrl: ''
   })
-
-  // Account Password for guest users
-  const [accountPassword, setAccountPassword] = useState('')
-  const [showAccountPassword, setShowAccountPassword] = useState(false)
 
   // Errors State
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -405,28 +444,20 @@ export default function AddBusinessClient() {
     setFormData(prev => ({ ...prev, subcategory: text }))
   }
 
-  // Load User Authentication & Session
+  // Load User Authentication & Session — Firebase Auth is the ONLY source
+  // of truth. Stored sessions are NEVER trusted on mount: a crafted
+  // localStorage/sessionStorage entry could otherwise make the form display
+  // a victim's businesses. Storage is written only from the verified
+  // onAuthStateChanged user object below.
   useEffect(() => {
-    // 1. Check Session Storage first
-    try {
-      const stored = sessionStorage.getItem('biznestusa_user_session') || localStorage.getItem('biznestusa_user_session') || sessionStorage.getItem('listpak_user_session') || localStorage.getItem('listpak_user_session')
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        if (parsed && (parsed.email || parsed.name)) {
-          setCurrentUser(parsed)
-          prefillUserForm(parsed)
-          fetchUserBusinesses(parsed.email || parsed.uid || '')
-        }
-      }
-    } catch (_) {}
-
-    // 2. Firebase Auth Listener
+    // Firebase Auth Listener
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       if (fbUser) {
         const userObj: UserSessionData = {
           uid: fbUser.uid,
           name: fbUser.displayName || fbUser.email?.split('@')[0] || 'User',
           email: fbUser.email || '',
+          emailVerified: fbUser.emailVerified,
           phone: fbUser.phoneNumber || '',
           role: 'business'
         }
@@ -487,35 +518,20 @@ export default function AddBusinessClient() {
 
     setIsLoggingIn(true)
     try {
-      let loggedUser: UserSessionData = {
-        email: loginEmail.trim().toLowerCase(),
-        name: loginEmail.split('@')[0],
-        role: 'business'
+      // Sign-in must succeed — a stored session is NEVER accepted as a login.
+      // The old fallback let anyone who planted a matching-email entry in
+      // localStorage walk in with any (wrong) password.
+      const userCredential = await signInWithEmailAndPassword(auth, loginEmail.trim(), loginPassword)
+      if (!userCredential.user) {
+        throw new Error('Invalid credentials')
       }
-
-      try {
-        const userCredential = await signInWithEmailAndPassword(auth, loginEmail.trim(), loginPassword)
-        if (userCredential.user) {
-          loggedUser = {
-            uid: userCredential.user.uid,
-            name: userCredential.user.displayName || loginEmail.split('@')[0],
-            email: userCredential.user.email || loginEmail.trim().toLowerCase(),
-            phone: userCredential.user.phoneNumber || '',
-            role: 'business'
-          }
-        }
-      } catch (authErr: any) {
-        const existingSession = localStorage.getItem('biznestusa_user_session') || localStorage.getItem('listpak_user_session')
-        if (existingSession) {
-          const parsed = JSON.parse(existingSession)
-          if (parsed.email?.toLowerCase() === loginEmail.trim().toLowerCase()) {
-            loggedUser = parsed
-          } else {
-            throw new Error(authErr?.message || 'Invalid credentials')
-          }
-        } else {
-          throw new Error(authErr?.message || 'Account not found. Please create an account first.')
-        }
+      const loggedUser: UserSessionData = {
+        uid: userCredential.user.uid,
+        name: userCredential.user.displayName || loginEmail.split('@')[0],
+        email: userCredential.user.email || loginEmail.trim().toLowerCase(),
+        emailVerified: userCredential.user.emailVerified,
+        phone: userCredential.user.phoneNumber || '',
+        role: 'business'
       }
 
       setCurrentUser(loggedUser)
@@ -577,6 +593,12 @@ export default function AddBusinessClient() {
             displayName: signupName.trim()
           })
           newUser.uid = userCredential.user.uid
+          newUser.emailVerified = false
+          try {
+            await sendEmailVerification(userCredential.user)
+          } catch (_) {
+            // Best-effort: the user can resend it from the form's verify notice.
+          }
         }
       } catch (authErr: any) {
         if (authErr?.code === 'auth/email-already-in-use') {
@@ -592,7 +614,7 @@ export default function AddBusinessClient() {
       localStorage.setItem('biznestusa_user_session', JSON.stringify(newUser))
       prefillUserForm(newUser)
 
-      toast.success('Your BizNest USA account has been created successfully!')
+      toast.success('Your BizNest USA account has been created! We sent a verification email — please verify your email before submitting a listing.')
       setActiveView('form')
     } catch (err: any) {
       console.error('Signup error:', err)
@@ -616,13 +638,32 @@ export default function AddBusinessClient() {
     toast.success('You have been signed out.')
   }
 
+  // Resend the Firebase email-verification link for the signed-in user.
+  const handleResendVerificationEmail = async () => {
+    const fbUser = auth.currentUser
+    if (!fbUser) {
+      toast.error('Please sign in first, then resend the verification email.')
+      return
+    }
+    setIsResendingVerification(true)
+    try {
+      await sendEmailVerification(fbUser)
+      toast.success('Verification email sent. Please check your inbox (and spam folder).')
+    } catch (err) {
+      console.error('Resend verification error:', err)
+      toast.error('Could not send the verification email. Please try again in a moment.')
+    } finally {
+      setIsResendingVerification(false)
+    }
+  }
+
   // Multi-Location Handlers
   const handleAddLocation = () => {
     setFormData(prev => ({
       ...prev,
       locations: [
         ...prev.locations,
-        { city: '', state: '', address: '', isPrimary: prev.locations.length === 0, citySearchQuery: '', isCityDropdownOpen: false, isCustomCity: false, customCityName: '' }
+        { city: '', state: '', address: '', zipCode: '', isPrimary: prev.locations.length === 0, citySearchQuery: '', isCityDropdownOpen: false, isCustomCity: false, customCityName: '' }
       ]
     }))
   }
@@ -728,10 +769,7 @@ export default function AddBusinessClient() {
   }
 
   const handleRemoveFaq = (index: number) => {
-    if ((formData.faqs || []).length <= 3) {
-      toast.error('A minimum of 3 FAQs is required to maximize customer conversion.')
-      return
-    }
+    // FAQs are optional: an owner may remove every FAQ.
     setFormData(prev => ({
       ...prev,
       faqs: (prev.faqs || []).filter((_, i) => i !== index)
@@ -825,6 +863,8 @@ export default function AddBusinessClient() {
                      document.getElementById(`field-location-${idx}-city`)
         } else if (field === 'address') {
           targetEl = document.getElementById(`field-location-${idx}-address`)
+        } else if (field === 'zip') {
+          targetEl = document.getElementById(`field-location-${idx}-zip`)
         }
       } else if (key === 'faqs') {
         const firstEmptyQ = document.querySelector('input[id^="field-faq-"][id$="-question"]') as HTMLElement | null
@@ -881,6 +921,12 @@ export default function AddBusinessClient() {
           if (!loc.address?.trim()) {
             errs[`location_${idx}_address`] = `Location ${idx + 1}: Physical address is required`
           }
+          const zipVal = (loc.zipCode || '').trim()
+          if (!zipVal) {
+            errs[`location_${idx}_zip`] = `Location ${idx + 1}: ZIP code is required`
+          } else if (!/^\d{5}(-\d{4})?$/.test(zipVal)) {
+            errs[`location_${idx}_zip`] = `Location ${idx + 1}: Enter a valid US ZIP code (e.g. 90210 or 90210-1234)`
+          }
 
           // Duplicate location detection
           const currentKey = `${effectiveCity.toLowerCase()}|${(loc.address || '').trim().toLowerCase()}`
@@ -919,15 +965,12 @@ export default function AddBusinessClient() {
         }
       }
 
-      if (!currentUser) {
-        if (!formData.email?.trim()) {
-          errs.email = 'Valid business email is required for account creation'
-        } else if (!validateEmail(formData.email).isValid) {
-          errs.email = 'Please provide a valid business email address (e.g. name@company.com)'
-        }
-        if (!accountPassword || accountPassword.length < 6) {
-          errs.accountPassword = 'Password must be at least 6 characters for your dashboard account'
-        }
+      // Email is the listing contact address. Account creation happens only
+      // in the sign-up tab up front — never inline at submit (see handleSubmit).
+      if (!formData.email?.trim()) {
+        errs.email = 'Business email is required'
+      } else if (!validateEmail(formData.email).isValid) {
+        errs.email = 'Please provide a valid business email address (e.g. name@company.com)'
       }
     } else if (step === 3) {
       // Step 3: Business Operating Hours validation
@@ -943,10 +986,34 @@ export default function AddBusinessClient() {
         errs.description = `Please provide a business description of at least 30 words. Current: ${wordCount} words (${remaining} more words required).`
       }
 
+      // Year established (optional): a sane 4-digit year only.
+      if (formData.yearEstablished?.trim()) {
+        const yearNum = Number(formData.yearEstablished.trim())
+        const currentYear = new Date().getFullYear()
+        if (!/^\d{4}$/.test(formData.yearEstablished.trim()) || yearNum < 1800 || yearNum > currentYear) {
+          errs.yearEstablished = `Enter a valid 4-digit founding year between 1800 and ${currentYear}.`
+        }
+      }
+      // Price range (optional): only $–$$$$ are valid values.
+      if (formData.priceRange && !['$', '$$', '$$$', '$$$$'].includes(formData.priceRange)) {
+        errs.priceRange = 'Select a valid price range ($, $$, $$$ or $$$$).'
+      }
+      // Photo gallery (optional): at most 5 photos.
+      if ((formData.gallery || []).length > 5) {
+        errs.gallery = 'The photo gallery holds at most 5 photos.'
+      }
+
       // Check if FAQs have questions without answers
       const incompleteFaqs = (formData.faqs || []).filter(f => (f.question.trim() && !f.answer.trim()) || (!f.question.trim() && f.answer.trim()))
       if (incompleteFaqs.length > 0) {
         errs.faqs = 'Please complete both the question and answer for your FAQs, or remove incomplete entries.'
+      }
+    } else if (step === 5) {
+      // Step 5 is the submit-time payment screen (not part of the wizard):
+      // no payment screenshot on file means no submission — no exceptions.
+      // Only submissions with a verified payment are approved.
+      if (!paymentScreenshotBase64) {
+        errs.paymentScreenshot = 'Please upload your payment screenshot to submit your business listing. Only submissions with a verified payment are approved.'
       }
     }
 
@@ -966,7 +1033,7 @@ export default function AddBusinessClient() {
 
   const handleNextStep = () => {
     if (validateStep(currentStep)) {
-      setCurrentStep(prev => Math.min(5, prev + 1))
+      setCurrentStep(prev => Math.min(4, prev + 1))
       window.scrollTo({ top: 400, behavior: 'smooth' })
     }
   }
@@ -976,9 +1043,10 @@ export default function AddBusinessClient() {
     window.scrollTo({ top: 400, behavior: 'smooth' })
   }
 
-  // Handle Form Submission: Saves Business Draft and Opens free US listing Payment Screen
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  // Step 4 done → validate the whole form + auth, THEN show the payment
+  // screen. Payment appears ONLY at submit time: the user fills the entire
+  // form first and never sees payment before this point.
+  const handleInitiateSubmit = () => {
     if (!validateStep(1)) {
       setCurrentStep(1)
       setTimeout(() => validateStep(1), 100)
@@ -999,59 +1067,98 @@ export default function AddBusinessClient() {
       setTimeout(() => validateStep(4), 100)
       return
     }
+    const fbUser = auth.currentUser
+    if (!fbUser || !currentUser?.uid) {
+      toast.error('Please sign in or create an account to submit your business listing.')
+      return
+    }
+    if (!fbUser.emailVerified) {
+      setShowVerifyNotice(true)
+      toast.error('Please verify your email address before submitting. Check your inbox for the verification email, or resend it from the notice above the form.')
+      return
+    }
+    setShowPaymentScreen(true)
+    window.scrollTo({ top: 200, behavior: 'smooth' })
+  }
 
-    // MANDATORY PAYMENT SCREENSHOT VALIDATION REQUIRED BY USER
-    if (!paymentScreenshotBase64) {
-      toast.error('Payment receipt screenshot is required to complete submission. Please upload your payment screenshot.', {
-        duration: 5000
-      })
-      const screenshotBox = document.getElementById('field-payment-screenshot')
-      if (screenshotBox) {
-        screenshotBox.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      }
+  // Handle Form Submission — runs ONLY from the submit-time payment screen,
+  // after the user has filled the form and uploaded a payment screenshot.
+  // Listing submission is PAID: the screenshot is a hard gate (validateStep 5),
+  // and only submissions with a verified payment are approved.
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!validateStep(1)) {
+      setCurrentStep(1)
+      setShowPaymentScreen(false)
+      setTimeout(() => validateStep(1), 100)
+      return
+    }
+    if (!validateStep(2)) {
+      setCurrentStep(2)
+      setShowPaymentScreen(false)
+      setTimeout(() => validateStep(2), 100)
+      return
+    }
+    if (!validateStep(3)) {
+      setCurrentStep(3)
+      setShowPaymentScreen(false)
+      setTimeout(() => validateStep(3), 100)
+      return
+    }
+    if (!validateStep(4)) {
+      setCurrentStep(4)
+      setShowPaymentScreen(false)
+      setTimeout(() => validateStep(4), 100)
+      return
+    }
+    // Step 5 = the submit-time payment screen: screenshot is a HARD gate.
+    if (!validateStep(5)) {
       return
     }
 
+    // Auth gate: submit requires a signed-in user with a VERIFIED email.
+    // There is no inline account creation at submit and we NEVER submit
+    // with an empty userId — the hardened Firestore rules require the
+    // caller's own verified identity on create.
+    const fbUser = auth.currentUser
+    if (!fbUser || !currentUser?.uid) {
+      toast.error('Please sign in or create an account to submit your business listing.')
+      setShowPaymentScreen(false)
+      return
+    }
+    if (!fbUser.emailVerified) {
+      setShowVerifyNotice(true)
+      toast.error('Please verify your email address before submitting. Check your inbox for the verification email, or resend it from the notice above the form.')
+      return
+    }
+    // Cloudflare Turnstile: when keys are set (user's job), a completed
+    // check is required and verified server-side via /api/turnstile/verify.
+    // With no keys configured the check is skipped and submit proceeds.
+    if (isTurnstileWidgetEnabled()) {
+      if (!turnstileToken) {
+        toast.error('Please complete the security check before submitting.')
+        return
+      }
+      const check = await verifyTurnstileTokenClient(turnstileToken)
+      if (!check.success) {
+        toast.error('Security check failed. Please try again.')
+        return
+      }
+    }
+    const resolvedUserId = fbUser.uid
+
     setIsSubmitting(true)
     try {
-      let resolvedUserId = currentUser?.uid || ''
-      if (!currentUser && formData.email && accountPassword) {
-        try {
-          const cred = await createUserWithEmailAndPassword(auth, formData.email.trim(), accountPassword)
-          if (cred.user) {
-            await updateProfile(cred.user, { displayName: formData.ownerName || formData.businessName })
-            resolvedUserId = cred.user.uid
-            const sessionUser: UserSessionData = {
-              uid: cred.user.uid,
-              name: formData.ownerName || formData.businessName,
-              email: formData.email.trim().toLowerCase(),
-              role: 'business'
-            }
-            setCurrentUser(sessionUser)
-            sessionStorage.setItem('biznestusa_user_session', JSON.stringify(sessionUser))
-            localStorage.setItem('biznestusa_user_session', JSON.stringify(sessionUser))
-          }
-        } catch (authErr: any) {
-          console.warn('Registration auth notice:', authErr?.message)
-          const sessionUser: UserSessionData = {
-            name: formData.ownerName || formData.businessName,
-            email: formData.email.trim().toLowerCase(),
-            role: 'business'
-          }
-          setCurrentUser(sessionUser)
-          sessionStorage.setItem('biznestusa_user_session', JSON.stringify(sessionUser))
-          localStorage.setItem('biznestusa_user_session', JSON.stringify(sessionUser))
-        }
-      }
-
       const primaryLoc = formData.locations.find(l => l.isPrimary) || formData.locations[0] || { city: 'New York', address: 'the United States' }
       const resolvedPrimaryCity = (primaryLoc.isCustomCity ? primaryLoc.customCityName || primaryLoc.city : primaryLoc.city).trim() || 'New York'
       // Top-level state/province must come from the primary location — otherwise
       // lib/db-service.ts defaults EVERY new business to 'New York'.
       const resolvedPrimaryState = (('state' in primaryLoc ? primaryLoc.state : '') || '').trim() || 'New York'
+      const resolvedPrimaryZip = (('zipCode' in primaryLoc ? (primaryLoc as FormLocation).zipCode : '') || '').trim()
       const resolvedLocations = formData.locations.map(l => ({
         city: (l.isCustomCity ? l.customCityName || l.city : l.city).trim(),
         state: l.state,
+        zipCode: (l.zipCode || '').trim(),
         address: l.address,
         isPrimary: l.isPrimary
       }))
@@ -1061,9 +1168,6 @@ export default function AddBusinessClient() {
         answer: f.answer.trim()
       })).filter(f => f.question && f.answer)
 
-      const planConfig = BUSINESS_PLANS[selectedPlan]
-      const channelConfig = US_PAYMENT_CHANNELS.find(c => c.id === selectedChannel) || US_PAYMENT_CHANNELS[0]
-
       const catDef = BUSINESS_CATEGORIES.find(
         c => c.name.toLowerCase() === formData.category.toLowerCase() || c.id === formData.category.toLowerCase()
       )
@@ -1071,13 +1175,21 @@ export default function AddBusinessClient() {
         ? catDef.id
         : (formData.category ? formData.category.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : 'local-services')
 
+      // All three paid tiers ($1 Basic, $5 Standard, $10 Authoritative).
+      // Price and name are both derived from the selected plan so a $1
+      // submission is never labelled as the $5 plan.
       const isAuthoritative = selectedPlan === 'authoritative_10'
-      const isStandard = selectedPlan === 'priority_5'
-      const isBasic = selectedPlan === 'review_1'
+      const planPrice = BUSINESS_PLANS[selectedPlan].price
+      const planName = BUSINESS_PLANS[selectedPlan].name
 
       const finalPaymentRef = payoneerReference || ('BNUSA-' + new Date().getFullYear() + '-' + Math.floor(100000 + Math.random() * 900000))
 
-      const saved = await saveBusinessToDatabase({
+      // NOTE: zipCode / year_established / service_area / priceRange / gallery
+      // are sent here, but lib/db-service.ts saveBusinessToDatabase builds its
+      // stored doc explicitly and does not copy them yet (except zipCode, which
+      // survives inside locations[] via its spread). That file needs a
+      // passthrough before these fields persist — see final report.
+      const businessPayload: Partial<BusinessItem> & { gallery?: string[] } = {
         name: formData.businessName,
         category: formData.category,
         categoryId: resolvedCategoryId,
@@ -1087,6 +1199,12 @@ export default function AddBusinessClient() {
         city: resolvedPrimaryCity,
         state: resolvedPrimaryState,
         province: resolvedPrimaryState,
+        zipCode: resolvedPrimaryZip || undefined,
+        zip: resolvedPrimaryZip || undefined,
+        year_established: formData.yearEstablished?.trim() ? Number(formData.yearEstablished.trim()) : undefined,
+        service_area: formData.serviceArea?.trim() || undefined,
+        priceRange: formData.priceRange || undefined,
+        gallery: (formData.gallery || []).length > 0 ? formData.gallery : undefined,
         address: primaryLoc.address || 'the United States',
         locations: resolvedLocations,
         cities: resolvedCities,
@@ -1098,7 +1216,7 @@ export default function AddBusinessClient() {
         email: formData.email || currentUser?.email || 'contact@yourcompany.com',
         website: formData.website,
         description: formData.description,
-        services: formData.services ? formData.services.split(',').map(s => s.trim()) : ['General Services'],
+        services: formData.services ? formData.services.split(',').map(s => s.trim()).filter(Boolean) : [],
         googleBusinessProfile: formData.googleBusinessProfile.trim(),
         facebookUrl: formData.facebookUrl.trim(),
         instagramUrl: formData.instagramUrl.trim(),
@@ -1106,37 +1224,39 @@ export default function AddBusinessClient() {
         operatingHours: serializeOperatingHours(),
         status: 'pending',
         plan: selectedPlan,
-        planName: planConfig.name,
-        planPrice: planConfig.price,
-        hasSinglePage: !isBasic,
-        canEditProfile: isStandard || isAuthoritative,
+        planName,
+        planPrice,
+        hasSinglePage: true,
+        canEditProfile: true,
         paymentStatus: 'PAYMENT_VERIFICATION_PENDING',
-        paymentScreenshot: paymentScreenshotBase64,
+        paymentScreenshot: paymentScreenshotBase64 || undefined,
         payment_reference: finalPaymentRef,
         payment_provider: 'payoneer',
         transactionRef: payoneerTxId.trim() || paymentRefNumber.trim() || finalPaymentRef,
         payoneer_transaction_id: payoneerTxId.trim() || undefined,
         customer_note: customerNote.trim() || undefined,
-        blog_post_entitled: isStandard || isAuthoritative,
-        blog_posts_allowed: isAuthoritative ? 10 : (isStandard ? 5 : 0),
+        blog_post_entitled: true,
+        blog_posts_allowed: BUSINESS_PLANS[selectedPlan].postsAllowed,
         blog_posts_used: 0,
         blog_post_feature_enabled: false,
         paymentDetails: {
           plan: selectedPlan,
-          amount: planConfig.price,
+          amount: planPrice,
           paymentMethod: 'Payoneer',
           paymentScreenshot: paymentScreenshotBase64 ? 'ATTACHED' : '',
           paymentDate: new Date().toISOString(),
           transactionId: payoneerTxId.trim() || undefined,
           customerNote: customerNote.trim() || undefined
         }
-      })
+      }
+
+      const saved = await saveBusinessToDatabase(businessPayload)
 
       // Sync to canonical payment records collection
       try {
         await fetch('/api/payments/submit-proof', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
           body: JSON.stringify({
             businessId: saved.id || saved.slug,
             businessName: saved.name,
@@ -1155,6 +1275,7 @@ export default function AddBusinessClient() {
       }
 
       setIsSubmitting(false)
+      setShowPaymentScreen(false)
       setSubmittedSlug(saved.slug)
       setSubmittedBizName(saved.name)
       setSubmittedPlan(selectedPlan)
@@ -1166,7 +1287,7 @@ export default function AddBusinessClient() {
         fetchUserBusinesses(targetEmail || resolvedUserId)
       }
 
-      toast.success('Listing and review payment submitted! Our team will review it before publishing.')
+      toast.success('Listing and payment submitted! Only submissions with a verified payment are approved — our team will review it before publishing.')
       window.scrollTo({ top: 200, behavior: 'smooth' })
     } catch (err) {
       console.error(err)
@@ -1249,6 +1370,97 @@ export default function AddBusinessClient() {
     setFormData(prev => ({ ...prev, logo: '' }))
   }
 
+  // ZIP code for one location — digits and an optional -XXXX suffix only.
+  const handleLocationZipChange = (index: number, value: string) => {
+    const cleaned = value.replace(/[^0-9-]/g, '').slice(0, 10)
+    setFormData(prev => ({
+      ...prev,
+      locations: prev.locations.map((item, i) => i === index ? { ...item, zipCode: cleaned } : item)
+    }))
+    if (errors[`location_${index}_zip`]) {
+      setErrors(prev => {
+        const next = { ...prev }
+        delete next[`location_${index}_zip`]
+        return next
+      })
+    }
+  }
+
+  // Photo gallery (optional, up to 5 photos) — same canvas compression as the logo.
+  const handleGalleryFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
+    const remaining = 5 - (formData.gallery || []).length
+    if (remaining <= 0) {
+      toast.error('You can upload up to 5 photos in the gallery.')
+      return
+    }
+    const accepted = files.filter(file => file.type.startsWith('image/')).slice(0, remaining)
+    if (accepted.length === 0) {
+      toast.error('Please upload image files (PNG, JPG, JPEG, WEBP).')
+      return
+    }
+    if (files.length > remaining) {
+      toast.info(`Only ${remaining} more photo${remaining === 1 ? '' : 's'} can be added (5 maximum).`)
+    }
+    accepted.forEach(file => {
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error(`"${file.name}" is larger than 10MB and was skipped.`)
+        return
+      }
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        const rawBase64 = event.target?.result as string
+        const addPhoto = (dataUrl: string) => {
+          setFormData(prev => {
+            if ((prev.gallery || []).length >= 5) return prev
+            return { ...prev, gallery: [...(prev.gallery || []), dataUrl] }
+          })
+        }
+        try {
+          const img = new Image()
+          img.onload = () => {
+            const canvas = document.createElement('canvas')
+            let width = img.width
+            let height = img.height
+            const maxDim = 800
+            if (width > maxDim || height > maxDim) {
+              if (width > height) {
+                height = Math.round((height * maxDim) / width)
+                width = maxDim
+              } else {
+                width = Math.round((width * maxDim) / height)
+                height = maxDim
+              }
+            }
+            canvas.width = width
+            canvas.height = height
+            const ctx = canvas.getContext('2d')
+            if (ctx) {
+              ctx.drawImage(img, 0, 0, width, height)
+              addPhoto(canvas.toDataURL('image/jpeg', 0.8))
+            } else {
+              addPhoto(rawBase64)
+            }
+          }
+          img.onerror = () => addPhoto(rawBase64)
+          img.src = rawBase64
+        } catch (_) {
+          addPhoto(rawBase64)
+        }
+      }
+      reader.readAsDataURL(file)
+    })
+    e.target.value = ''
+  }
+
+  const handleRemoveGalleryPhoto = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      gallery: (prev.gallery || []).filter((_, i) => i !== index)
+    }))
+  }
+
   // Handle Screenshot File Selection with Auto Canvas Compression (guarantees < 100KB base64 for Firestore)
   const handleScreenshotFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -1317,14 +1529,15 @@ export default function AddBusinessClient() {
 
     setIsUploadingPayment(true)
     try {
-      const planConfig = BUSINESS_PLANS[selectedPlan]
+      // All three paid tiers ($1 Basic, $5 Standard, $10 Authoritative).
+      const planPrice = BUSINESS_PLANS[selectedPlan].price
       const channelConfig = US_PAYMENT_CHANNELS.find(c => c.id === selectedChannel) || US_PAYMENT_CHANNELS[0]
       const targetId = activePaymentBiz.id || activePaymentBiz.slug
       const success = await updateBusinessPaymentProof(targetId, {
         paymentMethod: channelConfig.name,
         referenceNumber: paymentRefNumber.trim() || 'N/A',
         paymentScreenshot: paymentScreenshotBase64,
-        amount: planConfig.price,
+        amount: planPrice,
         plan: selectedPlan
       })
 
@@ -1356,6 +1569,7 @@ export default function AddBusinessClient() {
   const handleResetForm = () => {
     setSubmittedSlug(null)
     setSubmittedBizName('')
+    setShowPaymentScreen(false)
     setActivePaymentBiz(null)
     setPaymentScreenshotBase64(null)
     setPaymentRefNumber('')
@@ -1367,13 +1581,9 @@ export default function AddBusinessClient() {
       subcategory: '',
       logo: '',
       locations: [
-        { city: '', state: '', address: '', isPrimary: true, citySearchQuery: '', isCityDropdownOpen: false, isCustomCity: false, customCityName: '' }
+        { city: '', state: '', address: '', zipCode: '', isPrimary: true, citySearchQuery: '', isCityDropdownOpen: false, isCustomCity: false, customCityName: '' }
       ],
-      faqs: [
-        { question: 'What specific products or services do you offer?', answer: '' },
-        { question: 'What areas and cities do you serve in the United States?', answer: '' },
-        { question: 'How can clients request an estimate or schedule a consultation?', answer: '' }
-      ],
+      faqs: [],
       ownerName: currentUser?.name || '',
       phone: currentUser?.phone || '',
       whatsapp: currentUser?.phone || '',
@@ -1381,6 +1591,10 @@ export default function AddBusinessClient() {
       website: '',
       description: '',
       services: '',
+      yearEstablished: '',
+      priceRange: '',
+      serviceArea: '',
+      gallery: [],
       proofDoc: '',
       googleBusinessProfile: '',
       facebookUrl: '',
@@ -1414,6 +1628,10 @@ export default function AddBusinessClient() {
             Connect with US customers searching for local businesses, build a trusted online profile, and receive direct phone and message inquiries.
           </p>
 
+          <p className="text-slate-500 text-xs sm:text-sm leading-relaxed max-w-2xl mx-auto">
+            Searching and browsing the BizNestUSA directory is always free — listing a business is a paid submission: choose a $1, $5, or $10 tier when you submit.
+          </p>
+
           <div className="pt-2 flex items-center justify-center gap-6 text-xs text-slate-600 font-semibold flex-wrap">
             <span className="flex items-center gap-1.5 text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 font-bold">
               <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Transparent Review
@@ -1442,12 +1660,12 @@ export default function AddBusinessClient() {
                 <Building2 className="w-8 h-8" />
               </div>
               <h2 className="text-2xl font-extrabold text-slate-900">
-                {authTab === 'login' ? 'Sign In to Add Your Business' : 'Create Free Account & List Business'}
+                {authTab === 'login' ? 'Sign In to Add Your Business' : 'Create Your Account'}
               </h2>
               <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
                 {authTab === 'login'
                   ? 'Sign in with your BizNest USA credentials to submit and track your business listings in real-time.'
-                  : 'Register your account in 30 seconds to publish your business, manage locations, and track approval status.'}
+                  : 'Register your account in 30 seconds to submit your business for review, manage locations, and track approval status. Listing is a paid submission — plans start from $1.'}
               </p>
             </div>
 
@@ -1476,7 +1694,7 @@ export default function AddBusinessClient() {
                 }`}
               >
                 <UserPlus className="w-4 h-4" />
-                <span>New User (Sign Up Free)</span>
+                <span>New User (Sign Up)</span>
               </button>
             </div>
 
@@ -1543,7 +1761,7 @@ export default function AddBusinessClient() {
                     onClick={() => { setAuthTab('signup'); setSignupError(''); }}
                     className="text-blue-600 font-bold hover:underline cursor-pointer"
                   >
-                    Create Free Account
+                    Create Your Account
                   </button>
                 </p>
               </form>
@@ -1572,7 +1790,7 @@ export default function AddBusinessClient() {
                       className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                     />
                   </div>
-                  <p className="text-[10px] text-slate-400 mt-1">Alphabetic letters only (no numbers like &quot;232&quot;).</p>
+                  <p className="text-xs text-slate-400 mt-1">Alphabetic letters only (no numbers like &quot;232&quot;).</p>
                 </div>
 
                 <div>
@@ -1589,7 +1807,7 @@ export default function AddBusinessClient() {
                       className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                     />
                   </div>
-                  <p className="text-[10px] text-slate-400 mt-1">USA format: +1 (XXX) XXX-XXXX (exactly 10 digits).</p>
+                  <p className="text-xs text-slate-400 mt-1">USA format: +1 (XXX) XXX-XXXX (exactly 10 digits).</p>
                 </div>
 
                 <div>
@@ -1651,7 +1869,7 @@ export default function AddBusinessClient() {
               </form>
             )}
 
-            <div className="pt-4 border-t border-slate-100 flex items-center justify-center gap-6 text-[11px] text-slate-500">
+            <div className="pt-4 border-t border-slate-100 flex items-center justify-center gap-6 text-xs text-slate-500">
               <span className="flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> Secure Cloud Database</span>
               <span className="flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5 text-blue-600" /> Free Real-Time Tracking</span>
             </div>
@@ -1669,7 +1887,7 @@ export default function AddBusinessClient() {
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="text-sm font-extrabold text-slate-900">{currentUser.name || 'Account'}</h3>
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold">
                       Active Account
                     </span>
                   </div>
@@ -1681,7 +1899,7 @@ export default function AddBusinessClient() {
               <div className="flex items-center gap-2 w-full md:w-auto">
                 <button
                   type="button"
-                  onClick={() => { setActiveView('form'); setSubmittedSlug(null); setActivePaymentBiz(null); }}
+                  onClick={() => { setActiveView('form'); setSubmittedSlug(null); setShowPaymentScreen(false); setActivePaymentBiz(null); }}
                   className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
                     activeView === 'form'
                       ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
@@ -1720,6 +1938,29 @@ export default function AddBusinessClient() {
               </div>
             </div>
 
+            {/* EMAIL-VERIFICATION NOTICE: submit is blocked until the email is verified */}
+            {(showVerifyNotice || currentUser.emailVerified === false) && (
+              <div className="bg-amber-50 border border-amber-200 rounded-3xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-start gap-2.5">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-extrabold text-amber-900">Verify your email to submit a listing</p>
+                    <p className="text-xs text-amber-800 leading-relaxed">
+                      We sent a verification email to <strong>{currentUser.email}</strong>. Your listing cannot be submitted until your email is verified.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleResendVerificationEmail}
+                  disabled={isResendingVerification}
+                  className="px-4 py-2.5 min-h-[44px] bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs font-extrabold rounded-xl shadow-xs transition-colors cursor-pointer shrink-0"
+                >
+                  {isResendingVerification ? 'Sending…' : 'Resend Verification Email'}
+                </button>
+              </div>
+            )}
+
             {/* TAB CONTENT: MY SUBMITTED BUSINESSES */}
             {activeView === 'my-businesses' ? (
               <div className="space-y-6">
@@ -1727,7 +1968,7 @@ export default function AddBusinessClient() {
                   <div>
                     <h2 className="text-xl font-extrabold text-slate-900">Your Submitted Listings & Status</h2>
                     <p className="text-xs text-slate-600 mt-1">
-                      Track your business submissions. Once free US listing payment is verified, your listing is approved by our team within 1–2 hours and goes live immediately.
+                      Track your business submissions. Listing is a paid submission — only listings with a verified payment are approved. Once your payment is verified and your listing is approved by our team, it goes live.
                     </p>
                   </div>
 
@@ -1742,7 +1983,7 @@ export default function AddBusinessClient() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => { setActiveView('form'); setSubmittedSlug(null); setActivePaymentBiz(null); }}
+                      onClick={() => { setActiveView('form'); setSubmittedSlug(null); setShowPaymentScreen(false); setActivePaymentBiz(null); }}
                       className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-md cursor-pointer"
                     >
                       + Add Another Business
@@ -1768,7 +2009,7 @@ export default function AddBusinessClient() {
                     </div>
                     <button
                       type="button"
-                      onClick={() => { setActiveView('form'); setSubmittedSlug(null); setActivePaymentBiz(null); }}
+                      onClick={() => { setActiveView('form'); setSubmittedSlug(null); setShowPaymentScreen(false); setActivePaymentBiz(null); }}
                       className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold rounded-xl shadow-md cursor-pointer"
                     >
                       + Add Your First Business
@@ -1777,7 +2018,7 @@ export default function AddBusinessClient() {
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {userBusinesses.map((biz) => {
-                      const isApproved = (biz.status || 'approved') === 'approved'
+                      const isApproved = biz.status === 'approved'
                       const isPending = biz.status === 'pending'
                       const isRejected = biz.status === 'rejected'
                       const hasPaymentProof = Boolean(biz.paymentScreenshot || (biz.paymentDetails && biz.paymentDetails.paymentScreenshot))
@@ -1800,24 +2041,24 @@ export default function AddBusinessClient() {
 
                               {/* STATUS BADGE */}
                               {isApproved ? (
-                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-extrabold shadow-2xs">
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-extrabold shadow-2xs">
                                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                                   <span>Approved & Live</span>
                                 </span>
                               ) : isRejected ? (
-                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-50 text-red-800 border border-red-200 text-[11px] font-extrabold">
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-50 text-red-800 border border-red-200 text-xs font-extrabold">
                                   <AlertCircle className="w-3.5 h-3.5 text-red-600" />
                                   <span>Correction Needed</span>
                                 </span>
                               ) : hasPaymentProof ? (
-                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-800 border border-blue-200 text-[11px] font-extrabold">
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-800 border border-blue-200 text-xs font-extrabold">
                                   <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
                                   <span>Proof Under Review (1–2h)</span>
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-[11px] font-extrabold animate-pulse">
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-xs font-extrabold animate-pulse">
                                   <AlertTriangle className="w-3.5 h-3.5 text-amber-700" />
-                                  <span>Awaiting Rs. 50 Fee</span>
+                                  <span>Payment Required</span>
                                 </span>
                               )}
                             </div>
@@ -1833,19 +2074,19 @@ export default function AddBusinessClient() {
                                 <div className="flex items-start justify-between gap-1">
                                   <div className="flex items-center gap-1.5 font-bold text-amber-900">
                                     <Zap className="w-4 h-4 text-amber-600 shrink-0" />
-                                    <span>Approval Pending (Rs. 50 Listing Fee)</span>
+                                    <span>Approval Pending (Payment Required)</span>
                                   </div>
                                   <button
                                     type="button"
                                     onClick={() => setIsWhyFeeModalOpen(true)}
-                                    className="text-[10px] font-bold text-amber-800 underline hover:text-amber-950 flex items-center gap-0.5 cursor-pointer"
+                                    className="text-xs font-bold text-amber-800 underline hover:text-amber-950 flex items-center gap-0.5 cursor-pointer"
                                   >
                                     <HelpCircle className="w-3 h-3" />
                                     <span>Why pay?</span>
                                   </button>
                                 </div>
-                                <p className="text-[11px] text-amber-800 leading-relaxed">
-                                  Submit your free US listing payment transfer screenshot to put your listing at the top of the admin approval queue.
+                                <p className="text-xs text-amber-800 leading-relaxed">
+                                  Submit your payment transfer screenshot to complete your paid listing and put it at the top of the admin approval queue.
                                 </p>
                                 <button
                                   type="button"
@@ -1865,13 +2106,13 @@ export default function AddBusinessClient() {
                                   <Clock className="w-4 h-4 text-blue-600 shrink-0" />
                                   <span>Payment Proof Attached (Under 1–2h Review)</span>
                                 </div>
-                                <p className="text-[11px] text-blue-800 leading-tight">
+                                <p className="text-xs text-blue-800 leading-tight">
                                   Your payment screenshot is queued for administrative approval. You can update or re-upload your receipt anytime.
                                 </p>
                                 <button
                                   type="button"
                                   onClick={() => setActivePaymentBiz(biz)}
-                                  className="w-full py-2 bg-blue-100 hover:bg-blue-200 text-blue-900 font-extrabold text-[11px] rounded-xl border border-blue-300 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                                  className="w-full py-2 bg-blue-100 hover:bg-blue-200 text-blue-900 font-extrabold text-xs rounded-xl border border-blue-300 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                                 >
                                   <Upload className="w-3.5 h-3.5 text-blue-700" />
                                   <span>Update Payment Screenshot / Re-submit</span>
@@ -1891,7 +2132,7 @@ export default function AddBusinessClient() {
                                 <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                                 <span>{biz.phone || 'Phone not set'}</span>
                               </div>
-                              <div className="flex items-center gap-1.5 text-slate-400 text-[11px]">
+                              <div className="flex items-center gap-1.5 text-slate-400 text-xs">
                                 <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                                 <span>
                                   Submitted: {biz.submittedAt ? new Date(biz.submittedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Recently'}
@@ -1960,26 +2201,25 @@ export default function AddBusinessClient() {
                     </div>
 
                     {/* PLAN SELECTION CARDS */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div className="grid grid-cols-1 gap-3.5">
                       <div
                         onClick={() => setSelectedPlan('review_1')}
-                        className={`p-4 rounded-2xl border-2 transition-all cursor-pointer ${
+                        className={`p-4 rounded-2xl border-2 transition-all cursor-pointer relative ${
                           selectedPlan === 'review_1'
-                            ? 'border-blue-600 bg-blue-50/40 shadow-xs ring-2 ring-blue-500/10'
+                            ? 'border-emerald-600 bg-emerald-50/40 shadow-xs ring-2 ring-emerald-500/10'
                             : 'border-slate-200 hover:border-slate-300'
                         }`}
                       >
                         <div className="flex justify-between items-center">
-                          <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-700">Standard</span>
-                          {selectedPlan === 'review_1' && <Check className="w-4 h-4 text-blue-600" />}
+                          <span className="text-xs font-extrabold uppercase px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">Basic — Submit Only</span>
+                          {selectedPlan === 'review_1' && <Check className="w-4 h-4 text-emerald-600" />}
                         </div>
-                        <h4 className="font-extrabold text-slate-900 mt-1.5 text-sm">$1 Business Review</h4>
-                        <p className="text-xl font-black text-slate-900 mt-0.5">$1.00</p>
-                        <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
-                          Standard queue review, contact validation, categorization check.
+                        <h4 className="font-extrabold text-slate-900 mt-1.5 text-sm">$1 Basic Plan</h4>
+                        <p className="text-xl font-black text-emerald-600 mt-0.5">$1.00</p>
+                        <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                          Dedicated page created. Submit only — no edit access, no blog posts, no photo gallery.
                         </p>
                       </div>
-
                       <div
                         onClick={() => setSelectedPlan('priority_5')}
                         className={`p-4 rounded-2xl border-2 transition-all cursor-pointer relative ${
@@ -1989,13 +2229,13 @@ export default function AddBusinessClient() {
                         }`}
                       >
                         <div className="flex justify-between items-center">
-                          <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-blue-100 text-blue-800">Priority + 5 Posts</span>
+                          <span className="text-xs font-extrabold uppercase px-2 py-0.5 rounded bg-blue-100 text-blue-800">Priority + 5 Posts</span>
                           {selectedPlan === 'priority_5' && <Check className="w-4 h-4 text-blue-600" />}
                         </div>
                         <h4 className="font-extrabold text-slate-900 mt-1.5 text-sm">$5 Business Priority</h4>
                         <p className="text-xl font-black text-blue-600 mt-0.5">$5.00</p>
-                        <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
-                          Priority review within 24h + publish up to 5 business content/blog posts.
+                        <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                          Priority review queue + publish up to 5 business content/blog posts.
                         </p>
                       </div>
                     </div>
@@ -2003,7 +2243,7 @@ export default function AddBusinessClient() {
                     {/* TRUTHFUL STATEMENT */}
                     <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-600 space-y-1">
                       <p className="font-bold text-slate-800">Truthful Platform Notice</p>
-                      <p className="text-[11px] leading-relaxed">
+                      <p className="text-xs leading-relaxed">
                         BizNest USA does not guarantee search engine rankings. Review fees cover human verification and platform publication features. Payment does not automatically approve listings.
                       </p>
                     </div>
@@ -2037,7 +2277,7 @@ export default function AddBusinessClient() {
                             />
                             <div className="min-w-0 flex-1">
                               <p className="text-xs font-bold text-slate-900 truncate">Payment Screenshot Attached</p>
-                              <p className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
+                              <p className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
                                 <CheckCircle2 className="w-3.5 h-3.5" /> Ready for verification
                               </p>
                             </div>
@@ -2056,7 +2296,7 @@ export default function AddBusinessClient() {
                             <span className="text-xs font-bold text-slate-800">
                               Click to upload transfer screenshot proof
                             </span>
-                            <span className="text-[11px] text-slate-400">PNG, JPG, JPEG or WEBP (Max 5MB)</span>
+                            <span className="text-xs text-slate-400">PNG, JPG, JPEG or WEBP (Max 5MB)</span>
                             <input
                               type="file"
                               accept="image/*"
@@ -2116,21 +2356,13 @@ export default function AddBusinessClient() {
                         <div className="flex items-center justify-between border-b border-slate-200 pb-2">
                           <span className="font-semibold text-slate-600">Plan:</span>
                           <span className="font-extrabold text-slate-900">
-                            {submittedPlan === 'authoritative_10'
-                              ? 'Authoritative'
-                              : submittedPlan === 'priority_5'
-                              ? 'Standard'
-                              : 'Basic'}
+                            {submittedPlan ? BUSINESS_PLANS[submittedPlan].name.replace(' Plan', '') : 'Standard'}
                           </span>
                         </div>
                         <div className="flex items-center justify-between border-b border-slate-200 pb-2">
                           <span className="font-semibold text-slate-600">Amount:</span>
                           <span className="font-extrabold text-blue-600">
-                            {submittedPlan === 'authoritative_10'
-                              ? '$10 USD'
-                              : submittedPlan === 'priority_5'
-                              ? '$5 USD'
-                              : '$1 USD'}
+                            {submittedPlan ? `$${BUSINESS_PLANS[submittedPlan].price} USD` : '$5 USD'}
                           </span>
                         </div>
                         <div className="flex items-center justify-between border-b border-slate-200 pb-2">
@@ -2208,8 +2440,10 @@ export default function AddBusinessClient() {
                       </Link>
                     </div>
                   </div>
+                ) : showPaymentScreen ? (
+                      <PaymentScreenPanel copiedKey={copiedKey} currentUser={currentUser} customerNote={customerNote} errors={errors} formData={formData} handleScreenshotFileChange={handleScreenshotFileChange} handleSubmit={handleSubmit} hasClickedCompletedPayment={hasClickedCompletedPayment} isSubmitting={isSubmitting} paymentScreenshotBase64={paymentScreenshotBase64} payoneerReference={payoneerReference} payoneerTxId={payoneerTxId} payoneerUrl={payoneerUrl} selectedPlan={selectedPlan} selectedPlanConfig={selectedPlanConfig} setCopiedKey={setCopiedKey} setCustomerNote={setCustomerNote} setHasClickedCompletedPayment={setHasClickedCompletedPayment} setPaymentScreenshotBase64={setPaymentScreenshotBase64} setPayoneerTxId={setPayoneerTxId} setSelectedPlan={setSelectedPlan} setShowPaymentScreen={setShowPaymentScreen} turnstileToken={turnstileToken} setTurnstileToken={setTurnstileToken} />
                 ) : (
-                  /* 3. 4-STEP WIZARD FORM */
+                  /* 4. 4-STEP WIZARD FORM */
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
                     
                     {/* LEFT FORM COLUMN (8 Cols) */}
@@ -2218,1598 +2452,36 @@ export default function AddBusinessClient() {
                       {/* STEP PROGRESS BAR */}
                       <div className="space-y-3 pb-6 border-b border-slate-100">
                         <div className="flex justify-between items-center text-xs font-bold text-slate-700">
-                          <span className="text-blue-600">Step {currentStep} of 5</span>
-                          <span>{Math.round((currentStep / 5) * 100)}% Profile Complete</span>
+                          <span className="text-blue-600">Step {currentStep} of 4</span>
+                          <span>{Math.round((currentStep / 4) * 100)}% Profile Complete</span>
                         </div>
                         <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
                           <div 
                             className="h-full bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 transition-all duration-300 rounded-full"
-                            style={{ width: `${Math.max(currentStep * 20, (currentStep / 5) * 100)}%` }}
+                            style={{ width: `${(currentStep / 4) * 100}%` }}
                           ></div>
                         </div>
 
-                        <div className="grid grid-cols-5 gap-1 text-[11px] font-semibold text-center text-slate-400 pt-1">
+                        <div className="hidden sm:grid grid-cols-4 gap-1 text-xs font-semibold text-center text-slate-400 pt-1">
                           <span className={currentStep >= 1 ? 'text-blue-600 font-bold' : ''}>1. Identity</span>
                           <span className={currentStep >= 2 ? 'text-blue-600 font-bold' : ''}>2. Locations</span>
                           <span className={currentStep >= 3 ? 'text-blue-600 font-bold' : ''}>3. Hours</span>
                           <span className={currentStep >= 4 ? 'text-blue-600 font-bold' : ''}>4. Details</span>
-                          <span className={currentStep >= 5 ? 'text-blue-600 font-bold' : ''}>5. Verify &amp; Pay</span>
                         </div>
+                        <p className="sm:hidden text-xs font-bold text-blue-600 text-center pt-1">Step {currentStep} of 4 — {['Identity', 'Locations', 'Hours', 'Details'][currentStep - 1]}</p>
                       </div>
 
                       {/* STEP 1: BUSINESS IDENTITY */}
-                      {currentStep === 1 && (
-                        <div className="space-y-6 animate-in fade-in-50">
-                          {/* Category Type Switcher Banner */}
-                          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
-                            <label className="block text-xs font-bold text-slate-700">What profile type are you creating on BizNest USA?</label>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                              <div className="p-3 bg-white border-2 border-blue-600 rounded-xl flex items-center gap-3">
-                                <div className="p-2 bg-blue-50 text-blue-600 rounded-lg shrink-0">
-                                  <Building2 className="w-4 h-4" />
-                                </div>
-                                <div>
-                                  <p className="text-xs font-extrabold text-slate-900">Business / Store</p>
-                                  <p className="text-[10px] text-slate-500">Retail shops & vendors</p>
-                                </div>
-                              </div>
-
-                              <Link
-                                href="/add-professional"
-                                className="p-3 bg-white border border-slate-200 hover:border-blue-400 rounded-xl flex items-center gap-3 transition-all hover:bg-blue-50/50 group cursor-pointer"
-                              >
-                                <div className="p-2 bg-slate-100 group-hover:bg-blue-100 text-slate-600 group-hover:text-blue-600 rounded-lg shrink-0">
-                                  <Users className="w-4 h-4" />
-                                </div>
-                                <div>
-                                  <p className="text-xs font-extrabold text-slate-900 group-hover:text-blue-600">Professional</p>
-                                  <p className="text-[10px] text-slate-500">Personal & Freelancer</p>
-                                </div>
-                              </Link>
-
-                              <Link
-                                href="/add-company"
-                                className="p-3 bg-white border border-slate-200 hover:border-blue-400 rounded-xl flex items-center gap-3 transition-all hover:bg-blue-50/50 group cursor-pointer"
-                              >
-                                <div className="p-2 bg-slate-100 group-hover:bg-blue-100 text-slate-600 group-hover:text-blue-600 rounded-lg shrink-0">
-                                  <Briefcase className="w-4 h-4" />
-                                </div>
-                                <div>
-                                  <p className="text-xs font-extrabold text-slate-900 group-hover:text-blue-600">Hiring Company / HR</p>
-                                  <p className="text-[10px] text-slate-500">Employers & Jobs</p>
-                                </div>
-                              </Link>
-                            </div>
-                          </div>
-
-                          <div>
-                            <h2 className="text-xl font-extrabold text-slate-900">Step 1: Business Identity & Category</h2>
-                            <p className="text-xs text-slate-500 mt-1">Enter your registered or commercial trade name and industry taxonomy.</p>
-                          </div>
-
-                          <div className="space-y-4">
-                            <div>
-                              <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                                Business Name *
-                              </label>
-                              <input
-                                id="field-businessName"
-                                type="text"
-                                value={formData.businessName}
-                                onChange={(e) => {
-                                  setFormData({ ...formData, businessName: e.target.value })
-                                  if (errors.businessName) {
-                                    setErrors(prev => {
-                                      const next = { ...prev }
-                                      delete next.businessName
-                                      return next
-                                    })
-                                  }
-                                }}
-                                placeholder="e.g. Apex Global Solutions / Austin Creative Tech"
-                                className={`w-full px-4 py-3 bg-slate-50/80 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
-                                  errors.businessName ? 'border-red-500 bg-red-50/30 ring-2 ring-red-400/20' : 'border-slate-200'
-                                }`}
-                              />
-                              {errors.businessName && <span className="text-[11px] font-semibold text-red-500 mt-1 block">{errors.businessName}</span>}
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                              <div>
-                                <div className="flex items-center justify-between mb-1.5">
-                                  <label className="block text-xs font-bold text-slate-700">Industry Category *</label>
-                                  {isCustomCategory && (
-                                    <span className="text-[10px] text-blue-600 font-bold bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded-md">
-                                      Custom Industry
-                                    </span>
-                                  )}
-                                </div>
-                                <select
-                                  id="field-category"
-                                  value={isCustomCategory ? 'Other' : (BUSINESS_CATEGORIES.some(c => c.name === formData.category) ? formData.category : (formData.category ? 'Other' : ''))}
-                                  onChange={(e) => handleCategorySelectChange(e.target.value)}
-                                  className={`w-full px-4 py-3 bg-slate-50/80 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer ${
-                                    errors.category ? 'border-red-500 bg-red-50/30 ring-2 ring-red-400/20' : 'border-slate-200'
-                                  }`}
-                                >
-                                  <option value="">-- Select Business Category --</option>
-                                  {BUSINESS_CATEGORIES.map(cat => (
-                                    <option key={cat.id} value={cat.name}>{cat.name}</option>
-                                  ))}
-                                  <option value="Other">Other Category (Not Listed)</option>
-                                </select>
-                                {errors.category && <span className="text-[11px] font-semibold text-red-500 mt-1 block">{errors.category}</span>}
-
-                                {isCustomCategory && (
-                                  <div className="mt-2.5 space-y-1">
-                                    <label className="block text-[11px] font-bold text-blue-900">
-                                      Specify Your Custom Category / Industry *
-                                    </label>
-                                    <input
-                                      id="field-customCategory"
-                                      type="text"
-                                      value={customCategoryText}
-                                      onChange={(e) => handleCustomCategoryTextChange(e.target.value)}
-                                      placeholder="e.g. Solar Energy, Biotechnology, Aerospace..."
-                                      className="w-full px-4 py-2.5 bg-white border border-blue-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 shadow-xs"
-                                    />
-                                  </div>
-                                )}
-                              </div>
-
-                              <div>
-                                <div className="flex items-center justify-between mb-1.5">
-                                  <label className="block text-xs font-bold text-slate-700">Subcategory Specialization</label>
-                                  {isCustomSubcategory && (
-                                    <span className="text-[10px] text-indigo-600 font-bold bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded-md">
-                                      Custom Specialty
-                                    </span>
-                                  )}
-                                </div>
-
-                                {isCustomCategory ? (
-                                  <div>
-                                    <input
-                                      type="text"
-                                      value={formData.subcategory}
-                                      onChange={(e) => setFormData({ ...formData, subcategory: e.target.value })}
-                                      placeholder="e.g. Solar Panel Fabrication, Research Lab..."
-                                      className="w-full px-4 py-3 bg-slate-50/80 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                                    />
-                                    <span className="text-[10px] text-slate-500 mt-1 block">
-                                      Enter your specific service focus or primary commercial offering.
-                                    </span>
-                                  </div>
-                                ) : (
-                                  <div>
-                                    <select
-                                      value={isCustomSubcategory ? 'Other' : (availableSubcategories.includes(formData.subcategory) ? formData.subcategory : (formData.subcategory ? 'Other' : ''))}
-                                      onChange={(e) => handleSubcategorySelectChange(e.target.value)}
-                                      disabled={!formData.category}
-                                      className={`w-full px-4 py-3 bg-slate-50/80 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed border-slate-200`}
-                                    >
-                                      <option value="">
-                                        {formData.category ? `-- Select Subcategory Specialization --` : `-- Select Primary Category First --`}
-                                      </option>
-                                      {availableSubcategories.map(sub => (
-                                        <option key={sub} value={sub}>{sub}</option>
-                                      ))}
-                                      {formData.category && (
-                                        <option value="Other">Other Subcategory / Specialization</option>
-                                      )}
-                                    </select>
-
-                                    {isCustomSubcategory && (
-                                      <div className="mt-2.5 space-y-1">
-                                        <label className="block text-[11px] font-bold text-indigo-900">
-                                          Specify Your Subcategory Specialization
-                                        </label>
-                                        <input
-                                          type="text"
-                                          value={customSubcategoryText}
-                                          onChange={(e) => handleCustomSubcategoryTextChange(e.target.value)}
-                                          placeholder="e.g. Tankless Water Heaters, EV Charger Install..."
-                                          className="w-full px-4 py-2.5 bg-white border border-indigo-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-xs"
-                                        />
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* BUSINESS LOGO UPLOAD SECTION */}
-                            <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-50 to-blue-50/40 rounded-2xl border border-slate-200/90 space-y-3">
-                              <div className="flex justify-between items-start">
-                                <div>
-                                  <label className="block text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                                    <ImageIcon className="w-4 h-4 text-blue-600" />
-                                    <span>Business Logo / Brand Icon (Optional)</span>
-                                  </label>
-                                  <p className="text-[11px] text-slate-500 mt-0.5">
-                                    Upload your official logo or brand mark to make your listing stand out on BizNest USA.
-                                  </p>
-                                </div>
-                                {logoPreview && (
-                                  <button
-                                    type="button"
-                                    onClick={handleRemoveLogo}
-                                    className="text-[11px] text-red-600 hover:text-red-700 font-bold flex items-center gap-1 cursor-pointer"
-                                  >
-                                    <X className="w-3.5 h-3.5" />
-                                    <span>Remove</span>
-                                  </button>
-                                )}
-                              </div>
-
-                              <div className="flex flex-col sm:flex-row items-center gap-4">
-                                {/* Preview Avatar Box */}
-                                <div className="relative w-16 h-16 rounded-2xl bg-white border-2 border-dashed border-blue-300 flex items-center justify-center overflow-hidden shrink-0 shadow-xs group">
-                                  {logoPreview ? (
-                                    <img src={logoPreview} alt="Logo Preview" className="w-full h-full object-cover" />
-                                  ) : (
-                                    <div className="flex flex-col items-center justify-center text-slate-400">
-                                      <Building2 className="w-6 h-6 text-slate-400" />
-                                      <span className="text-[9px] font-bold mt-0.5 text-slate-400">No Logo</span>
-                                    </div>
-                                  )}
-                                </div>
-
-                                {/* File Input & URL Input */}
-                                <div className="flex-1 w-full space-y-2">
-                                  <div className="flex items-center gap-2">
-                                    <label className="px-4 py-2.5 bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 font-bold text-xs rounded-xl cursor-pointer transition shadow-2xs flex items-center gap-2 hover:border-blue-300">
-                                      <Upload className="w-3.5 h-3.5 text-blue-600" />
-                                      <span>{logoPreview ? 'Change Logo Image' : 'Choose Logo File (PNG, JPG, WebP)'}</span>
-                                      <input
-                                        type="file"
-                                        accept="image/png,image/jpeg,image/jpg,image/webp"
-                                        onChange={handleLogoFileChange}
-                                        className="hidden"
-                                      />
-                                    </label>
-                                  </div>
-
-                                  <div className="relative">
-                                    <input
-                                      type="url"
-                                      value={formData.logo || ''}
-                                      onChange={(e) => handleLogoUrlChange(e.target.value)}
-                                      placeholder="Or paste direct image URL / Google Drive link"
-                                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-slate-700"
-                                    />
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
+                      {currentStep === 1 && <StepIdentityPanel availableSubcategories={availableSubcategories} customCategoryText={customCategoryText} customSubcategoryText={customSubcategoryText} errors={errors} formData={formData} handleCategorySelectChange={handleCategorySelectChange} handleCustomCategoryTextChange={handleCustomCategoryTextChange} handleCustomSubcategoryTextChange={handleCustomSubcategoryTextChange} handleGalleryFileChange={handleGalleryFileChange} handleLogoFileChange={handleLogoFileChange} handleLogoUrlChange={handleLogoUrlChange} handleRemoveGalleryPhoto={handleRemoveGalleryPhoto} handleRemoveLogo={handleRemoveLogo} handleSubcategorySelectChange={handleSubcategorySelectChange} isCustomCategory={isCustomCategory} isCustomSubcategory={isCustomSubcategory} logoPreview={logoPreview} setErrors={setErrors} setFormData={setFormData} />}
 
                       {/* STEP 2: LOCATION & CONTACT */}
-                      {currentStep === 2 && (
-                        <div className="space-y-6 animate-in fade-in-50">
-                          <div>
-                            <h2 className="text-xl font-extrabold text-slate-900">Step 2: Business Locations & Contact Channels</h2>
-                            <p className="text-xs text-slate-500 mt-1">
-                              Add all physical branches, campuses, or store locations across cities. The first location is set as your Primary location.
-                            </p>
-                          </div>
-
-                          {/* REPEATABLE LOCATIONS SECTION */}
-                          <div className="space-y-6">
-                            <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-                              <span className="text-xs font-extrabold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                                <MapPin className="w-4 h-4 text-blue-600" />
-                                Business Locations ({formData.locations.length} {formData.locations.length === 1 ? 'Location' : 'Locations'})
-                              </span>
-                              <span className="text-[11px] font-medium text-slate-500">
-                                Press <strong>Enter</strong> in address to add another location
-                              </span>
-                            </div>
-
-                            {formData.locations.map((loc, index) => {
-                              const stateCode = loc.state && geoStates ? stateCodeForName(loc.state, geoStates) : null
-                              const geoList = stateCode ? geoCitiesByCode[stateCode] : undefined
-                              const geoLoading = stateCode ? !!geoLoadingCodes[stateCode] : false
-                              const fallbackCities = loc.state ? (STATE_CITIES[loc.state] || []) : []
-                              const usingGeoCities = !!geoList && geoList.length > 0
-                              const availableCities = usingGeoCities ? geoList.map(c => c.name) : fallbackCities
-                              const filteredCities = usingGeoCities
-                                ? searchCities(geoList, loc.citySearchQuery || '').map(c => c.name)
-                                : availableCities.filter(c =>
-                                    c.toLowerCase().includes((loc.citySearchQuery || '').toLowerCase().trim())
-                                  )
-
-                              return (
-                                <div 
-                                  key={index}
-                                  className={`p-5 rounded-2xl border transition-all space-y-4 ${
-                                    loc.isPrimary 
-                                      ? 'bg-blue-50/40 border-blue-200 shadow-xs' 
-                                      : 'bg-slate-50/60 border-slate-200'
-                                  }`}
-                                >
-                                  <div className="flex flex-wrap justify-between items-center gap-2 pb-2 border-b border-slate-200/60">
-                                    <div className="flex items-center gap-2">
-                                      <span className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center">
-                                        {index + 1}
-                                      </span>
-                                      <h4 className="text-sm font-extrabold text-slate-900">
-                                        Location {index + 1}
-                                      </h4>
-                                      {loc.isPrimary ? (
-                                        <span className="px-2.5 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-bold shadow-xs">
-                                          Primary Location
-                                        </span>
-                                      ) : (
-                                        <button
-                                          type="button"
-                                          onClick={() => handleSetPrimaryLocation(index)}
-                                          className="text-[11px] text-blue-600 hover:text-blue-800 font-bold underline cursor-pointer"
-                                        >
-                                          Set as Primary
-                                        </button>
-                                      )}
-                                    </div>
-
-                                    {formData.locations.length > 1 && (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleRemoveLocation(index)}
-                                        className="text-xs font-semibold text-red-500 hover:text-red-700 transition-colors cursor-pointer"
-                                      >
-                                        Remove Location
-                                      </button>
-                                    )}
-                                  </div>
-
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    <div>
-                                      <label className="block text-xs font-bold text-slate-700 mb-1.5">State *</label>
-                                      <select
-                                        id={`field-location-${index}-state`}
-                                        value={loc.state}
-                                        onChange={(e) => {
-                                          ensureStateCities(e.target.value)
-                                          setFormData(prev => ({
-                                            ...prev,
-                                            locations: prev.locations.map((item, i) => i === index ? {
-                                              ...item,
-                                              state: e.target.value,
-                                              city: '',
-                                              citySearchQuery: '',
-                                              isCityDropdownOpen: false
-                                            } : item)
-                                          }))
-                                          if (errors[`location_${index}_state`]) {
-                                            setErrors(prev => {
-                                              const next = { ...prev }
-                                              delete next[`location_${index}_state`]
-                                              return next
-                                            })
-                                          }
-                                        }}
-                                        className={`w-full px-4 py-3 bg-white border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
-                                          errors[`location_${index}_state`] ? 'border-red-500 bg-red-50/30 ring-2 ring-red-400/20' : 'border-slate-200'
-                                        }`}
-                                      >
-                                        <option value="">Search or select a state</option>
-                                        {(geoStates ? geoStates.map(s => s.name) : US_STATES).map((state) => <option key={state} value={state}>{state}</option>)}
-                                      </select>
-                                      {errors[`location_${index}_state`] && (
-                                        <span className="text-[11px] font-semibold text-red-500 mt-1 block">
-                                          {errors[`location_${index}_state`]}
-                                        </span>
-                                      )}
-                                    </div>
-                                    {/* City Selector for Location Block */}
-                                    <div className="relative">
-                                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                                        City *
-                                      </label>
-                                      <div className="relative">
-                                        <button
-                                          type="button"
-                                          id={`field-location-${index}-city`}
-                                          onClick={() => toggleLocationCityDropdown(index)}
-                                          disabled={!loc.state}
-                                          aria-disabled={!loc.state}
-                                          className={`w-full px-4 py-3 bg-white border rounded-2xl text-sm flex items-center justify-between text-left focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition disabled:cursor-not-allowed disabled:bg-slate-50 ${
-                                            errors[`location_${index}_city`] ? 'border-red-500 bg-red-50/30 ring-2 ring-red-400/20' : 'border-slate-200 hover:border-slate-300'
-                                          }`}
-                                        >
-                                          <span className={loc.city ? 'font-semibold text-slate-900' : 'text-slate-400'}>
-                                            {loc.isCustomCity
-                                              ? (loc.customCityName ? `${loc.customCityName} (Custom)` : 'Other City (Type below)')
-                                              : (loc.city ? loc.city : loc.state ? `-- Select City (${availableCities.length} Cities) --` : '-- Select a state first --')}
-                                          </span>
-                                          <ChevronDown className={`w-4 h-4 text-slate-400 flex-shrink-0 ml-2 transition-transform duration-200 ${loc.isCityDropdownOpen ? 'rotate-180' : ''}`} />
-                                        </button>
-
-                                        {loc.isCityDropdownOpen && (
-                                          <div className="absolute z-50 mt-2 w-full bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden animate-in fade-in-50 duration-150">
-                                            {geoLoading && (
-                                              <div className="px-3 py-1.5 text-[11px] text-slate-400 bg-slate-50/80 border-b border-slate-100">Loading cities…</div>
-                                            )}
-                                            <div className="p-2.5 border-b border-slate-100 bg-slate-50/80 sticky top-0">
-                                              <input
-                                                type="text"
-                                                value={loc.citySearchQuery || ''}
-                                                onChange={(e) => handleLocationCitySearch(index, e.target.value)}
-                                                placeholder="Search city..."
-                                                className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                                                autoFocus
-                                              />
-                                            </div>
-
-                                            <div className="max-h-56 overflow-y-auto divide-y divide-slate-50 p-1">
-                                              {filteredCities.length > 0 ? (
-                                                filteredCities.map((city) => (
-                                                  <button
-                                                    key={city}
-                                                    type="button"
-                                                    onClick={() => handleLocationCitySelect(index, city)}
-                                                    className={`w-full px-3 py-2 text-left text-xs rounded-xl flex items-center justify-between transition ${
-                                                      loc.city === city ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-slate-50 text-slate-700'
-                                                    }`}
-                                                  >
-                                                    <span>{city}</span>
-                                                    {loc.city === city && <Check className="w-3.5 h-3.5 text-blue-600" />}
-                                                  </button>
-                                                ))
-                                              ) : (
-                                                <div className="p-3 text-center text-xs text-slate-500 space-y-2">
-                                                  <p>City not in standard list.</p>
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                      handleCustomCityNameChange(index, loc.citySearchQuery || '')
-                                                      handleLocationOtherCitySelect(index)
-                                                    }}
-                                                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
-                                                  >
-                                                    <Plus className="w-3.5 h-3.5" />
-                                                    <span>Use &ldquo;{loc.citySearchQuery || 'Custom City'}&rdquo;</span>
-                                                  </button>
-                                                </div>
-                                              )}
-                                            </div>
-
-                                            {/* Sticky Other City option */}
-                                            <div className="p-1 border-t border-slate-100 bg-slate-50/90 sticky bottom-0">
-                                              <button
-                                                type="button"
-                                                onClick={() => handleLocationOtherCitySelect(index)}
-                                                className={`w-full px-3 py-2 text-left text-xs rounded-xl flex items-center justify-between transition font-bold cursor-pointer ${
-                                                  loc.isCustomCity ? 'bg-blue-100 text-blue-700' : 'text-blue-600 hover:bg-blue-50'
-                                                }`}
-                                              >
-                                                <span className="flex items-center gap-1.5">
-                                                  <Plus className="w-3.5 h-3.5" />
-                                                  <span>Other City (Not Listed)</span>
-                                                </span>
-                                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-semibold">
-                                                  Specify custom
-                                                </span>
-                                              </button>
-                                            </div>
-                                          </div>
-                                        )}
-                                      </div>
-
-                                      {/* Custom City Input when Other City is selected */}
-                                      {loc.isCustomCity && (
-                                        <div className="mt-2.5 p-3 rounded-2xl bg-blue-50/70 border border-blue-200 animate-in fade-in-50 duration-200">
-                                          <div className="flex items-center justify-between mb-1">
-                                            <label className="block text-[11px] font-bold text-blue-900">
-                                              Specify City Name *
-                                            </label>
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                setFormData(prev => {
-                                                  const updated = [...prev.locations]
-                                                  updated[index] = { ...updated[index], isCustomCity: false, customCityName: '', city: '' }
-                                                  return { ...prev, locations: updated }
-                                                })
-                                              }}
-                                              className="text-[10px] text-blue-600 hover:underline font-semibold cursor-pointer"
-                                            >
-                                              Back to list
-                                            </button>
-                                          </div>
-                                          <input
-                                            type="text"
-                                            id={`field-location-${index}-customCity`}
-                                            value={loc.customCityName || ''}
-                                            onChange={(e) => handleCustomCityNameChange(index, e.target.value)}
-                                            placeholder="Enter your city name (e.g. Arlington, Plano, Scottsdale)..."
-                                            className={`w-full px-3.5 py-2.5 bg-white border rounded-xl text-xs sm:text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
-                                              errors[`location_${index}_city`] ? 'border-red-500 bg-red-50/30 ring-2 ring-red-400/20' : 'border-blue-300'
-                                            }`}
-                                            autoFocus
-                                          />
-                                        </div>
-                                      )}
-                                      {errors[`location_${index}_city`] && (
-                                        <span className="text-[11px] font-semibold text-red-500 mt-1 block">
-                                          {errors[`location_${index}_city`]}
-                                        </span>
-                                      )}
-                                    </div>
-
-                                    {/* Address Field */}
-                                    <div>
-                                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                                        Physical Address / Area *
-                                      </label>
-                                      <input
-                                        type="text"
-                                        id={`field-location-${index}-address`}
-                                        value={loc.address}
-                                        onChange={(e) => handleLocationAddressChange(index, e.target.value)}
-                                        onKeyDown={(e) => handleAddressKeyDown(e, index)}
-                                        placeholder="e.g. Suite 400, 1200 Broadway"
-                                        className={`w-full px-4 py-3 bg-white border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
-                                          errors[`location_${index}_address`] ? 'border-red-500 bg-red-50/30 ring-2 ring-red-400/20' : 'border-slate-200'
-                                        }`}
-                                      />
-                                      {errors[`location_${index}_address`] && (
-                                        <span className="text-[11px] font-semibold text-red-500 mt-1 block">
-                                          {errors[`location_${index}_address`]}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              )
-                            })}
-
-                            <button
-                              type="button"
-                              onClick={handleAddLocation}
-                              className="w-full py-3 bg-blue-50/70 hover:bg-blue-100/70 text-blue-700 border-2 border-dashed border-blue-200 rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                            >
-                              <MapPin className="w-4 h-4 text-blue-600" />
-                              <span>+ Add Another Branch / City Location</span>
-                            </button>
-                          </div>
-
-                          {/* Contact Info Channels */}
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-slate-100">
-                            <div>
-                              <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                                Phone Number (Calls - USA Standard) *
-                              </label>
-                              <div className="relative">
-                                <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                <input
-                                  id="field-phone"
-                                  type="tel"
-                                  maxLength={17}
-                                  value={formData.phone}
-                                  onChange={(e) => {
-                                    setFormData({ ...formData, phone: formatUsPhone(e.target.value) })
-                                    if (errors.phone) {
-                                      setErrors(prev => {
-                                        const next = { ...prev }
-                                        delete next.phone
-                                        return next
-                                      })
-                                    }
-                                  }}
-                                  placeholder="+1 (555) 123-4567"
-                                  className={`w-full pl-10 pr-4 py-3 bg-slate-50/80 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
-                                    errors.phone ? 'border-red-500 bg-red-50/30 ring-2 ring-red-400/20' : 'border-slate-200'
-                                  }`}
-                                />
-                              </div>
-                              {errors.phone ? (
-                                <span className="text-[11px] font-semibold text-red-500 mt-1 block">{errors.phone}</span>
-                              ) : (
-                                <span className="text-[10px] text-slate-400 mt-1 block">USA format: +1 (XXX) XXX-XXXX (10 digits)</span>
-                              )}
-                            </div>
-
-                            <div>
-                              <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                                WhatsApp Number (Inquiries - USA Standard)
-                              </label>
-                              <div className="relative">
-                                <MessageCircle className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                <input
-                                  id="field-whatsapp"
-                                  type="tel"
-                                  maxLength={17}
-                                  value={formData.whatsapp}
-                                  onChange={(e) => {
-                                    setFormData({ ...formData, whatsapp: formatUsPhone(e.target.value) })
-                                    if (errors.whatsapp) {
-                                      setErrors(prev => {
-                                        const next = { ...prev }
-                                        delete next.whatsapp
-                                        return next
-                                      })
-                                    }
-                                  }}
-                                  placeholder="+1 (555) 123-4567"
-                                  className={`w-full pl-10 pr-4 py-3 bg-slate-50/80 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
-                                    errors.whatsapp ? 'border-red-500 bg-red-50/30 ring-2 ring-red-400/20' : 'border-slate-200'
-                                  }`}
-                                />
-                              </div>
-                              {errors.whatsapp ? (
-                                <span className="text-[11px] font-semibold text-red-500 mt-1 block">{errors.whatsapp}</span>
-                              ) : (
-                                <span className="text-[10px] text-slate-400 mt-1 block">USA format: +1 (XXX) XXX-XXXX (10 digits)</span>
-                              )}
-                            </div>
-
-                            <div>
-                              <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                                Business Email {!currentUser && <span className="text-red-500">*</span>}
-                              </label>
-                              <div className="relative">
-                                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                <input
-                                  id="field-email"
-                                  type="email"
-                                  value={formData.email}
-                                  onChange={(e) => {
-                                    setFormData({ ...formData, email: e.target.value })
-                                    if (errors.email) {
-                                      setErrors(prev => {
-                                        const next = { ...prev }
-                                        delete next.email
-                                        return next
-                                      })
-                                    }
-                                  }}
-                                  placeholder="info@yourcompany.com"
-                                  className={`w-full pl-10 pr-4 py-3 bg-slate-50/80 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
-                                    errors.email ? 'border-red-500 bg-red-50/30 ring-2 ring-red-400/20' : 'border-slate-200'
-                                  }`}
-                                />
-                              </div>
-                              {errors.email ? (
-                                <span className="text-[11px] font-semibold text-red-500 mt-1 block">{errors.email}</span>
-                              ) : (
-                                !currentUser && (
-                                  <span className="text-[10px] text-slate-400 mt-1 block">Required to create your dashboard login & receive verification confirmation.</span>
-                                )
-                              )}
-                            </div>
-
-                            <div>
-                              <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                                Contact Person / Representative Name
-                              </label>
-                              <div className="relative">
-                                <Users className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                <input
-                                  id="field-ownerName"
-                                  type="text"
-                                  value={formData.ownerName}
-                                  onChange={(e) => {
-                                    const cleaned = filterPersonNameInput(e.target.value)
-                                    setFormData({ ...formData, ownerName: cleaned })
-                                    if (errors.ownerName) {
-                                      setErrors(prev => {
-                                        const next = { ...prev }
-                                        delete next.ownerName
-                                        return next
-                                      })
-                                    }
-                                  }}
-                                  placeholder="e.g. John Miller (Letters only)"
-                                  className={`w-full pl-10 pr-4 py-3 bg-slate-50/80 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
-                                    errors.ownerName ? 'border-red-500 bg-red-50/30 ring-2 ring-red-400/20' : 'border-slate-200'
-                                  }`}
-                                />
-                              </div>
-                              {errors.ownerName ? (
-                                <span className="text-[11px] font-semibold text-red-500 mt-1 block">{errors.ownerName}</span>
-                              ) : (
-                                <span className="text-[10px] text-slate-400 mt-1 block">Authorized representative or owner name (letters only).</span>
-                              )}
-                            </div>
-
-                            <div className="sm:col-span-2">
-                              <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                                Website (Optional)
-                              </label>
-                              <div className="relative">
-                                <Globe className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                <input
-                                  id="field-website"
-                                  type="url"
-                                  value={formData.website}
-                                  onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-                                  placeholder="https://yourcompany.com"
-                                  className="w-full pl-10 pr-4 py-3 bg-slate-50/80 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                                />
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Account Password Setup for Guests */}
-                          {!currentUser && (
-                            <div className={`p-5 bg-gradient-to-r from-blue-50/90 to-indigo-50/70 rounded-2xl border transition-all space-y-3 ${
-                              errors.accountPassword ? 'border-red-400 bg-red-50/40 ring-2 ring-red-400/20' : 'border-blue-200'
-                            }`}>
-                              <div className="flex items-center gap-2 text-blue-900">
-                                <Lock className="w-4 h-4 text-blue-600" />
-                                <h4 className="font-extrabold text-xs">Create Dashboard Password (Required) *</h4>
-                              </div>
-                              <p className="text-[11px] text-slate-600">
-                                Set a secure password for your email (<strong>{formData.email || 'your email'}</strong>) so you can log into your Business Dashboard anytime to check approval status, upload receipts, and manage listings.
-                              </p>
-                              <div>
-                                <label className="block text-xs font-bold text-slate-700 mb-1">Account Password *</label>
-                                <div className="relative">
-                                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                  <input
-                                    id="field-accountPassword"
-                                    type={showAccountPassword ? 'text' : 'password'}
-                                    value={accountPassword}
-                                    onChange={(e) => {
-                                      setAccountPassword(e.target.value)
-                                      if (errors.accountPassword) {
-                                        setErrors(prev => {
-                                          const next = { ...prev }
-                                          delete next.accountPassword
-                                          return next
-                                        })
-                                      }
-                                    }}
-                                    placeholder="At least 6 characters"
-                                    className={`w-full pl-10 pr-10 py-2.5 bg-white border rounded-xl text-xs focus:ring-2 focus:ring-blue-500 ${
-                                      errors.accountPassword ? 'border-red-500 bg-red-50/30 ring-2 ring-red-400/20' : 'border-slate-200'
-                                    }`}
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => setShowAccountPassword(!showAccountPassword)}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-1"
-                                  >
-                                    {showAccountPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                  </button>
-                                </div>
-                                {errors.accountPassword && (
-                                  <span className="text-[11px] font-semibold text-red-500 mt-1 block">
-                                    {errors.accountPassword}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
+                      {currentStep === 2 && <StepLocationsPanel ensureStateCities={ensureStateCities} errors={errors} formData={formData} geoCitiesByCode={geoCitiesByCode} geoLoadingCodes={geoLoadingCodes} geoStates={geoStates} handleAddLocation={handleAddLocation} handleAddressKeyDown={handleAddressKeyDown} handleCustomCityNameChange={handleCustomCityNameChange} handleLocationAddressChange={handleLocationAddressChange} handleLocationCitySearch={handleLocationCitySearch} handleLocationCitySelect={handleLocationCitySelect} handleLocationOtherCitySelect={handleLocationOtherCitySelect} handleLocationZipChange={handleLocationZipChange} handleRemoveLocation={handleRemoveLocation} handleSetPrimaryLocation={handleSetPrimaryLocation} setErrors={setErrors} setFormData={setFormData} toggleLocationCityDropdown={toggleLocationCityDropdown} />}
 
                       {/* STEP 3: OPERATING HOURS & AVAILABILITY */}
-                      {currentStep === 3 && (
-                        <div className="space-y-6 animate-in fade-in-50">
-                          <div>
-                            <span className="text-xs font-extrabold uppercase tracking-wider text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-200">
-                              Step 3: Operating Hours
-                            </span>
-                            <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 mt-2">
-                              Operating Hours &amp; Customer Availability
-                            </h2>
-                            <p className="text-xs text-slate-500 mt-1">
-                              Accurate business hours build customer confidence and help local buyers call or visit at the right time.
-                            </p>
-                          </div>
-
-                          {/* QUICK PRESETS */}
-                          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
-                            <label className="block text-xs font-bold text-slate-700">Quick Hours Presets:</label>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                              <button
-                                type="button"
-                                onClick={() => applyHoursPreset('standard')}
-                                className="px-3 py-2 bg-white hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 border border-slate-200 rounded-xl text-[11px] font-bold text-slate-700 transition cursor-pointer text-center"
-                              >
-                                Standard (Mon-Fri 9-5)
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => applyHoursPreset('retail')}
-                                className="px-3 py-2 bg-white hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 border border-slate-200 rounded-xl text-[11px] font-bold text-slate-700 transition cursor-pointer text-center"
-                              >
-                                Retail (7 Days 8-8)
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => applyHoursPreset('mon_sat')}
-                                className="px-3 py-2 bg-white hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 border border-slate-200 rounded-xl text-[11px] font-bold text-slate-700 transition cursor-pointer text-center"
-                              >
-                                Mon-Sat (9-6)
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => applyHoursPreset('24_7')}
-                                className="px-3 py-2 bg-white hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 border border-slate-200 rounded-xl text-[11px] font-bold text-slate-700 transition cursor-pointer text-center"
-                              >
-                                Open 24/7 Service
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* 7 DAYS SCHEDULE TABLE */}
-                          <div className="border border-slate-200 rounded-2xl overflow-hidden divide-y divide-slate-100 bg-white shadow-2xs">
-                            {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => {
-                              const sched = operatingHoursState[day] || { isOpen: true, openTime: '09:00 AM', closeTime: '05:00 PM', is24Hours: false }
-                              const TIME_OPTIONS = [
-                                '12:00 AM', '01:00 AM', '02:00 AM', '03:00 AM', '04:00 AM', '05:00 AM',
-                                '06:00 AM', '07:00 AM', '08:00 AM', '08:30 AM', '09:00 AM', '09:30 AM',
-                                '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM', '12:00 PM', '12:30 PM',
-                                '01:00 PM', '01:30 PM', '02:00 PM', '02:30 PM', '03:00 PM', '03:30 PM',
-                                '04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM', '06:00 PM', '06:30 PM',
-                                '07:00 PM', '07:30 PM', '08:00 PM', '08:30 PM', '09:00 PM', '10:00 PM', '11:00 PM', '11:59 PM'
-                              ]
-
-                              return (
-                                <div key={day} className={`p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition ${sched.isOpen ? 'bg-white' : 'bg-slate-50/70'}`}>
-                                  <div className="flex items-center gap-3 sm:w-36">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setOperatingHoursState(prev => ({
-                                          ...prev,
-                                          [day]: { ...sched, isOpen: !sched.isOpen }
-                                        }))
-                                      }}
-                                      className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold uppercase transition cursor-pointer ${
-                                        sched.isOpen ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
-                                      }`}
-                                    >
-                                      {sched.isOpen ? 'Open' : 'Closed'}
-                                    </button>
-                                    <span className={`text-xs font-bold ${sched.isOpen ? 'text-slate-900' : 'text-slate-400'}`}>
-                                      {day}
-                                    </span>
-                                  </div>
-
-                                  {sched.isOpen ? (
-                                    <div className="flex flex-wrap items-center gap-2.5 flex-1 justify-start sm:justify-end">
-                                      <label className="flex items-center gap-1.5 text-[11px] text-slate-600 font-semibold cursor-pointer mr-2">
-                                        <input
-                                          type="checkbox"
-                                          checked={sched.is24Hours}
-                                          onChange={(e) => {
-                                            setOperatingHoursState(prev => ({
-                                              ...prev,
-                                              [day]: { ...sched, is24Hours: e.target.checked }
-                                            }))
-                                          }}
-                                          className="w-3.5 h-3.5 text-blue-600 rounded"
-                                        />
-                                        <span>24 Hours</span>
-                                      </label>
-
-                                      {!sched.is24Hours && (
-                                        <div className="flex items-center gap-2">
-                                          <select
-                                            value={sched.openTime}
-                                            onChange={(e) => {
-                                              setOperatingHoursState(prev => ({
-                                                ...prev,
-                                                [day]: { ...sched, openTime: e.target.value }
-                                              }))
-                                            }}
-                                            className="px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-medium focus:ring-1 focus:ring-blue-500 cursor-pointer"
-                                          >
-                                            {TIME_OPTIONS.map(t => (
-                                              <option key={t} value={t}>{t}</option>
-                                            ))}
-                                          </select>
-                                          <span className="text-xs text-slate-400 font-semibold">to</span>
-                                          <select
-                                            value={sched.closeTime}
-                                            onChange={(e) => {
-                                              setOperatingHoursState(prev => ({
-                                                ...prev,
-                                                [day]: { ...sched, closeTime: e.target.value }
-                                              }))
-                                            }}
-                                            className="px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-medium focus:ring-1 focus:ring-blue-500 cursor-pointer"
-                                          >
-                                            {TIME_OPTIONS.map(t => (
-                                              <option key={t} value={t}>{t}</option>
-                                            ))}
-                                          </select>
-                                        </div>
-                                      )}
-
-                                      {sched.is24Hours && (
-                                        <span className="text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
-                                          Open 24 Hours
-                                        </span>
-                                      )}
-                                    </div>
-                                  ) : (
-                                    <div className="text-xs text-slate-400 font-medium sm:text-right">
-                                      Closed All Day
-                                    </div>
-                                  )}
-                                </div>
-                              )
-                            })}
-                          </div>
-
-                          {/* BRAND AUTHORITY & GOOGLE RANK BOOSTER (GBP & SOCIAL PROFILES) */}
-                          <div className="pt-4 border-t border-slate-200/80 space-y-4">
-                            <div className="p-4 bg-gradient-to-r from-blue-50/80 to-indigo-50/80 rounded-2xl border border-blue-200/70 space-y-1">
-                              <div className="flex items-center gap-2">
-                                <Sparkles className="w-4 h-4 text-blue-600 shrink-0" />
-                                <h3 className="font-extrabold text-slate-900 text-xs sm:text-sm">
-                                  Brand Authority &amp; Google Rank Booster
-                                </h3>
-                              </div>
-                              <p className="text-[11px] text-slate-600 leading-relaxed">
-                                Connect your verified Google Business Profile, Facebook, Instagram, and LinkedIn. Linking authentic corporate profiles establishes direct brand authority, builds trust with visitors, and accelerates ranking on Google local search.
-                              </p>
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                              <div>
-                                <label className="block text-xs font-bold text-slate-700 mb-1">
-                                  Google Business Profile (GBP / Maps URL)
-                                </label>
-                                <input
-                                  type="url"
-                                  placeholder="https://maps.google.com/?cid=... or https://g.page/..."
-                                  value={formData.googleBusinessProfile}
-                                  onChange={(e) => setFormData({ ...formData, googleBusinessProfile: e.target.value })}
-                                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                                />
-                                <p className="text-[10px] text-slate-400 mt-1">Strengthens local map citations and Google search visibility</p>
-                              </div>
-
-                              <div>
-                                <label className="block text-xs font-bold text-slate-700 mb-1">
-                                  Facebook Page / Profile URL
-                                </label>
-                                <input
-                                  type="url"
-                                  placeholder="https://facebook.com/yourbusiness"
-                                  value={formData.facebookUrl}
-                                  onChange={(e) => setFormData({ ...formData, facebookUrl: e.target.value })}
-                                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                                />
-                                <p className="text-[10px] text-slate-400 mt-1">Official Facebook company page or business handle</p>
-                              </div>
-
-                              <div>
-                                <label className="block text-xs font-bold text-slate-700 mb-1">
-                                  Instagram Profile URL
-                                </label>
-                                <input
-                                  type="url"
-                                  placeholder="https://instagram.com/yourbusiness"
-                                  value={formData.instagramUrl}
-                                  onChange={(e) => setFormData({ ...formData, instagramUrl: e.target.value })}
-                                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                                />
-                                <p className="text-[10px] text-slate-400 mt-1">Visual branding portfolio and customer engagement</p>
-                              </div>
-
-                              <div>
-                                <label className="block text-xs font-bold text-slate-700 mb-1">
-                                  LinkedIn Profile / Company Page
-                                </label>
-                                <input
-                                  type="url"
-                                  placeholder="https://linkedin.com/company/yourbusiness"
-                                  value={formData.linkedinUrl}
-                                  onChange={(e) => setFormData({ ...formData, linkedinUrl: e.target.value })}
-                                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                                />
-                                <p className="text-[10px] text-slate-400 mt-1">B2B corporate authority and verified professional presence</p>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
+                      {currentStep === 3 && <StepHoursPanel applyHoursPreset={applyHoursPreset} formData={formData} operatingHoursState={operatingHoursState} setFormData={setFormData} setOperatingHoursState={setOperatingHoursState} />}
 
                       {/* STEP 4: DETAILS & DESCRIPTION */}
-                      {currentStep === 4 && (
-                        <div className="space-y-6 animate-in fade-in-50">
-                          <div>
-                            <span className="text-xs font-extrabold uppercase tracking-wider text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-200">
-                              Step 4: Details &amp; FAQs
-                            </span>
-                            <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 mt-2">
-                              Comprehensive Profile &amp; Business Narrative
-                            </h2>
-                            <p className="text-xs text-slate-500 mt-1">
-                              Detailed business listings with 150+ words index faster on Google search engines. (Minimum 30 words required).
-                            </p>
-                          </div>
-
-                          <div className="space-y-4">
-                            <div>
-                              <div className="flex justify-between items-center mb-1.5">
-                                <label className="block text-xs font-bold text-slate-700">
-                                  Business Overview (Min 30 Words) *
-                                </label>
-                                <span className={`text-[11px] font-bold ${
-                                  (formData.description.trim().split(/\s+/).filter(Boolean).length >= 30)
-                                    ? 'text-emerald-600'
-                                    : 'text-amber-600'
-                                }`}>
-                                  Word Count: {formData.description.trim() ? formData.description.trim().split(/\s+/).filter(Boolean).length : 0} / 30 words min (150+ recommended)
-                                </span>
-                              </div>
-                              <textarea
-                                id="field-description"
-                                rows={6}
-                                value={formData.description}
-                                onChange={(e) => {
-                                  setFormData({ ...formData, description: e.target.value })
-                                  if (errors.description) {
-                                    setErrors(prev => {
-                                      const next = { ...prev }
-                                      delete next.description
-                                      return next
-                                    })
-                                  }
-                                }}
-                                placeholder="Describe your business background, offerings, why customers in the United States should choose you, years of experience, unique features, and customer guarantees..."
-                                className={`w-full p-4 bg-slate-50/80 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 leading-relaxed ${
-                                  errors.description ? 'border-red-500 bg-red-50/30 ring-2 ring-red-400/20' : 'border-slate-200'
-                                }`}
-                              ></textarea>
-                              {errors.description && (
-                                <span className="text-[11px] font-semibold text-red-500 mt-1 block">{errors.description}</span>
-                              )}
-                            </div>
-
-                            <div>
-                              <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                                Key Products / Services Offered (Comma Separated)
-                              </label>
-                              <input
-                                type="text"
-                                value={formData.services}
-                                onChange={(e) => setFormData({ ...formData, services: e.target.value })}
-                                placeholder="e.g. Fast Delivery, Custom Furniture, Corporate Packages, 24/7 Support"
-                                className="w-full px-4 py-3 bg-slate-50/80 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                              />
-                            </div>
-
-                            {/* Frequently Asked Questions (Minimum 3 FAQs Required) */}
-                            <div id="field-faqs" className="pt-6 border-t border-slate-200/80 space-y-4">
-                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    <HelpCircle className="w-4 h-4 text-blue-600" />
-                                    <h3 className="text-sm font-bold text-slate-900">
-                                      Frequently Asked Questions (Minimum 3 FAQs Required) *
-                                    </h3>
-                                  </div>
-                                  <p className="text-xs text-slate-500 mt-1">
-                                    Direct FAQ answers capture visitor attention, answer buyer concerns immediately, and increase customer inquiries on your listing.
-                                  </p>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={handleAddFaq}
-                                  className="px-3.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-xl border border-blue-200 transition-colors flex items-center gap-1.5 self-start sm:self-center cursor-pointer"
-                                >
-                                  <Plus className="w-3.5 h-3.5" />
-                                  <span>Add Another FAQ</span>
-                                </button>
-                              </div>
-
-                              {errors.faqs && (
-                                <div className="p-3 bg-red-50/80 border border-red-200 rounded-xl text-xs text-red-600 font-semibold flex items-center gap-2">
-                                  <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
-                                  <span>{errors.faqs}</span>
-                                </div>
-                              )}
-
-                              <div className="space-y-4">
-                                {(formData.faqs || []).map((faq, faqIdx) => (
-                                  <div
-                                    key={faqIdx}
-                                    className="p-4 sm:p-5 rounded-2xl border border-slate-200 bg-slate-50/60 hover:bg-white transition-all space-y-3 shadow-2xs"
-                                  >
-                                    <div className="flex justify-between items-center pb-2 border-b border-slate-200/60">
-                                      <span className="text-xs font-extrabold text-blue-700 flex items-center gap-1.5">
-                                        <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center">
-                                          {faqIdx + 1}
-                                        </span>
-                                        FAQ Item #{faqIdx + 1}
-                                      </span>
-                                      {(formData.faqs || []).length > 3 && (
-                                        <button
-                                          type="button"
-                                          onClick={() => handleRemoveFaq(faqIdx)}
-                                          className="text-xs font-semibold text-red-500 hover:text-red-700 transition-colors cursor-pointer"
-                                        >
-                                          Remove FAQ
-                                        </button>
-                                      )}
-                                    </div>
-
-                                    <div>
-                                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                                        Question *
-                                      </label>
-                                      <input
-                                        id={`field-faq-${faqIdx}-question`}
-                                        type="text"
-                                        value={faq.question}
-                                        onChange={(e) => handleFaqChange(faqIdx, 'question', e.target.value)}
-                                        placeholder="e.g. What are your turnaround times or service warranties?"
-                                        className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                                      />
-                                    </div>
-
-                                    <div>
-                                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                                        Answer *
-                                      </label>
-                                      <textarea
-                                        id={`field-faq-${faqIdx}-answer`}
-                                        rows={3}
-                                        value={faq.answer}
-                                        onChange={(e) => handleFaqChange(faqIdx, 'answer', e.target.value)}
-                                        placeholder="Provide a clear, detailed, and reassuring response to build customer confidence..."
-                                        className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 leading-relaxed"
-                                      />
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* STEP 5: PLAN SELECTION & REVIEW PAYMENT */}
-                      {currentStep === 5 && (
-                        <div className="space-y-6 animate-in fade-in-50">
-                          <div>
-                            <span className="text-xs font-extrabold uppercase tracking-wider text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-200">
-                              Step 5: Plan Selection &amp; Review Payment
-                            </span>
-                            <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 mt-2">
-                              Choose Your Business Onboarding Plan
-                            </h2>
-                            <p className="text-xs text-slate-500 mt-1">
-                              Select an onboarding tier. All submissions undergo human admin compliance review before appearing in public directory categories.
-                            </p>
-                          </div>
-
-                          {/* LISTING SUMMARY CHIP */}
-                          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                            <div>
-                              <p className="font-extrabold text-slate-900 text-sm">{formData.businessName || 'Business Name'}</p>
-                              <p className="text-slate-500 mt-0.5">
-                                {formData.category || 'General Services'} • {formData.locations[0]?.city || 'United States'}
-                                {formData.locations.length > 1 && ` (+${formData.locations.length - 1} branches)`}
-                              </p>
-                            </div>
-                            <span className="px-3 py-1 bg-white border border-slate-200 rounded-full font-bold text-slate-700 text-[11px]">
-                              Owner: {currentUser?.name || formData.ownerName || 'Representative'}
-                            </span>
-                          </div>
-
-                          {/* 3 PLAN SELECTOR CARDS */}
-                          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                            {/* PLAN 1: $1 BASIC PLAN */}
-                            <div 
-                              onClick={() => setSelectedPlan('review_1')}
-                              className={`p-5 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
-                                selectedPlan === 'review_1'
-                                  ? 'border-blue-600 bg-blue-50/40 shadow-md ring-2 ring-blue-500/20'
-                                  : 'border-slate-200 hover:border-slate-300 bg-white'
-                              }`}
-                            >
-                              <div className="space-y-3">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
-                                    Basic Plan
-                                  </span>
-                                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                                    selectedPlan === 'review_1' ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300'
-                                  }`}>
-                                    {selectedPlan === 'review_1' && <Check className="w-3 h-3 stroke-[3]" />}
-                                  </div>
-                                </div>
-
-                                <div>
-                                  <h3 className="text-lg font-extrabold text-slate-900">$1 Basic Plan</h3>
-                                  <div className="mt-1 flex items-baseline gap-1">
-                                    <span className="text-2xl font-black text-slate-900">$1.00</span>
-                                    <span className="text-xs text-slate-500">/ one-time review</span>
-                                  </div>
-                                  <p className="text-xs text-slate-600 mt-2 leading-relaxed">
-                                    Admin reviews &amp; approves. Appears strictly in category/subcategory List &amp; Grid views. <strong>No single page is created.</strong>
-                                  </p>
-                                </div>
-
-                                <ul className="space-y-2 pt-2 border-t border-slate-200/80 text-xs text-slate-700">
-                                  <li className="flex items-start gap-2">
-                                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                                    <span><strong>Category List &amp; Grid View:</strong> Shows directly in search results upon admin approval</span>
-                                  </li>
-                                  <li className="flex items-start gap-2">
-                                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                                    <span>Phone, hours &amp; full branch details visible on card</span>
-                                  </li>
-                                  <li className="flex items-start gap-2">
-                                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                                    <span>Human admin verification check</span>
-                                  </li>
-                                  <li className="flex items-start gap-2 text-slate-400">
-                                    <X className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-                                    <span>No standalone single profile page</span>
-                                  </li>
-                                  <li className="flex items-start gap-2 text-slate-400">
-                                    <X className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-                                    <span>No dashboard profile editing</span>
-                                  </li>
-                                </ul>
-                              </div>
-                            </div>
-
-                            {/* PLAN 2: $5 STANDARD PLAN */}
-                            <div 
-                              onClick={() => setSelectedPlan('priority_5')}
-                              className={`p-5 rounded-2xl border-2 transition-all cursor-pointer relative flex flex-col justify-between ${
-                                selectedPlan === 'priority_5'
-                                  ? 'border-blue-600 bg-blue-50/40 shadow-lg ring-2 ring-blue-500/20'
-                                  : 'border-slate-200 hover:border-slate-300 bg-white'
-                              }`}
-                            >
-                              <div className="absolute -top-3 right-4 px-3 py-0.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-extrabold text-[10px] uppercase tracking-wider rounded-full shadow-xs">
-                                Recommended
-                              </div>
-
-                              <div className="space-y-3">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-100 text-blue-800">
-                                    Standard Plan
-                                  </span>
-                                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                                    selectedPlan === 'priority_5' ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300'
-                                  }`}>
-                                    {selectedPlan === 'priority_5' && <Check className="w-3 h-3 stroke-[3]" />}
-                                  </div>
-                                </div>
-
-                                <div>
-                                  <h3 className="text-lg font-extrabold text-slate-900">$5 Standard Plan</h3>
-                                  <div className="mt-1 flex items-baseline gap-1">
-                                    <span className="text-2xl font-black text-blue-600">$5.00</span>
-                                    <span className="text-xs text-slate-500">/ one-time review</span>
-                                  </div>
-                                  <p className="text-xs text-slate-600 mt-2 leading-relaxed">
-                                    <strong>Dedicated standalone page created</strong> to show business ownership. User dashboard profile &amp; business editing enabled.
-                                  </p>
-                                </div>
-
-                                <ul className="space-y-2 pt-2 border-t border-slate-200/80 text-xs text-slate-700">
-                                  <li className="flex items-start gap-2">
-                                    <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-                                    <span><strong>Dedicated Single Page Created:</strong> Permanent company ownership URL (/business/[slug])</span>
-                                  </li>
-                                  <li className="flex items-start gap-2">
-                                    <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-                                    <span><strong>Category List &amp; Grid View:</strong> Shows with "View Full Profile" action</span>
-                                  </li>
-                                  <li className="flex items-start gap-2">
-                                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                                    <span><strong>Dashboard Edit Option:</strong> Edit profile &amp; business info (applied after 24h review)</span>
-                                  </li>
-                                  <li className="flex items-start gap-2">
-                                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                                    <span>Publish up to 5 business articles</span>
-                                  </li>
-                                  <li className="flex items-start gap-2">
-                                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                                    <span>Priority human verification badge</span>
-                                  </li>
-                                </ul>
-                              </div>
-                            </div>
-
-                            {/* PLAN 3: $10 AUTHORITATIVE PLAN */}
-                            <div 
-                              onClick={() => setSelectedPlan('authoritative_10')}
-                              className={`p-5 rounded-2xl border-2 transition-all cursor-pointer relative flex flex-col justify-between ${
-                                selectedPlan === 'authoritative_10'
-                                  ? 'border-indigo-600 bg-indigo-50/40 shadow-lg ring-2 ring-indigo-500/20'
-                                  : 'border-slate-200 hover:border-slate-300 bg-white'
-                              }`}
-                            >
-                              <div className="absolute -top-3 right-4 px-3 py-0.5 bg-gradient-to-r from-amber-500 to-indigo-600 text-white font-extrabold text-[10px] uppercase tracking-wider rounded-full shadow-xs">
-                                VIP Authority
-                              </div>
-
-                              <div className="space-y-3">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800">
-                                    Authoritative Plan
-                                  </span>
-                                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                                    selectedPlan === 'authoritative_10' ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300'
-                                  }`}>
-                                    {selectedPlan === 'authoritative_10' && <Check className="w-3 h-3 stroke-[3]" />}
-                                  </div>
-                                </div>
-
-                                <div>
-                                  <h3 className="text-lg font-extrabold text-slate-900">$10 Authoritative Plan</h3>
-                                  <div className="mt-1 flex items-baseline gap-1">
-                                    <span className="text-2xl font-black text-indigo-600">$10.00</span>
-                                    <span className="text-xs text-slate-500">/ one-time review</span>
-                                  </div>
-                                  <p className="text-xs text-slate-600 mt-2 leading-relaxed">
-                                    Fast-track 24h approval &amp; 48h indexing, WhatsApp VIP support, directory syndication, and <strong>10 blog posts every 60 days</strong>.
-                                  </p>
-                                </div>
-
-                                <ul className="space-y-2 pt-2 border-t border-slate-200/80 text-xs text-slate-700">
-                                  <li className="flex items-start gap-2">
-                                    <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
-                                    <span><strong>Dedicated Single Page Created:</strong> High-authority standalone profile</span>
-                                  </li>
-                                  <li className="flex items-start gap-2">
-                                    <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
-                                    <span><strong>10 Blog Posts per 60 Days:</strong> Rolling cycle quota (e.g. 7 created = 3 left; refreshes to 10 after 60 days)</span>
-                                  </li>
-                                  <li className="flex items-start gap-2">
-                                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                                    <span><strong>Dashboard Edit Option:</strong> Profile &amp; business updates applied after 24h</span>
-                                  </li>
-                                  <li className="flex items-start gap-2">
-                                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                                    <span><strong>Fast-track 24h approval &amp; 48h Google indexing</strong></span>
-                                  </li>
-                                  <li className="flex items-start gap-2">
-                                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                                    <span>Multiple High DA backlinks &amp; directory syndication</span>
-                                  </li>
-                                  <li className="flex items-start gap-2">
-                                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                                    <span>Priority VIP Email &amp; WhatsApp concierge support</span>
-                                  </li>
-                                </ul>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* TRUTHFUL STATEMENT DISCLAIMER */}
-                          <div className="p-4 bg-slate-100 rounded-2xl border border-slate-200 text-xs text-slate-600 space-y-1.5">
-                            <div className="flex items-center gap-1.5 font-bold text-slate-800">
-                              <Info className="w-4 h-4 text-blue-600 shrink-0" />
-                              <span>Platform Truthful Disclosure &amp; Search Engine Compliance</span>
-                            </div>
-                            <p className="text-[11px] leading-relaxed">
-                              BizNest USA does not make false guarantees about search engine rankings. Review fees cover human editorial moderation, data accuracy verification, and publication tools. Payment does not guarantee automatic approval if submitted content violates safety policies.
-                            </p>
-                          </div>
-
-                          {/* PAYMENT DETAILS & SCREENSHOT UPLOAD */}
-                          <div className="p-6 bg-white rounded-3xl border border-slate-200 shadow-sm space-y-6">
-                            {/* Header */}
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-3">
-                              <div>
-                                <span className="inline-flex items-center gap-1.5 text-[11px] font-extrabold px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 mb-1.5">
-                                  <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-                                  <span>Secure payment processed through Payoneer</span>
-                                </span>
-                                <h4 className="font-extrabold text-slate-900 text-lg">Complete Your Payment</h4>
-                                <p className="text-xs text-slate-600 mt-0.5">
-                                  You selected <strong>{selectedPlan === 'authoritative_10' ? '$10 Authoritative Plan' : selectedPlan === 'priority_5' ? '$5 Standard Plan' : '$1 Basic Plan'}</strong> — <strong className="text-blue-600">{selectedPlan === 'authoritative_10' ? '$10.00 USD' : selectedPlan === 'priority_5' ? '$5.00 USD' : '$1.00 USD'}</strong>.
-                                </p>
-                              </div>
-                              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 text-right self-start sm:self-auto">
-                                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Business Listing</span>
-                                <span className="text-xs font-black text-slate-800 truncate max-w-[180px] block">
-                                  {formData.businessName || 'Your Business'}
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* UNIQUE PAYMENT REFERENCE CARD */}
-                            <div className="p-4 bg-gradient-to-br from-slate-50 to-blue-50/30 rounded-2xl border border-blue-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                              <div className="space-y-0.5">
-                                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                                  BizNestUSA Payment Reference
-                                </span>
-                                <p className="text-base sm:text-lg font-mono font-black text-blue-700 tracking-wider">
-                                  {payoneerReference}
-                                </p>
-                                <p className="text-[11px] text-slate-500">
-                                  Please include this reference if Payoneer asks for a memo or payment note.
-                                </p>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (navigator.clipboard) {
-                                    navigator.clipboard.writeText(payoneerReference)
-                                    setCopiedKey('ref')
-                                    toast.success('Payment reference copied to clipboard!')
-                                    setTimeout(() => setCopiedKey(null), 2500)
-                                  }
-                                }}
-                                className="px-4 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5 self-start sm:self-auto cursor-pointer"
-                              >
-                                {copiedKey === 'ref' ? (
-                                  <>
-                                    <Check className="w-3.5 h-3.5 text-emerald-600" />
-                                    <span className="text-emerald-700">Copied</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Copy className="w-3.5 h-3.5 text-slate-500" />
-                                    <span>Copy Reference</span>
-                                  </>
-                                )}
-                              </button>
-                            </div>
-
-                            {/* STEP 1: PAY VIA PAYONEER BUTTON */}
-                            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
-                                  <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px]">1</span>
-                                  <span>Complete payment securely through Payoneer</span>
-                                </span>
-                                <span className="text-[11px] font-bold text-slate-500">Official Checkout Link</span>
-                              </div>
-                              <p className="text-[11px] text-slate-600 leading-relaxed">
-                                Click the button below to open Payoneer in a secure tab and complete your payment of <strong>{selectedPlan === 'authoritative_10' ? '$10.00 USD' : selectedPlan === 'priority_5' ? '$5.00 USD' : '$1.00 USD'}</strong>.
-                              </p>
-                              
-                              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1">
-                                {payoneerUrl ? (
-                                  <a
-                                    href={payoneerUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    onClick={() => setHasClickedCompletedPayment(true)}
-                                    className="flex-1 py-3 px-5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-extrabold rounded-xl shadow-md shadow-blue-600/20 transition-all flex items-center justify-center gap-2 text-center"
-                                  >
-                                    <ExternalLink className="w-4 h-4" />
-                                    <span>Pay Securely with Payoneer ({selectedPlan === 'authoritative_10' ? '$10.00' : selectedPlan === 'priority_5' ? '$5.00' : '$1.00'})</span>
-                                  </a>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() => toast.info('Payoneer link is loading. Please check in a moment.')}
-                                    className="flex-1 py-3 px-5 bg-slate-200 text-slate-600 text-xs font-bold rounded-xl cursor-not-allowed flex items-center justify-center gap-2"
-                                  >
-                                    <Clock className="w-4 h-4 animate-spin" />
-                                    <span>Loading Payoneer Link...</span>
-                                  </button>
-                                )}
-
-                                {!hasClickedCompletedPayment && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setHasClickedCompletedPayment(true)}
-                                    className="px-5 py-3 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer"
-                                  >
-                                    I&apos;ve Completed My Payment
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* STEP 2: CONFIRMATION & SCREENSHOT FORM (REVEALED WHEN USER HAS PAID OR READY) */}
-                            {hasClickedCompletedPayment && (
-                              <div className="p-5 bg-blue-50/40 rounded-2xl border border-blue-200 space-y-4 animate-in fade-in-50">
-                                <div className="flex items-center justify-between pb-2 border-b border-blue-100">
-                                  <span className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
-                                    <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px]">2</span>
-                                    <span>Upload Payment Confirmation &amp; Details</span>
-                                  </span>
-                                  <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
-                                    Manual Verification Queue
-                                  </span>
-                                </div>
-
-                                <p className="text-[11px] text-slate-600 leading-relaxed">
-                                  After completing the payment, return to BizNestUSA and upload your payment confirmation screenshot. Your payment will be manually verified by our team before your business listing is approved.
-                                </p>
-
-                                {/* OPTIONAL TRANSACTION ID */}
-                                <div>
-                                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                                    Payoneer Transaction ID (Optional)
-                                  </label>
-                                  <input
-                                    type="text"
-                                    value={payoneerTxId}
-                                    onChange={(e) => setPayoneerTxId(e.target.value)}
-                                    placeholder="e.g. 192837465 or Payoneer payment reference"
-                                    className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 font-mono"
-                                  />
-                                </div>
-
-                                {/* OPTIONAL CUSTOMER NOTE */}
-                                <div>
-                                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                                    Customer Note (Optional)
-                                  </label>
-                                  <input
-                                    type="text"
-                                    value={customerNote}
-                                    onChange={(e) => setCustomerNote(e.target.value)}
-                                    placeholder="e.g. Payment sent from company account or payer name"
-                                    className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                                  />
-                                </div>
-
-                                {/* SCREENSHOT UPLOAD (MANDATORY REQUIREMENT) */}
-                                <div id="field-payment-screenshot">
-                                  <div className="flex justify-between items-center mb-1">
-                                    <label className="block text-xs font-bold text-slate-900">
-                                      Upload Payment Screenshot / Receipt (Required to Complete Submission) *
-                                    </label>
-                                    <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-100 text-amber-900">
-                                      Mandatory Proof
-                                    </span>
-                                  </div>
-
-                                  {paymentScreenshotBase64 ? (
-                                    <div className="p-3 bg-white border-2 border-emerald-500/50 rounded-xl flex items-center justify-between gap-3 shadow-xs">
-                                      <div className="flex items-center gap-3">
-                                        <img
-                                          src={paymentScreenshotBase64}
-                                          alt="Screenshot preview"
-                                          className="w-14 h-14 rounded-lg object-cover border border-slate-200 shadow-xs"
-                                        />
-                                        <div>
-                                          <p className="text-xs font-bold text-slate-900">Payment Receipt Attached</p>
-                                          <p className="text-[11px] text-emerald-600 font-bold flex items-center gap-1">
-                                            <CheckCircle2 className="w-3.5 h-3.5" /> Ready for admin manual verification
-                                          </p>
-                                        </div>
-                                      </div>
-                                      <button
-                                        type="button"
-                                        onClick={() => setPaymentScreenshotBase64(null)}
-                                        className="p-2 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 cursor-pointer"
-                                        title="Remove screenshot"
-                                      >
-                                        <X className="w-4 h-4" />
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    <label className="p-5 border-2 border-dashed border-amber-300 hover:border-blue-500 bg-amber-50/40 hover:bg-blue-50/30 rounded-xl flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors text-center group">
-                                      <div className="w-10 h-10 rounded-full bg-amber-100 group-hover:bg-blue-100 flex items-center justify-center text-amber-700 group-hover:text-blue-600 transition">
-                                        <Upload className="w-5 h-5" />
-                                      </div>
-                                      <span className="text-xs font-extrabold text-slate-800">
-                                        Click to attach payment transfer screenshot *
-                                      </span>
-                                      <span className="text-[11px] text-slate-500">
-                                        Submission is unlocked once your payment receipt (PNG, JPG, WEBP, max 10MB) is uploaded.
-                                      </span>
-                                      <input
-                                        type="file"
-                                        accept="image/png,image/jpeg,image/webp"
-                                        onChange={handleScreenshotFileChange}
-                                        className="hidden"
-                                      />
-                                    </label>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
+                      {currentStep === 4 && <StepDetailsPanel errors={errors} formData={formData} handleAddFaq={handleAddFaq} handleFaqChange={handleFaqChange} handleRemoveFaq={handleRemoveFaq} setErrors={setErrors} setFormData={setFormData} />}
 
                       {/* WIZARD BUTTON ACTIONS */}
                       <div className="pt-6 border-t border-slate-100 flex items-center justify-between">
@@ -3824,41 +2496,24 @@ export default function AddBusinessClient() {
                           </button>
                         ) : <div></div>}
 
-                        {currentStep < 5 ? (
+                        {currentStep < 4 ? (
                           <button
                             type="button"
                             onClick={handleNextStep}
-                            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-lg shadow-blue-600/20 transition-all inline-flex items-center gap-1.5 cursor-pointer"
+                            className="px-6 py-3 min-h-[44px] bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-lg shadow-blue-600/20 transition-all inline-flex items-center gap-1.5 cursor-pointer"
                           >
                             <span>Continue to Step {currentStep + 1}</span>
                             <ArrowRight className="w-4 h-4" />
                           </button>
                         ) : (
-                          <div className="flex flex-col items-end gap-1.5">
-                            {!paymentScreenshotBase64 && (
-                              <span className="text-[11px] font-bold text-amber-600 flex items-center gap-1">
-                                <AlertCircle className="w-3.5 h-3.5" />
-                                Upload payment screenshot above to enable submission
-                              </span>
-                            )}
-                            <button
-                              type="button"
-                              onClick={handleSubmit}
-                              disabled={isSubmitting || !paymentScreenshotBase64}
-                              className={`px-8 py-3.5 text-white font-extrabold text-sm rounded-xl shadow-xl transition-all inline-flex items-center gap-2 cursor-pointer ${
-                                !paymentScreenshotBase64
-                                  ? 'bg-slate-400 opacity-60 cursor-not-allowed'
-                                  : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'
-                              }`}
-                            >
-                              <CheckCircle2 className="w-5 h-5" />
-                              <span>
-                                {isSubmitting
-                                  ? 'Submitting...'
-                                  : `Submit Business & Payment (${selectedPlan === 'authoritative_10' ? '$10.00' : selectedPlan === 'priority_5' ? '$5.00' : '$1.00'})`}
-                              </span>
-                            </button>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={handleInitiateSubmit}
+                            className="px-6 py-3 min-h-[44px] bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-lg shadow-blue-600/20 transition-all inline-flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <span>Review &amp; Continue to Payment</span>
+                            <ArrowRight className="w-4 h-4" />
+                          </button>
                         )}
                       </div>
 
@@ -3873,7 +2528,7 @@ export default function AddBusinessClient() {
                             <Eye className="w-4 h-4" />
                             Live Listing Preview
                           </span>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
                             Draft
                           </span>
                         </div>
@@ -3892,18 +2547,18 @@ export default function AddBusinessClient() {
                               <h4 className="font-extrabold text-slate-900 text-sm truncate">
                                 {formData.businessName || 'Your Business Name'}
                               </h4>
-                              <p className="text-[11px] font-medium text-slate-500">{formData.category || 'Category'}</p>
-                              <div className="flex items-center gap-1 text-[11px] text-slate-500 font-medium">
+                              <p className="text-xs font-medium text-slate-500">{formData.category || 'Category'}</p>
+                              <div className="flex items-center gap-1 text-xs text-slate-500 font-medium">
                                 <span>New Directory Listing</span>
                               </div>
                             </div>
                           </div>
 
-                          <p className="text-[11px] text-slate-600 line-clamp-2 leading-relaxed">
+                          <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
                             {formData.description || 'Your business description will appear here as you type...'}
                           </p>
 
-                          <div className="pt-2 border-t border-slate-200/60 flex justify-between items-center text-[11px] text-slate-500">
+                          <div className="pt-2 border-t border-slate-200/60 flex justify-between items-center text-xs text-slate-500">
                             <span className="flex items-center gap-1">
                               <MapPin className="w-3 h-3 text-slate-400" />
                               {formData.locations[0]?.city || 'the United States'}
@@ -3933,7 +2588,7 @@ export default function AddBusinessClient() {
                             <Globe className="w-5 h-5" />
                           </div>
                           <div>
-                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+                            <span className="text-xs font-extrabold uppercase tracking-wider text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
                               Free Consultation
                             </span>
                             <h4 className="text-sm font-extrabold text-slate-900 mt-1">Need a Business Website?</h4>
@@ -3952,7 +2607,7 @@ export default function AddBusinessClient() {
                           <span>Contact Support Team</span>
                         </Link>
 
-                        <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-[10px] text-slate-500">
+                        <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
                           <span>Direct Support</span>
                           <span className="text-emerald-600 font-bold">Available 7 Days</span>
                         </div>
@@ -3978,7 +2633,7 @@ export default function AddBusinessClient() {
                     <Info className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-extrabold text-slate-900">Why Pay the free US listing Listing Fee?</h3>
+                    <h3 className="text-lg font-extrabold text-slate-900">Why is there a listing fee?</h3>
                     <p className="text-xs text-slate-500">Transparent & Secure Ecosystem Operations</p>
                   </div>
                 </div>
@@ -3997,8 +2652,8 @@ export default function AddBusinessClient() {
                     <CheckCircle2 className="w-4 h-4 text-blue-600" />
                     <span>Dedicated Cloud Database & Platform Hosting</span>
                   </h4>
-                  <p className="text-[11px] leading-relaxed">
-                    This modest nominal fee of <strong>free US listing</strong> directly supports our enterprise-grade cloud database infrastructure, maintaining fast uptime, high-speed multi-city searches, and data storage for your business profile.
+                  <p className="text-xs leading-relaxed">
+                    This listing fee directly supports our enterprise-grade cloud database infrastructure, maintaining fast uptime, high-speed multi-city searches, and data storage for your business profile.
                   </p>
                 </div>
 
@@ -4007,8 +2662,8 @@ export default function AddBusinessClient() {
                     <ShieldCheck className="w-4 h-4 text-emerald-600" />
                     <span>Manual Anti-Spam & Fraud Prevention</span>
                   </h4>
-                  <p className="text-[11px] leading-relaxed">
-                    Our compliance team manually reviews and authenticates every listing within <strong>1 to 2 hours</strong> to eliminate duplicate spam and ensure consumers only connect with authentic the United Statesi businesses.
+                  <p className="text-xs leading-relaxed">
+                    Our compliance team manually reviews and authenticates every listing to eliminate duplicate spam and ensure consumers only connect with authentic American businesses. Only submissions with a verified payment are approved.
                   </p>
                 </div>
 
@@ -4017,8 +2672,8 @@ export default function AddBusinessClient() {
                     <Clock className="w-4 h-4 text-amber-600" />
                     <span>7-Day Inactive Clean-Up Policy</span>
                   </h4>
-                  <p className="text-[11px] leading-relaxed">
-                    Please note: Unverified draft listings that remain without free US listing payment proof will be automatically cleaned up and removed from your dashboard after <strong>7 days</strong> from submission.
+                  <p className="text-xs leading-relaxed">
+                    Please note: listings that remain without payment proof will be automatically cleaned up and removed from your dashboard after <strong>7 days</strong> from submission.
                   </p>
                 </div>
               </div>
@@ -4057,7 +2712,7 @@ export default function AddBusinessClient() {
               <div className="space-y-3 text-xs">
                 <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex justify-between items-center">
                   <span className="font-bold text-slate-600">Current Status:</span>
-                  <span className={`px-2.5 py-1 rounded-full font-extrabold uppercase text-[10px] ${
+                  <span className={`px-2.5 py-1 rounded-full font-extrabold uppercase text-xs ${
                     selectedBizModal.status === 'approved'
                       ? 'bg-emerald-100 text-emerald-800'
                       : (selectedBizModal.status === 'rejected' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800')
@@ -4109,7 +2764,7 @@ export default function AddBusinessClient() {
                   Close
                 </button>
                 {selectedBizModal.status === 'approved' && (
-                  selectedBizModal.plan === 'review_1' || selectedBizModal.hasSinglePage === false ? (
+                  selectedBizModal.hasSinglePage === false ? (
                     <span className="px-4 py-2 bg-blue-50 text-blue-700 text-xs font-bold rounded-xl border border-blue-200">
                       Live in Category List/Grid
                     </span>
@@ -4166,9 +2821,9 @@ export default function AddBusinessClient() {
               <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center font-bold">
                 <Award className="w-5 h-5" />
               </div>
-              <h3 className="font-bold text-slate-900 text-base">Free Business Review</h3>
+              <h3 className="font-bold text-slate-900 text-base">Human Business Review</h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Zero commission per inquiry and zero hidden monthly subscriptions. Standard review is included with all listings.
+                Every listing is reviewed by our team before it goes live. Only submissions with a verified payment are approved and published.
               </p>
             </div>
 

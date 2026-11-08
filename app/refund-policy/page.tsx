@@ -47,7 +47,7 @@ export default function RefundPolicyPage() {
             <section className="space-y-3">
               <h2 className="text-xl font-bold text-slate-900">1. Free Core Directory Access &amp; Commercial Services</h2>
               <p>
-                Standard business listings, individual practitioner portfolios, and basic job discovery on <strong>BizNestUSA</strong> are 100% free of charge. For merchants, corporate recruiters, and agencies that purchase optional promotional solutions—such as featured category placements, top-of-city spotlight banners, or expedited editorial verification—this Refund &amp; Cancellation Policy defines your rights and financial obligations.
+                Standard business listings, individual practitioner portfolios, and basic job discovery on <strong>BizNestUSA</strong> are paid submissions (plans start at $1). For merchants, corporate recruiters, and agencies that purchase optional promotional solutions—such as featured category placements, top-of-city spotlight banners, or expedited editorial verification—this Refund &amp; Cancellation Policy defines your rights and financial obligations.
               </p>
             </section>
 
@@ -72,7 +72,7 @@ export default function RefundPolicyPage() {
               <p>Due to the immediate expenditure of administrative and operational resources, the following fees are non-refundable:</p>
               <ul className="list-disc pl-5 space-y-2">
                 <li>
-                  <strong>Expedited Verification Review Fees:</strong> Fees paid for fast-track manual investigation of state licenses, Secretary of State corporate filings, or commercial lease validations cover staff review time and are non-refundable, regardless of whether verification is approved or rejected due to falsified credentials.
+                  <strong>Verification Review Fees:</strong> Fees paid for a documentary review of the materials a business submits (for example, a business license or formation document provided by the owner) cover staff review time and are non-refundable, regardless of whether verification is approved or rejected. Verification is a review of submitted documents only — we do not check state license registries, Secretary of State corporate filings, or commercial leases.
                 </li>
                 <li>
                   <strong>Delivered Ad Impressions &amp; Featured Placements:</strong> Once a promotional campaign has commenced and served public impressions across directory pages, fees for that billing cycle cannot be refunded pro-rata.

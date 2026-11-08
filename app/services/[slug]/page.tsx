@@ -8,13 +8,12 @@ import { Metadata } from 'next'
 import {
   POPULAR_SERVICES,
   getServiceBySlug,
-  getSubcategoryHref,
   ServiceDefinition
 } from '@/lib/services-data'
 import { getAllBusinesses } from '@/lib/db-service'
 import { getAllProfessionals } from '@/lib/professional-service'
 import { toCanonicalUrl, VERIFICATION_DISCLAIMER } from '@/lib/directory-helpers'
-import { TOP_CITIES, BUSINESS_CATEGORIES } from '@/lib/data'
+import { TOP_CITIES } from '@/lib/data'
 import {
   ShieldCheck,
   Star,
@@ -40,35 +39,26 @@ export const revalidate = 604800 // 7-day ISR revalidation
 export const dynamicParams = true
 
 export async function generateStaticParams() {
-  const allServiceSlugs = new Set<string>()
-  POPULAR_SERVICES.forEach((srv) => allServiceSlugs.add(srv.slug))
-  BUSINESS_CATEGORIES.forEach((cat) => {
-    cat.subcategories.forEach((sub) => {
-      const href = getSubcategoryHref(sub, cat.id)
-      const slug = href.replace(/^\/services\//, '').replace(/\/$/, '')
-      if (slug) allServiceSlugs.add(slug)
-    })
-  })
-  return Array.from(allServiceSlugs).map((slug) => ({
-    slug,
+  // ISR budget: prerender only the curated POPULAR_SERVICES list. The
+  // subcategory-derived service pages (~107, duplicates of
+  // /category/<cat>/<sub>) render on first visit (dynamicParams=true) and
+  // cache for 7 days — no URL breaks, no sitemap change.
+  return POPULAR_SERVICES.map((srv) => ({
+    slug: srv.slug,
   }))
 }
 
 function formatServiceMetaTitle(service: ServiceDefinition): string {
   const name = service.title
   const candidates = [
-    `${name} in USA: Hiring, Costs & Licensing Guide`,
-    `${name} in USA: Costs, Licensing & Hiring Guide`,
-    `${name} in USA: Complete Cost & Hiring Guide`,
-    `${name} in USA: Cost Breakdown & Hiring Guide`,
-    `${name} in USA: Guide to Costs & Licensing`,
-    `${name} in the USA: Hiring & Licensing Guide`,
-    `${name} in USA: Hiring & Licensing Guide`,
-    `${name} in USA: Verified Hiring & Cost Guide`,
-    `${name} in USA: Costs & Hiring Guide | BizNest`,
-    `${name} in USA: Licensing & Cost Guide | BizNest`,
-    `${name} in USA: Hiring Guide | BizNestUSA`,
-    `${name} in the USA: Hiring Guide | BizNestUSA`,
+    `${name} Near You: Find & Hire Local Pros | BizNestUSA`,
+    `${name}: Find & Hire Local Pros Near You | BizNestUSA`,
+    `${name} Near You: Hire a Local Pro | BizNestUSA`,
+    `${name} Near You: Find & Hire Local Pros`,
+    `${name} in USA: Local Directory & Hiring Guide`,
+    `${name} in the USA: Find & Hire Local Pros`,
+    `${name} Near You | BizNestUSA`,
+    `${name} Near You | BizNestUSA Directory`,
   ]
 
   for (const c of candidates) {
@@ -87,30 +77,28 @@ function formatServiceMetaTitle(service: ServiceDefinition): string {
     if (res.length >= 50 && res.length <= 60) return res
   }
 
-  const padded = `${name} in USA: Verified Contractor Guide | BizNest`
+  const padded = `${name} in USA: Directory | BizNestUSA`
   if (padded.length >= 50 && padded.length <= 60) return padded
 
-  const padded2 = `Verified ${name} in the United States | BizNestUSA`
+  const padded2 = `${name} in the United States | BizNestUSA`
   if (padded2.length >= 50 && padded2.length <= 60) return padded2
 
   const shortPadded = `${name} in USA: Guide & Directory | BizNestUSA`
   if (shortPadded.length >= 50 && shortPadded.length <= 60) return shortPadded
 
-  return `${name} in USA: Directory, Costs & Hiring Guide | BizNest`.slice(0, 60)
+  return `${name} in USA: Find Local Pros | BizNestUSA`.slice(0, 60)
 }
 
 function formatServiceMetaDescription(service: ServiceDefinition): string {
   const name = service.title.toLowerCase()
 
   const candidates = [
-    `Complete USA guide for ${name}. Compare average service costs, state licensing regulations, project scopes, and hiring tips on BizNestUSA.`,
-    `Comprehensive USA guide for ${name}. Review average service costs, state licensing standards, common project scopes, and tips on BizNestUSA.`,
-    `Essential USA guide for ${name}. Explore average hourly costs, state licensing credentials, common repair scopes, and hiring tips on BizNestUSA.`,
-    `Explore USA hiring standards for ${name}. Review estimated costs, state licensing boards, common service offerings, and tips on BizNestUSA.`,
-    `Complete guide to ${name} in the USA. Review pricing, licensing rules, and verified contractor ratings on the BizNestUSA business network.`,
-    `Comprehensive directory and hiring guide for ${name} across all 50 US states. Compare local rates, verified credentials, and quotes on BizNestUSA.`,
-    `Complete USA guide for ${name}. Compare average service costs, state licensing regulations, project scopes, and verified contractor ratings on BizNestUSA.`,
-    `Guide to hiring ${name} across the USA. Compare average costs, state licensing requirements, project scopes, and quotes on BizNestUSA.`,
+    `Find ${name} near you. Search local providers by city, compare business profiles, and contact a provider directly on BizNestUSA.`,
+    `Find ${name} near you in the USA. Search local providers by city, compare business profiles, and contact one directly on BizNestUSA.`,
+    `Looking for ${name} near you? Browse local providers across 39 states and Washington, D.C., compare profiles, and contact one directly.`,
+    `Hire ${name} in your city. Browse US business profiles on BizNestUSA, compare the services offered, and contact a provider directly.`,
+    `Search ${name} by city on BizNestUSA. Find local providers in 39 states and Washington, D.C., compare profiles, and get in touch directly.`,
+    `Find ${name} near you in the USA. Search providers in your city, compare business profiles and services, and contact a provider directly on BizNestUSA.`,
   ]
 
   for (const c of candidates) {
@@ -130,10 +118,10 @@ function formatServiceMetaDescription(service: ServiceDefinition): string {
     }
   }
 
-  const shortIntro = `USA guide for ${name}. Review average service costs, licensing rules, verified provider credentials, and hiring advice. Find top pros on BizNestUSA.`
+  const shortIntro = `USA guide for ${name}. Compare services offered, provider credentials, and hiring advice. Find local pros on BizNestUSA.`
   if (shortIntro.length >= 140 && shortIntro.length <= 160) return shortIntro
 
-  const paddedShort = `Guide to hiring ${name} across all 50 states. Compare average costs, licensing requirements, and verified customer reviews on BizNestUSA directory.`
+  const paddedShort = `Guide to finding ${name} across 39 states and Washington, D.C. Browse local providers and contact one directly on BizNestUSA.`
   if (paddedShort.length >= 140 && paddedShort.length <= 160) return paddedShort
 
   return candidates[0].slice(0, 160)
@@ -196,8 +184,16 @@ export default async function ServiceDetailPage(props: { params: Promise<{ slug:
     return serviceKeywords.some(kw => textBlob.includes(kw))
   })
 
-  // Fallback to parent category businesses if direct match is small
-  const parentCategoryBiz = allBiz.filter(b => b.category === service.parentCategoryId && !directMatchingBiz.some(d => d.id === b.id))
+  // Fallback to parent category businesses if direct match is small.
+  // NOTE (2026-11-08): this used to compare b.category (the display name,
+  // e.g. "Home Services") to service.parentCategoryId (the slug,
+  // "home-services") — never equal, so the fallback never fired and was
+  // dead code. The slug lives on b.categoryId (lib/db-service.ts maps
+  // main_category_slug -> categoryId); the display-name comparison is kept
+  // only for docs that never got a categoryId.
+  const parentCategoryBiz = directMatchingBiz.length < 8
+    ? allBiz.filter(b => (b.categoryId === service.parentCategoryId || b.category === service.parentCategoryName) && !directMatchingBiz.some(d => d.id === b.id)).slice(0, 8 - directMatchingBiz.length)
+    : []
   const displayedBiz = [...directMatchingBiz, ...parentCategoryBiz].slice(0, 8)
 
   // Filter matching professionals
@@ -253,13 +249,8 @@ export default async function ServiceDetailPage(props: { params: Promise<{ slug:
     },
     provider: {
       '@type': 'Organization',
-      name: 'BizNestUSA Verified Directory',
+      name: 'BizNestUSA',
       url: 'https://www.biznestusa.com/'
-    },
-    offers: {
-      '@type': 'AggregateOffer',
-      priceCurrency: 'USD',
-      price: service.typicalCost
     },
     hasOfferCatalog: {
       '@type': 'OfferCatalog',
@@ -344,8 +335,8 @@ export default async function ServiceDetailPage(props: { params: Promise<{ slug:
                   <DollarSign className="w-5 h-5 text-emerald-300" />
                 </div>
                 <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-300">Average US Rate</div>
-                  <div className="text-xs sm:text-sm font-bold text-white">{service.typicalCost}</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-300">Get Quotes First</div>
+                  <div className="text-xs sm:text-sm font-bold text-white">Ask local providers for written quotes before you hire</div>
                 </div>
               </div>
 
@@ -376,7 +367,7 @@ export default async function ServiceDetailPage(props: { params: Promise<{ slug:
             <div className="bg-emerald-50/90 border border-emerald-200/90 rounded-2xl p-4 flex items-start gap-3 text-xs text-emerald-950 shadow-xs">
               <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
               <p className="leading-relaxed">
-                <strong>BizNestUSA Verification Standard:</strong> All {service.title.toLowerCase()} and contractors listed are verified US-based businesses. {VERIFICATION_DISCLAIMER}
+                <strong>BizNestUSA Verification Standard:</strong> A business or professional listed here completed our basic verification process. {VERIFICATION_DISCLAIMER}
               </p>
             </div>
 
@@ -389,7 +380,7 @@ export default async function ServiceDetailPage(props: { params: Promise<{ slug:
                 </h2>
               </div>
               <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                Whether for residential routine maintenance or urgent commercial repairs, licensed {service.singularTitle.toLowerCase()} contractors in the United States commonly provide these certified solutions:
+                Providers in this field commonly offer these services — check each business profile for exactly what it covers in your city:
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
                 {service.commonServices.map((item, idx) => (
@@ -412,7 +403,7 @@ export default async function ServiceDetailPage(props: { params: Promise<{ slug:
                     Verified {service.title} &amp; Contractors
                   </h2>
                   <p className="text-xs sm:text-sm text-slate-500">
-                    Showing top-rated American businesses specializing in {service.title.toLowerCase()}
+                    Showing American businesses specializing in {service.title.toLowerCase()} — open a profile to see services, location, and contact details
                   </p>
                 </div>
                 <Link
@@ -420,7 +411,7 @@ export default async function ServiceDetailPage(props: { params: Promise<{ slug:
                   className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 hover:text-blue-900 bg-blue-50 px-3 py-1.5 rounded-full border border-blue-200 hover:bg-blue-100 transition-colors"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-                  List Your {service.singularTitle} Business Free
+                  List Your {service.singularTitle} Business
                 </Link>
               </div>
 
@@ -430,9 +421,9 @@ export default async function ServiceDetailPage(props: { params: Promise<{ slug:
                     <Search className="w-7 h-7" />
                   </div>
                   <div className="max-w-md mx-auto space-y-1">
-                    <h3 className="text-base font-bold text-slate-900">Be the First Verified {service.singularTitle}</h3>
+                    <h3 className="text-base font-bold text-slate-900">No {service.title} Listed Here Yet</h3>
                     <p className="text-xs text-slate-500">
-                      We are currently vetting new licensed {service.title.toLowerCase()} across US metros. Register your company today to receive customer inquiries.
+                      Be the first {service.singularTitle.toLowerCase()} listed on this page. Add your business from $1 and start receiving inquiries from customers searching in your city.
                     </p>
                   </div>
                   <Link
@@ -476,7 +467,7 @@ export default async function ServiceDetailPage(props: { params: Promise<{ slug:
                               {biz.plan === 'priority_5' && (
                                 <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
                                   <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
-                                  Top Rated
+                                  Featured
                                 </span>
                               )}
                             </div>
@@ -543,7 +534,7 @@ export default async function ServiceDetailPage(props: { params: Promise<{ slug:
                   <div className="flex items-center gap-2">
                     <UserCheck className="w-5 h-5 text-blue-600" />
                     <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">
-                      Licensed Specialists &amp; Master Technicians
+                      Local Specialists &amp; Professionals
                     </h2>
                   </div>
                   <Link
@@ -605,11 +596,11 @@ export default async function ServiceDetailPage(props: { params: Promise<{ slug:
               <div className="space-y-1">
                 <span className="text-xs font-bold uppercase tracking-wider text-blue-300">USA Industry Guide</span>
                 <h2 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
-                  How Much Do {service.title} Cost in the United States?
+                  What Affects the Cost of {service.title} in the USA?
                 </h2>
               </div>
               <p className="text-xs sm:text-sm text-slate-200 leading-relaxed">
-                Plumbing, roofing, and contractor pricing varies based on local state codes, permit costs, and emergency status. Here is what American homeowners and property managers can expect:
+                {service.title} pricing depends on the job — scope, location, permits, materials, and urgency all play a part. There is no single US rate, so compare written quotes before you hire:
               </p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
@@ -619,7 +610,7 @@ export default async function ServiceDetailPage(props: { params: Promise<{ slug:
                     <span>Hourly &amp; Project Rates</span>
                   </div>
                   <p className="text-xs text-slate-200 leading-relaxed">
-                    Typical hourly rates range from <strong>{service.typicalCost}</strong>. Flat-rate estimates are common for well-defined fixture replacements or inspections.
+                    Some providers charge by the hour, others quote a flat project price. Ask for a written quote that lists labor, materials, and any call-out fee.
                   </p>
                 </div>
 
@@ -629,7 +620,7 @@ export default async function ServiceDetailPage(props: { params: Promise<{ slug:
                     <span>Licensing &amp; Insurance</span>
                   </div>
                   <p className="text-xs text-slate-200 leading-relaxed">
-                    Always confirm contractors possess minimum $1M general liability insurance, state license validation, and local municipal bond protection.
+                    Ask to see the license your state requires and proof of liability insurance before work starts — rules vary by state and city.
                   </p>
                 </div>
               </div>
@@ -669,11 +660,11 @@ export default async function ServiceDetailPage(props: { params: Promise<{ slug:
               <div className="flex items-center gap-2">
                 <MapPin className="w-5 h-5 text-blue-600" />
                 <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">
-                  Find Professional {service.title} Across Top US Metros
+                  Find {service.title} in Top US Cities
                 </h2>
               </div>
               <p className="text-xs text-slate-500">
-                Browse verified {service.singularTitle.toLowerCase()} contractors by major metropolitan area:
+                Browse {service.singularTitle.toLowerCase()} providers by city:
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 pt-2">
                 {TOP_CITIES.slice(0, 16).map((city) => {
@@ -734,21 +725,21 @@ export default async function ServiceDetailPage(props: { params: Promise<{ slug:
 
               <div className="space-y-2">
                 <h3 className="text-xl font-extrabold text-white tracking-tight">
-                  Are You a Licensed {service.singularTitle}?
+                  Are You a {service.singularTitle}?
                 </h3>
                 <p className="text-xs text-blue-100 leading-relaxed">
-                  Join thousands of verified US service providers. Get discovered by local customers searching for certified {service.title.toLowerCase()} in your service area.
+                  Join US service providers. Get discovered by local customers searching for {service.title.toLowerCase()} in your service area.
                 </p>
               </div>
 
               <div className="space-y-2 pt-1">
                 <div className="flex items-center gap-2 text-xs text-blue-100">
                   <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>Google-indexed business profile</span>
+                  <span>Searchable public business profile</span>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-blue-100">
                   <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>Verified credentials badge</span>
+                  <span>Verified listing badge</span>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-blue-100">
                   <Check className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -760,7 +751,7 @@ export default async function ServiceDetailPage(props: { params: Promise<{ slug:
                 href="/add-business"
                 className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-white hover:bg-blue-50 text-blue-950 text-xs font-extrabold shadow-md transition-all"
               >
-                Register Your Business Free
+                List Your Business — from $1
                 <ArrowRight className="w-4 h-4 text-blue-700" />
               </Link>
             </div>

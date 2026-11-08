@@ -25,8 +25,34 @@ import {
 import { getAllCompanies, approveCompany, rejectCompany } from '@/lib/company-service'
 import { getAllJobs, approveJob, rejectJob } from '@/lib/job-service'
 import { getAllJobApplications, updateJobApplicationStatus, deleteJobApplication } from '@/lib/job-application-service'
+import {
+  getPendingBusinessReviews,
+  getPendingProfessionalReviews,
+  getPendingBusinessClaims,
+  moderateBusinessReview,
+  moderateProfessionalReview,
+  moderateBusinessClaim,
+  type StoredBusinessReview,
+  type StoredProfessionalReview,
+  type StoredBusinessClaim,
+} from '@/lib/review-service'
 import { getPublicJobPath } from '@/lib/job-url'
+import {
+  getPendingBusinessPosts,
+  approveBusinessPost,
+  rejectBusinessPost,
+} from '@/lib/user-post-service'
+import type { UserBlogPost } from '@/lib/data'
 import { submitToIndexNow } from '@/lib/indexnow'
+import {
+  getBusinessRevalidatePaths,
+  getCompanyRevalidatePaths,
+  getJobRevalidatePaths,
+  getProfessionalRevalidatePaths,
+  requestRevalidatePaths,
+} from '@/lib/revalidate'
+import { getAuthHeaders } from '@/lib/client-auth'
+import { sendBusinessSubmissionEmail } from '@/lib/email-service'
 import { toast } from 'sonner'
 
 export default function AdminPage() {
@@ -35,10 +61,10 @@ export default function AdminPage() {
   const [adminPass, setAdminPass] = useState('')
   const [showAdminPass, setShowAdminPass] = useState(false)
   const [loginError, setLoginError] = useState('')
-  const [adminUid, setAdminUid] = useState('0LM7RVOwGIMVK4rwVD6muuzPYij1')
+  const [adminUid, setAdminUid] = useState('') // set only after the UID check below; never defaults to the admin UID
 
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'payments' | 'pending' | 'businesses' | 'professionals' | 'verifications' | 'companies' | 'jobs' | 'applications' | 'messages' | 'categories' | 'locations' | 'articles' | 'settings' | 'seo'
+    'overview' | 'payments' | 'pending' | 'businesses' | 'professionals' | 'verifications' | 'moderation' | 'companies' | 'jobs' | 'applications' | 'messages' | 'categories' | 'locations' | 'articles' | 'settings' | 'seo'
   >('overview')
 
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'pending' | 'plan_1' | 'plan_5' | 'verified' | 'rejected' | 'needs_changes'>('all')
@@ -56,6 +82,12 @@ export default function AdminPage() {
   const [allJobs, setAllJobs] = useState<JobItem[]>([])
   const [allJobApplications, setAllJobApplications] = useState<JobApplication[]>([])
   const [contactMessages, setContactMessages] = useState<ContactMessage[]>([])
+  // Reviews & claims moderation queue (lib/review-service.ts)
+  const [pendingBizReviews, setPendingBizReviews] = useState<StoredBusinessReview[]>([])
+  const [pendingProReviews, setPendingProReviews] = useState<StoredProfessionalReview[]>([])
+  const [pendingClaims, setPendingClaims] = useState<StoredBusinessClaim[]>([])
+  // Pending business blog posts awaiting moderation (lib/user-post-service.ts)
+  const [pendingBlogPosts, setPendingBlogPosts] = useState<UserBlogPost[]>([])
   const [loading, setLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [bizSearchQuery, setBizSearchQuery] = useState('')
@@ -108,10 +140,20 @@ export default function AdminPage() {
       setAllJobApplications(apps)
       const msgs = await getContactMessages()
       setContactMessages(msgs)
+      // Reviews & claims moderation queue — admin reads pending items
+      // (firestore.rules allows isAdmin() reads on all three collections).
+      const modBizReviews = await getPendingBusinessReviews()
+      setPendingBizReviews(modBizReviews)
+      const modProReviews = await getPendingProfessionalReviews()
+      setPendingProReviews(modProReviews)
+      const modClaims = await getPendingBusinessClaims()
+      setPendingClaims(modClaims)
+      const modPosts = await getPendingBusinessPosts()
+      setPendingBlogPosts(modPosts)
 
-      // Fetch unified payment records
+      // Fetch unified payment records (admin ID token required)
       try {
-        const payRes = await fetch('/api/payments/list?isAdmin=true')
+        const payRes = await fetch('/api/payments/list', { headers: await getAuthHeaders() })
         if (payRes.ok) {
           const payData = await payRes.json()
           if (payData.payments && Array.isArray(payData.payments)) {
@@ -166,7 +208,11 @@ export default function AdminPage() {
   const handleApprovePro = async (id: string, name: string) => {
     setActionLoading(id)
     try {
-      await approveProfessional(id, adminUid)
+      const ok = await approveProfessional(id, adminUid)
+      if (!ok) {
+        toast.error(`Professional "${name}" cannot be approved — a recorded payment is not verified.`)
+        return
+      }
       setAllProfessionals(prev => prev.map(p => (p.id === id || p.username === id) ? { ...p, status: 'approved', profileStatus: 'APPROVED' } : p))
       if (selectedPro && (selectedPro.id === id || selectedPro.username === id)) {
         setSelectedPro({ ...selectedPro, status: 'approved', profileStatus: 'APPROVED' })
@@ -176,6 +222,11 @@ export default function AdminPage() {
       const proSlug = pro?.username || pro?.slug
       if (proSlug) {
         submitToIndexNow(`/professionals/${proSlug}`).catch(err => console.error('[IndexNow] professional approve submission failed:', err))
+        // On-demand revalidation: the public profile must go live now,
+        // not wait up to 7 days for the ISR window (fire-and-forget).
+        // Also revalidates the index pages that list this professional:
+        // homepage, /professionals and every affected city page.
+        requestRevalidatePaths(getProfessionalRevalidatePaths(pro, `/professionals/${proSlug}`)).catch(err => console.error('[Revalidate] professional approve revalidation failed:', err))
       }
       toast.success(`Professional "${name}" approved & published!`)
     } catch (err) {
@@ -291,14 +342,22 @@ export default function AdminPage() {
   const handleApproveCompany = async (id: string, name: string) => {
     setActionLoading(id)
     try {
-      await approveCompany(id, adminUid)
+      const ok = await approveCompany(id, adminUid)
+      if (!ok) {
+        toast.error(`Company "${name}" cannot be approved — a recorded payment is not verified.`)
+        return
+      }
       setAllCompanies(prev => prev.map(c => (c.id === id || c.slug === id) ? { ...c, status: 'approved' } : c))
       // IndexNow: notify Bing the public company page is live (fire-and-forget — never fails the approval)
       const comp = allCompanies.find(c => c.id === id || c.slug === id)
       if (comp?.slug) {
         submitToIndexNow(`/companies/${comp.slug}`).catch(err => console.error('[IndexNow] company approve submission failed:', err))
+        // On-demand revalidation: the public company page must go live
+        // now, not wait up to 7 days for the ISR window (fire-and-forget).
+        // Also revalidates the /companies index that lists it.
+        requestRevalidatePaths(getCompanyRevalidatePaths(comp)).catch(err => console.error('[Revalidate] company approve revalidation failed:', err))
       }
-      toast.success(`Hiring Company "${name}" approved & verified!`)
+      toast.success(`Hiring Company "${name}" approved!`)
     } catch (err) {
       toast.error('Failed to approve company.')
     } finally {
@@ -325,12 +384,21 @@ export default function AdminPage() {
   const handleApproveJob = async (id: string, title: string) => {
     setActionLoading(id)
     try {
-      await approveJob(id, adminUid)
+      const ok = await approveJob(id, adminUid)
+      if (!ok) {
+        toast.error(`Job "${title}" cannot be approved — a recorded payment is not verified.`)
+        return
+      }
       setAllJobs(prev => prev.map(j => (j.id === id || j.slug === id) ? { ...j, status: 'approved' } : j))
       // IndexNow: notify Bing the public job page is live (fire-and-forget — never fails the approval)
       const job = allJobs.find(j => j.id === id || j.slug === id)
       if (job) {
         submitToIndexNow(getPublicJobPath(job)).catch(err => console.error('[IndexNow] job approve submission failed:', err))
+        // On-demand revalidation: the public job page must go live now,
+        // not wait up to 7 days for the ISR window (fire-and-forget).
+        // Also revalidates the index pages that list this job: homepage,
+        // /jobs and every affected city page.
+        requestRevalidatePaths(getJobRevalidatePaths(job, getPublicJobPath(job))).catch(err => console.error('[Revalidate] job approve revalidation failed:', err))
       }
       toast.success(`Job Opening "${title}" approved!`)
     } catch (err) {
@@ -407,7 +475,11 @@ export default function AdminPage() {
   const handleApprove = async (id: string, name: string) => {
     setActionLoading(id)
     try {
-      await approveBusiness(id, adminUid)
+      const ok = await approveBusiness(id, adminUid)
+      if (!ok) {
+        toast.error(`"${name}" cannot be approved yet — payment is not verified. Verify the payment proof first.`)
+        return
+      }
       setAllBusinesses(prev => prev.map(b => b.id === id ? { ...b, status: 'approved' } : b))
       if (selectedBiz?.id === id) {
         setSelectedBiz({ ...selectedBiz, status: 'approved' })
@@ -416,6 +488,32 @@ export default function AdminPage() {
       const biz = allBusinesses.find(b => b.id === id)
       if (biz?.slug) {
         submitToIndexNow(`/business/${biz.slug}`).catch(err => console.error('[IndexNow] business approve submission failed:', err))
+        // On-demand revalidation: the public listing must go live now,
+        // not wait up to 7 days for the ISR window (fire-and-forget).
+        // Also revalidates every index page that lists this business:
+        // homepage, /business-directory, its category page, and the
+        // city + category×city pages for each of its cities.
+        requestRevalidatePaths(getBusinessRevalidatePaths(biz)).catch(err => console.error('[Revalidate] business approve revalidation failed:', err))
+      }
+      // Brevo: email the owner that the listing is live (fire-and-forget —
+      // never fails the approval). Skip when there is no real owner email:
+      // the add-business form falls back to the 'contact@yourcompany.com'
+      // placeholder when the owner leaves the email blank.
+      if (biz?.email && biz.email !== 'contact@yourcompany.com') {
+        sendBusinessSubmissionEmail({
+          to: biz.email,
+          businessName: biz.name,
+          businessId: biz.id,
+          email: biz.email,
+          phone: biz.phone,
+          category: biz.category,
+          city: biz.city,
+          address: biz.address,
+          description: biz.description,
+          slug: biz.slug,
+        }).then(sent => {
+          if (!sent) console.warn('[brevo] Owner live-listing email not sent for', biz.slug)
+        })
       }
       toast.success(`"${name}" is officially approved and live on BizNest USA!`)
     } catch (err) {
@@ -480,7 +578,7 @@ export default function AdminPage() {
       const currentNotes = notes !== undefined ? notes : (adminNotesMap[businessId] ?? '')
       const res = await fetch('/api/admin/payment-actions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
         body: JSON.stringify({
           businessId,
           action,
@@ -559,7 +657,7 @@ export default function AdminPage() {
     try {
       const res = await fetch('/api/admin/payment-actions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
         body: JSON.stringify({
           businessId: payment.business_id,
           action: 'approve_payment',
@@ -587,7 +685,7 @@ export default function AdminPage() {
     try {
       const res = await fetch('/api/admin/payment-actions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
         body: JSON.stringify({
           businessId: payment.business_id,
           action: 'reject_payment',
@@ -604,6 +702,135 @@ export default function AdminPage() {
       await fetchAdminData()
     } catch (err: any) {
       toast.error(err.message || 'Failed to reject payment')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  // --- REVIEWS & CLAIMS MODERATION HANDLERS ---
+  // The signed-in admin updates the doc status directly (firestore.rules:
+  // allow update on business_reviews / professional_reviews /
+  // business_claims is isAdmin()). Approve only flips the item's status —
+  // Note: approving a claim also sets isClaimed / claim_status on the business itself (lib/review-service.ts moderateBusinessClaim).
+  const handleModerateBizReview = async (reviewId: string, decision: 'approved' | 'rejected') => {
+    let reason: string | undefined
+    if (decision === 'rejected') {
+      const input = prompt('Enter rejection reason (optional):', '')
+      if (input === null) return
+      reason = input.trim() || undefined
+    }
+    setActionLoading(reviewId)
+    try {
+      await moderateBusinessReview(reviewId, decision, adminUid, reason)
+      setPendingBizReviews(prev => prev.filter(r => r.id !== reviewId))
+      toast.success(decision === 'approved' ? 'Review approved — it is now public on the business page.' : 'Review rejected.')
+    } catch (err) {
+      toast.error('Failed to update review. Please try again.')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleModerateProReview = async (reviewId: string, decision: 'approved' | 'rejected') => {
+    let reason: string | undefined
+    if (decision === 'rejected') {
+      const input = prompt('Enter rejection reason (optional):', '')
+      if (input === null) return
+      reason = input.trim() || undefined
+    }
+    setActionLoading(reviewId)
+    try {
+      await moderateProfessionalReview(reviewId, decision, adminUid, reason)
+      setPendingProReviews(prev => prev.filter(r => r.id !== reviewId))
+      toast.success(decision === 'approved' ? 'Review approved — it is now public on the professional profile.' : 'Review rejected.')
+    } catch (err) {
+      toast.error('Failed to update review. Please try again.')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleModerateClaim = async (claimId: string, decision: 'approved' | 'rejected') => {
+    let reason: string | undefined
+    if (decision === 'rejected') {
+      const input = prompt('Enter rejection reason (optional):', '')
+      if (input === null) return
+      reason = input.trim() || undefined
+    }
+    setActionLoading(claimId)
+    try {
+      await moderateBusinessClaim(claimId, decision, adminUid, reason)
+      setPendingClaims(prev => prev.filter(c => c.id !== claimId))
+      toast.success(decision === 'approved' ? 'Ownership claim approved.' : 'Ownership claim rejected.')
+    } catch (err) {
+      toast.error('Failed to update claim. Please try again.')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleModerateBlogPost = async (postId: string, decision: 'approved' | 'rejected') => {
+    setActionLoading(postId)
+    try {
+      const ok = decision === 'approved'
+        ? await approveBusinessPost(postId)
+        : await rejectBusinessPost(postId)
+      if (!ok) throw new Error('moderation failed')
+      setPendingBlogPosts(prev => prev.filter(p => p.id !== postId))
+      toast.success(decision === 'approved' ? 'Blog post approved — it is now public.' : 'Blog post rejected.')
+    } catch (err) {
+      toast.error('Failed to update blog post. Please try again.')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  // --- BUSINESS VERIFICATION HANDLER ---
+  // Sets verified:true/false on a business via the token-verified API route
+  // (/api/admin/verify-business), which performs the update with the
+  // admin's own ID token so firestore.rules listingUpdate() (isAdmin())
+  // allows it. No rules change is needed for this path.
+  const handleMarkVerified = async (bizId: string, bizName: string, verified: boolean) => {
+    setActionLoading(bizId + '_verify')
+    try {
+      const res = await fetch('/api/admin/verify-business', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
+        body: JSON.stringify({ businessId: bizId, verified })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Verification update failed')
+      setAllBusinesses(prev => prev.map(b => b.id === bizId ? { ...b, verified } : b))
+      if (selectedBiz?.id === bizId) {
+        setSelectedBiz({ ...selectedBiz, verified })
+      }
+      toast.success(verified ? `"${bizName}" is now Verified — the shield shows on its page and it passes the "Verified Only" search filter.` : `Verification removed from "${bizName}".`)
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update verification.')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  // Companies have the same verify gap businesses had: approveCompany()
+  // never sets verified, so the companies FAQ ("admin marks that profile
+  // verified") needs this handler + the buttons in the companies tab.
+  // Same token-verified route as businesses (type: 'company'); the rules
+  // allow the admin REST write on /companies with no rules change.
+  const handleMarkVerifiedCompany = async (compId: string, compName: string, verified: boolean) => {
+    setActionLoading(compId + '_verify')
+    try {
+      const res = await fetch('/api/admin/verify-business', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
+        body: JSON.stringify({ type: 'company', companyId: compId, verified })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Verification update failed')
+      setAllCompanies(prev => prev.map(c => (c.id === compId || c.slug === compId) ? { ...c, verified } : c))
+      toast.success(verified ? `"${compName}" is now Verified — the badge shows on its company page.` : `Verification removed from "${compName}".`)
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update verification.')
     } finally {
       setActionLoading(null)
     }
@@ -626,12 +853,12 @@ export default function AdminPage() {
       const bTime = new Date((b as any).lastRequestedAt || b.submittedAt || (b as any).createdAt || 0).getTime() || 0
       return bTime - aTime
     })
-  const approvedListings = allBusinesses.filter(b => (b.status || 'approved').toLowerCase().trim() === 'approved')
+  const approvedListings = allBusinesses.filter(b => (b.status || 'pending').toLowerCase().trim() === 'approved')
   const rejectedListings = allBusinesses.filter(b => (b.status || '').toLowerCase().trim() === 'rejected')
   const featuredListings = allBusinesses.filter(b => b.isFeatured)
 
   const pendingPros = allProfessionals.filter(p => p.status === 'pending' || p.profileStatus === 'PENDING')
-  const approvedPros = allProfessionals.filter(p => (p.status || 'approved') === 'approved' && (p.profileStatus || 'APPROVED') === 'APPROVED')
+  const approvedPros = allProfessionals.filter(p => p.status === 'approved' && (p.profileStatus || 'APPROVED') === 'APPROVED')
   const rejectedPros = allProfessionals.filter(p => p.status === 'rejected' || p.profileStatus === 'REJECTED')
   const verifiedPros = allProfessionals.filter(p => p.verified === true || p.verificationStatus === 'VERIFIED')
   const unverifiedPros = allProfessionals.filter(p => !p.verified && p.verificationStatus !== 'VERIFIED')
@@ -659,6 +886,7 @@ export default function AdminPage() {
     unverifiedPros: unverifiedPros.length,
     pendingVerReqs: pendingVerReqs.length,
     totalVerReqs: verificationRequests.length,
+    pendingModeration: pendingBizReviews.length + pendingProReviews.length + pendingClaims.length + pendingBlogPosts.length,
     totalApps: allJobApplications.length,
     newApps: allJobApplications.filter(a => a.status === 'new').length,
     messages: contactMessages.length,
@@ -842,6 +1070,21 @@ export default function AdminPage() {
               {stats.pendingVerReqs > 0 && (
                 <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-900 text-[10px] font-extrabold animate-pulse">
                   {stats.pendingVerReqs} New
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => setActiveTab('moderation')}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 relative cursor-pointer shrink-0 ${
+                activeTab === 'moderation' ? 'bg-teal-700 text-white shadow-md' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              <Star className="w-4 h-4 text-amber-400" />
+              <span>Reviews &amp; Claims</span>
+              {stats.pendingModeration > 0 && (
+                <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-900 text-[10px] font-extrabold animate-pulse">
+                  {stats.pendingModeration} New
                 </span>
               )}
             </button>
@@ -1111,7 +1354,7 @@ export default function AdminPage() {
                     <span>Business Plans &amp; Payment Management</span>
                   </h2>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Review paid business subscriptions ($1 Business Review vs $5 Business Priority), verify payment screenshots, and manage 5-post blog entitlements.
+                    Review paid business subscriptions ($1 Basic, $5 Standard, $10 Authoritative), verify payment screenshots, and manage blog entitlements (5 posts Standard, 10 posts / 60 days Authoritative).
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1146,7 +1389,7 @@ export default function AdminPage() {
                       paymentFilter === 'plan_1' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-800 hover:bg-blue-100 border border-blue-200'
                     }`}
                   >
-                    $1 Review ({stats.plan1Biz})
+                    $1 Legacy ({stats.plan1Biz})
                   </button>
                   <button
                     onClick={() => setPaymentFilter('plan_5')}
@@ -1273,14 +1516,15 @@ export default function AdminPage() {
                     })
                     .map((biz) => {
                       const isPlan5 = biz.plan === 'priority_5' || biz.listingFee === 5 || biz.paymentDetails?.plan === 'priority_5'
-                      const planPrice = isPlan5 ? '$5.00' : '$1.00'
-                      const planLabel = isPlan5 ? '$5 Business Priority Plan' : '$1 Business Review Plan'
+                      const isPlan10 = biz.plan === 'authoritative_10' || biz.listingFee === 10 || biz.paymentDetails?.plan === 'authoritative_10'
+                      const planPrice = isPlan10 ? '$10.00' : isPlan5 ? '$5.00' : '$1.00'
+                      const planLabel = isPlan10 ? '$10 Authoritative Plan' : isPlan5 ? '$5 Business Priority Plan' : '$1 Basic Plan'
                       const pStatus = (biz.paymentStatus || 'PENDING').toUpperCase()
                       const screenshotUrl = biz.paymentScreenshot || biz.paymentDetails?.paymentScreenshot
                       const refNum = biz.paymentDetails?.referenceNumber || biz.transactionRef || ''
                       const userDisplay = biz.email || (biz as any).userEmail || (biz as any).userId || (biz as any).claimedBy || 'Direct User'
                       const postsUsed = biz.blog_posts_used || 0
-                      const postsAllowed = biz.blog_posts_allowed || (isPlan5 ? 5 : 0)
+                      const postsAllowed = biz.blog_posts_allowed || (isPlan10 ? 10 : isPlan5 ? 5 : 0)
                       const isFeatureEnabled = Boolean(biz.blog_post_feature_enabled)
 
                       return (
@@ -1335,7 +1579,7 @@ export default function AdminPage() {
                                 <DollarSign className={`w-4 h-4 ${isPlan5 ? 'text-purple-600' : 'text-blue-600'}`} />
                                 <div>
                                   <span className="block leading-tight">{planLabel}</span>
-                                  <span className="text-[10px] font-normal opacity-80">{planPrice} • {isPlan5 ? 'Priority Queue + 5 Posts' : 'Standard Review Queue'}</span>
+                                  <span className="text-[10px] font-normal opacity-80">{planPrice} • {isPlan10 ? 'Priority Queue + 10 Posts / 60d' : isPlan5 ? 'Priority Queue + 5 Posts' : 'Standard Review Queue — Submit only'}</span>
                                 </div>
                               </div>
 
@@ -1433,7 +1677,7 @@ export default function AdminPage() {
                                 </div>
                               ) : (
                                 <p className="text-slate-400 italic text-[11px] pt-1">
-                                  Not Included ($1 Plan grants 0 posts)
+                                  Not Included (this plan grants 0 posts)
                                 </p>
                               )}
                             </div>
@@ -1461,7 +1705,7 @@ export default function AdminPage() {
                           {/* Bottom Row: Plan-Specific Admin Actions (Requirement 7) */}
                           <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100">
                             <span className="text-[11px] text-slate-500 font-medium">
-                              Actions for <strong className="text-slate-800">{isPlan5 ? '$5 Priority Plan' : '$1 Review Plan'}</strong>:
+                              Actions for <strong className="text-slate-800">{isPlan10 ? '$10 Authoritative Plan' : isPlan5 ? '$5 Priority Plan' : '$1 Basic Plan'}</strong>:
                             </span>
 
                             <div className="flex flex-wrap items-center gap-2">
@@ -1690,6 +1934,21 @@ export default function AdminPage() {
                             <CheckCircle2 className="w-4 h-4" />
                             <span>Approve & Publish</span>
                           </button>
+                          {biz.verified ? (
+                            <span className="px-4 py-2.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5">
+                              <ShieldCheck className="w-4 h-4" />
+                              <span>Verified</span>
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => handleMarkVerified(biz.id, biz.name, true)}
+                              disabled={actionLoading === biz.id + '_verify'}
+                              className="px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer"
+                            >
+                              <ShieldCheck className="w-4 h-4" />
+                              <span>Mark Verified</span>
+                            </button>
+                          )}
                           <button
                             onClick={() => handleReject(biz.id, biz.name)}
                             disabled={actionLoading === biz.id}
@@ -1767,7 +2026,7 @@ export default function AdminPage() {
                   .filter(p => {
                     const q = searchQuery.toLowerCase().trim()
                     const matchesQuery = !q || p.name.toLowerCase().includes(q) || p.profession.toLowerCase().includes(q) || p.city.toLowerCase().includes(q)
-                    const status = p.status || p.profileStatus?.toLowerCase() || 'approved'
+                    const status = p.status || p.profileStatus?.toLowerCase() || 'pending'
                     const matchesStatus = proStatusFilter === 'all' || status === proStatusFilter
                     const isV = p.verified === true || p.verificationStatus === 'VERIFIED'
                     const matchesVerify = proVerifyFilter === 'all' || (proVerifyFilter === 'verified' ? isV : !isV)
@@ -1785,7 +2044,7 @@ export default function AdminPage() {
                     return bTime - aTime
                   })
                   .map((pro) => {
-                    const isAppr = (pro.status || 'approved') === 'approved' && (pro.profileStatus || 'APPROVED') === 'APPROVED'
+                    const isAppr = pro.status === 'approved' && (pro.profileStatus || 'APPROVED') === 'APPROVED'
                     const isPend = pro.status === 'pending' || pro.profileStatus === 'PENDING'
                     const isRej = pro.status === 'rejected' || pro.profileStatus === 'REJECTED'
                     const isVer = pro.verified === true || pro.verificationStatus === 'VERIFIED'
@@ -2049,6 +2308,193 @@ export default function AdminPage() {
             </div>
           )}
 
+          {/* TAB: REVIEWS & CLAIMS MODERATION */}
+          {activeTab === 'moderation' && (
+            <div className="space-y-6 animate-in fade-in-50">
+              <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-4">
+                  <div>
+                    <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
+                      <Star className="w-6 h-6 text-amber-500" />
+                      <span>Reviews &amp; Claims Moderation</span>
+                    </h2>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Pending reviews and ownership claims sit here until approved — approved reviews go public on the business or professional page. Claims carry EIN / license numbers and proof documents and are visible to the admin only.
+                    </p>
+                  </div>
+                  <span className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1 rounded-full">
+                    {stats.pendingModeration} Awaiting Review
+                  </span>
+                </div>
+
+                {stats.pendingModeration === 0 ? (
+                  <div className="py-12 text-center space-y-2">
+                    <Star className="w-10 h-10 text-slate-400 mx-auto" />
+                    <h3 className="font-bold text-slate-900 text-base">Moderation Queue Clear</h3>
+                    <p className="text-xs text-slate-500">No pending reviews or ownership claims. New submissions will appear here.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-8">
+                    {/* Pending business reviews */}
+                    {pendingBizReviews.length > 0 && (
+                      <div className="space-y-3">
+                        <h3 className="font-extrabold text-slate-900 text-sm">Pending Business Reviews ({pendingBizReviews.length})</h3>
+                        {pendingBizReviews.map((review) => (
+                          <div key={review.id} className="p-5 rounded-2xl border border-amber-200 bg-amber-50/50 space-y-2">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="font-extrabold text-slate-900 text-sm">{review.businessName}</p>
+                                <p className="text-xs text-slate-500">{review.userName} • {review.email} • {new Date(review.createdAt).toLocaleDateString()}</p>
+                                <p className="text-xs font-bold text-amber-600 mt-1">{'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)} ({review.rating}/5)</p>
+                                <p className="text-xs text-slate-700 leading-relaxed mt-1">{review.comment}</p>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <button
+                                  onClick={() => handleModerateBizReview(review.id, 'approved')}
+                                  disabled={actionLoading === review.id}
+                                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl cursor-pointer flex items-center gap-1.5"
+                                >
+                                  <CheckCircle2 className="w-4 h-4" />
+                                  <span>Approve</span>
+                                </button>
+                                <button
+                                  onClick={() => handleModerateBizReview(review.id, 'rejected')}
+                                  disabled={actionLoading === review.id}
+                                  className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 font-bold text-xs rounded-xl cursor-pointer"
+                                >
+                                  Reject
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Pending professional reviews */}
+                    {pendingProReviews.length > 0 && (
+                      <div className="space-y-3">
+                        <h3 className="font-extrabold text-slate-900 text-sm">Pending Professional Reviews ({pendingProReviews.length})</h3>
+                        {pendingProReviews.map((review) => (
+                          <div key={review.id} className="p-5 rounded-2xl border border-amber-200 bg-amber-50/50 space-y-2">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="font-extrabold text-slate-900 text-sm">{review.professionalName}</p>
+                                <p className="text-xs text-slate-500">{review.userName} • {review.email} • {new Date(review.createdAt).toLocaleDateString()}</p>
+                                <p className="text-xs font-bold text-amber-600 mt-1">{'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)} ({review.rating}/5)</p>
+                                <p className="text-xs text-slate-700 leading-relaxed mt-1">{review.comment}</p>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <button
+                                  onClick={() => handleModerateProReview(review.id, 'approved')}
+                                  disabled={actionLoading === review.id}
+                                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl cursor-pointer flex items-center gap-1.5"
+                                >
+                                  <CheckCircle2 className="w-4 h-4" />
+                                  <span>Approve</span>
+                                </button>
+                                <button
+                                  onClick={() => handleModerateProReview(review.id, 'rejected')}
+                                  disabled={actionLoading === review.id}
+                                  className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 font-bold text-xs rounded-xl cursor-pointer"
+                                >
+                                  Reject
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Pending ownership claims */}
+                    {pendingClaims.length > 0 && (
+                      <div className="space-y-3">
+                        <h3 className="font-extrabold text-slate-900 text-sm">Pending Ownership Claims ({pendingClaims.length})</h3>
+                        {pendingClaims.map((claim) => (
+                          <div key={claim.id} className="p-5 rounded-2xl border border-amber-200 bg-amber-50/50 space-y-2">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div className="min-w-0 space-y-1">
+                                <p className="font-extrabold text-slate-900 text-sm">{claim.businessName}</p>
+                                <p className="text-xs text-slate-500">{claim.claimantName} • {claim.email} • {claim.claimantPhone} • {new Date(claim.createdAt).toLocaleDateString()}</p>
+                                <p className="text-xs text-slate-700"><span className="font-bold">State Filing / EIN / License:</span> {claim.taxIdOrLicense}</p>
+                                {claim.proofFileName && (
+                                  <p className="text-xs text-slate-700">
+                                    <span className="font-bold">Proof attached:</span> {claim.proofFileName}
+                                    {claim.proofDataUrl && (
+                                      <button
+                                        type="button"
+                                        onClick={() => window.open(claim.proofDataUrl, '_blank')}
+                                        className="ml-2 px-2 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold rounded-lg cursor-pointer"
+                                      >
+                                        View Proof
+                                      </button>
+                                    )}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <button
+                                  onClick={() => handleModerateClaim(claim.id, 'approved')}
+                                  disabled={actionLoading === claim.id}
+                                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl cursor-pointer flex items-center gap-1.5"
+                                >
+                                  <CheckCircle2 className="w-4 h-4" />
+                                  <span>Approve Claim</span>
+                                </button>
+                                <button
+                                  onClick={() => handleModerateClaim(claim.id, 'rejected')}
+                                  disabled={actionLoading === claim.id}
+                                  className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 font-bold text-xs rounded-xl cursor-pointer"
+                                >
+                                  Reject
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {/* Pending business blog posts */}
+                    {pendingBlogPosts.length > 0 && (
+                      <div className="space-y-3">
+                        <h3 className="font-extrabold text-slate-900 text-sm">Pending Business Blog Posts ({pendingBlogPosts.length})</h3>
+                        {pendingBlogPosts.map((post) => (
+                          <div key={post.id} className="p-5 rounded-2xl border border-amber-200 bg-amber-50/50 space-y-2">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div className="min-w-0 space-y-1">
+                                <p className="font-extrabold text-slate-900 text-sm">{post.title}</p>
+                                <p className="text-xs text-slate-500">{post.businessName} • {post.authorName} • {new Date(post.createdAt).toLocaleDateString()}</p>
+                                <p className="text-xs text-slate-700 line-clamp-2">{post.excerpt}</p>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <button
+                                  onClick={() => handleModerateBlogPost(post.id, 'approved')}
+                                  disabled={actionLoading === post.id}
+                                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl cursor-pointer flex items-center gap-1.5"
+                                >
+                                  <CheckCircle2 className="w-4 h-4" />
+                                  <span>Approve Post</span>
+                                </button>
+                                <button
+                                  onClick={() => handleModerateBlogPost(post.id, 'rejected')}
+                                  disabled={actionLoading === post.id}
+                                  className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 font-bold text-xs rounded-xl cursor-pointer"
+                                >
+                                  Reject
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* TAB 5: ALL BUSINESSES DIRECTORY */}
           {activeTab === 'businesses' && (
             <div className="space-y-6 animate-in fade-in-50">
@@ -2110,7 +2556,7 @@ export default function AdminPage() {
                             (b.phone && b.phone.includes(q)) ||
                             (b.email && b.email.toLowerCase().includes(q))
                           
-                          const status = (b.status || 'approved').toLowerCase()
+                          const status = (b.status || 'pending').toLowerCase()
                           const hasProof = Boolean(b.paymentScreenshot || (b.paymentDetails && b.paymentDetails.paymentScreenshot))
                           
                           let matchesStatus = true
@@ -2127,7 +2573,7 @@ export default function AdminPage() {
                           return matchesQuery && matchesStatus
                         })
                         .map((biz) => {
-                          const isApproved = (biz.status || 'approved') === 'approved'
+                          const isApproved = biz.status === 'approved'
                           const isPending = biz.status === 'pending' || biz.paymentStatus === 'PENDING'
                           const isRejected = biz.status === 'rejected'
                           const hasProof = Boolean(biz.paymentScreenshot || (biz.paymentDetails && biz.paymentDetails.paymentScreenshot))
@@ -2199,6 +2645,24 @@ export default function AdminPage() {
                                     Approve
                                   </button>
                                 )}
+                                {biz.verified ? (
+                                  <button
+                                    onClick={() => handleMarkVerified(biz.id, biz.name, false)}
+                                    disabled={actionLoading === biz.id + '_verify'}
+                                    title="Remove verification"
+                                    className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold cursor-pointer"
+                                  >
+                                    ✓ Verified
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => handleMarkVerified(biz.id, biz.name, true)}
+                                    disabled={actionLoading === biz.id + '_verify'}
+                                    className="px-2.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold cursor-pointer"
+                                  >
+                                    Mark Verified
+                                  </button>
+                                )}
                                 <button
                                   onClick={() => setSelectedBiz(biz)}
                                   className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold cursor-pointer"
@@ -2244,6 +2708,16 @@ export default function AdminPage() {
                       {comp.status === 'pending' && (
                         <button onClick={() => handleApproveCompany(comp.id || comp.slug, comp.name)} className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-xl">
                           Approve
+                        </button>
+                      )}
+                      {comp.status === 'approved' && !comp.verified && (
+                        <button onClick={() => handleMarkVerifiedCompany(comp.id || comp.slug, comp.name, true)} className="px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-xl">
+                          Mark Verified
+                        </button>
+                      )}
+                      {comp.status === 'approved' && comp.verified && (
+                        <button onClick={() => handleMarkVerifiedCompany(comp.id || comp.slug, comp.name, false)} className="px-3 py-1.5 bg-slate-200 text-slate-800 text-xs font-bold rounded-xl">
+                          Remove Verification
                         </button>
                       )}
                     </div>
@@ -2751,7 +3225,7 @@ export default function AdminPage() {
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold uppercase text-slate-500">Status:</span>
                   <span className="text-xs font-extrabold text-blue-600 uppercase">
-                    {selectedPro.status || 'approved'} • {selectedPro.verified ? 'Verified' : 'Unverified'}
+                    {selectedPro.status || 'pending'} • {selectedPro.verified ? 'Verified' : 'Unverified'}
                   </span>
                 </div>
 
@@ -2944,10 +3418,10 @@ export default function AdminPage() {
                     <strong>Onboarding Plan:</strong>{' '}
                     <span className="font-extrabold text-blue-700">
                       {selectedBiz.plan === 'authoritative_10'
-                        ? '$10 Authoritative Plan (VIP 24h Review, 48h Indexing, 10 Posts / 60d)'
+                        ? '$10 Authoritative Plan (Priority review queue, 10 Posts / 60d)'
                         : selectedBiz.plan === 'priority_5'
                         ? '$5 Standard Plan (Single Page + Profile Editing + 5 Posts)'
-                        : '$1 Basic Plan (Category List/Grid View Only, No Single Page)'}
+                        : '$1 Basic Plan (Submit only — page created, no edit, no blog, no gallery)'}
                     </span>
                   </div>
                 </div>
@@ -3135,11 +3609,11 @@ export default function AdminPage() {
 
               <div className="pt-4 border-t border-slate-200 flex justify-between items-center">
                 <span className="text-xs font-bold text-amber-700 uppercase">
-                  Status: {selectedBiz.status || 'approved'}
+                  Status: {selectedBiz.status || 'pending'}
                 </span>
 
                 <div className="flex gap-2">
-                  {selectedBiz.plan === 'review_1' || selectedBiz.hasSinglePage === false ? (
+                  {selectedBiz.hasSinglePage === false ? (
                     <Link
                       href={`/category/${selectedBiz.category ? selectedBiz.category.toLowerCase().replace(/[^a-z0-9]+/g, '-') : 'general'}`}
                       target="_blank"

@@ -12,6 +12,10 @@ import Footer from '@/components/footer'
 import { STATE_CITIES, US_STATES } from '@/lib/data'
 import { loadStates, loadCities, stateCodeForName, searchCities, type GeoState, type GeoCity } from '@/lib/geo-data'
 import { saveCompanyToDatabase } from '@/lib/company-service'
+import TurnstileWidget from '@/components/turnstile-widget'
+import { isTurnstileWidgetEnabled, verifyTurnstileTokenClient } from '@/lib/turnstile'
+import { auth } from '@/lib/firebase'
+import { onAuthStateChanged, sendEmailVerification } from 'firebase/auth'
 import StickyWebsiteBanner from '@/components/business/sticky-website-banner'
 import { isValidPersonName, validatePersonName, filterPersonNameInput, isValidUsPhone, validateUsPhone, formatUsPhone, isValidEmail } from '@/lib/validation'
 import { toast } from 'sonner'
@@ -47,48 +51,119 @@ export default function AddCompanyClient() {
   const router = useRouter()
   const [currentStep, setCurrentStep] = useState(1)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
   const [submittedSlug, setSubmittedSlug] = useState<string | null>(null)
 
   const [formData, setFormData] = useState({
     name: '',
-    industry: 'Technology & IT',
+    industry: '',
     category: 'Hiring Company / HR',
-    companySize: '50 - 200 Employees',
-    employeeCount: '100',
-    establishedYear: '2018',
-    registrationNumber: '',
-    companyType: 'Private' as any,
-    headquarters: '',
+    companySize: '',
+    establishedYear: '',
+    companyType: '' as any,
     website: '',
     careersUrl: '',
-    googleMapUrl: '',
 
     // HR Contact
     hrName: '',
     hrDesignation: '',
     hrEmail: '',
-    companyEmail: '',
     phone: '',
     whatsapp: '',
     address: '',
-    city: 'New York',
-    province: 'New York',
+    city: '',
+    province: '',
 
-    // Social Links
+    // Social Links — only LinkedIn is rendered. The other social fields
+    // (facebook, instagram, twitter, youtube, github), registrationNumber,
+    // headquarters, googleMapUrl, companyEmail, employeeCount and coverImage
+    // were dead state silently submitted unseen, so they are deleted here
+    // rather than shipped with invented values.
     linkedin: '',
-    facebook: '',
-    instagram: '',
-    twitter: '',
-    youtube: '',
-    github: '',
-    
+
     // Description & Images
     description: '',
-    logo: '',
-    coverImage: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=1200&q=80'
+    logo: ''
   })
 
   const [errors, setErrors] = useState<Record<string, string>>({})
+
+  // Word count for the description floor (30 words, matching add-business).
+  const descriptionWordCount = formData.description.trim()
+    ? formData.description.trim().split(/\s+/).filter(Boolean).length
+    : 0
+
+  // Auth gate: submitting requires a signed-in account with a verified
+  // email (hardened firestore.rules: creates need verified email + the
+  // caller's own identity). Never submit anonymously.
+  const [authUser, setAuthUser] = useState<{ uid: string; email: string | null; emailVerified: boolean } | null>(null)
+  const [authChecking, setAuthChecking] = useState(true)
+  const [resendingVerification, setResendingVerification] = useState(false)
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (fbUser) => {
+      setAuthUser(fbUser ? { uid: fbUser.uid, email: fbUser.email, emailVerified: fbUser.emailVerified } : null)
+      setAuthChecking(false)
+    })
+    return () => unsubscribe()
+  }, [])
+
+  const requireVerifiedAuth = async (): Promise<{ uid: string; email: string } | null> => {
+    const user = auth.currentUser
+    if (!user) {
+      toast.error('Please sign in to submit this company profile. Log in or create an account first.')
+      return null
+    }
+    try { await user.reload() } catch { /* fall through with the cached token state */ }
+    if (!user.emailVerified) {
+      toast.error('Please verify your email before submitting — check your inbox for the verification link.')
+      return null
+    }
+    return { uid: user.uid, email: user.email || '' }
+  }
+
+  const handleResendVerification = async () => {
+    const user = auth.currentUser
+    if (!user) return
+    setResendingVerification(true)
+    try {
+      await sendEmailVerification(user)
+      toast.success('Verification email sent — please check your inbox.')
+    } catch {
+      toast.error('Could not send the verification email. Please try again in a few minutes.')
+    } finally {
+      setResendingVerification(false)
+    }
+  }
+
+  const authBanner = (
+    <>
+      {!authChecking && !authUser && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs text-amber-900 space-y-1">
+          <p className="font-extrabold">Sign in to submit your company profile</p>
+          <p className="text-amber-800 leading-relaxed">Submitting requires a signed-in account with a verified email. Your profile is reviewed before it goes public.</p>
+          <p className="pt-1">
+            <Link href="/login" className="font-bold text-blue-700 underline mr-3">Log in</Link>
+            <Link href="/register" className="font-bold text-blue-700 underline">Create an account</Link>
+          </p>
+        </div>
+      )}
+      {!authChecking && authUser && !authUser.emailVerified && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs text-amber-900 space-y-1">
+          <p className="font-extrabold">Verify your email to submit</p>
+          <p className="text-amber-800 leading-relaxed">We sent a verification link to {authUser.email}. Your profile can only be submitted after you verify.</p>
+          <button type="button" onClick={handleResendVerification} disabled={resendingVerification} className="font-bold text-blue-700 underline disabled:opacity-50 cursor-pointer">
+            {resendingVerification ? 'Sending…' : 'Resend verification email'}
+          </button>
+        </div>
+      )}
+      {!authChecking && authUser?.emailVerified && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 text-xs text-emerald-900">
+          Submitting as <strong>{authUser.email}</strong> (verified).
+        </div>
+      )}
+    </>
+  )
 
   // Geo dataset (Census Gazetteer JSON in /public/data). States load once;
   // the selected state's cities load on demand. Any fetch failure falls back
@@ -140,9 +215,20 @@ export default function AddCompanyClient() {
     const errs: Record<string, string> = {}
     if (step === 1) {
       if (!formData.name.trim()) errs.name = 'Company Name is required'
-      if (!formData.establishedYear.trim()) errs.establishedYear = 'Established Year is required'
+      if (!formData.establishedYear.trim()) {
+        errs.establishedYear = 'Established Year is required'
+      } else if (!/^\d{4}$/.test(formData.establishedYear.trim())) {
+        errs.establishedYear = 'Enter a valid 4-digit year (e.g. 2015)'
+      } else {
+        const yr = Number(formData.establishedYear.trim())
+        const currentYear = new Date().getFullYear()
+        if (yr < 1800 || yr > currentYear) {
+          errs.establishedYear = `Enter a year between 1800 and ${currentYear}`
+        }
+      }
     }
     if (step === 2) {
+      if (!formData.province) errs.province = 'State is required'
       if (!formData.city) errs.city = 'City is required'
     }
     if (step === 3) {
@@ -173,8 +259,8 @@ export default function AddCompanyClient() {
       }
     }
     if (step === 4) {
-      if (!formData.description.trim() || formData.description.length < 30) {
-        errs.description = 'Company description must be at least 30 characters'
+      if (!formData.description.trim() || descriptionWordCount < 30) {
+        errs.description = `Company description must be at least 30 words (currently ${descriptionWordCount} words)`
       }
     }
     setErrors(errs)
@@ -200,11 +286,35 @@ export default function AddCompanyClient() {
       return
     }
 
+    // Auth gate — blocks anonymous / unverified submits. saveCompanyToDatabase
+    // already saves with status 'pending' (lib/company-service.ts:145); do not
+    // override it here. Identity is passed so the hardened rules can match
+    // the caller (userId is dropped by the service normalizer today — see report).
+    const authed = await requireVerifiedAuth()
+    if (!authed) return
+
+    // Cloudflare Turnstile: when keys are set (user's job), a completed
+    // check is required and verified server-side via /api/turnstile/verify.
+    // With no keys configured the check is skipped and submit proceeds.
+    if (isTurnstileWidgetEnabled()) {
+      if (!turnstileToken) {
+        toast.error('Please complete the security check before submitting.')
+        return
+      }
+      const check = await verifyTurnstileTokenClient(turnstileToken)
+      if (!check.success) {
+        toast.error('Security check failed. Please try again.')
+        return
+      }
+    }
+
     setIsSubmitting(true)
     try {
       const createdComp = await saveCompanyToDatabase({
         ...formData,
-        employeeCount: String(formData.employeeCount || '10')
+        userId: authed.uid,
+        email: authed.email,
+        ownerEmail: authed.email
       })
       setSubmittedSlug(createdComp.slug)
       toast.success('Hiring Company profile submitted successfully!')
@@ -257,10 +367,10 @@ export default function AddCompanyClient() {
                 <span>Employer Verification Under Review</span>
               </span>
               <h2 className="text-2xl font-extrabold text-slate-900">
-                Company Profile Created!
+                Company Profile Submitted for Review
               </h2>
               <p className="text-slate-600 text-sm max-w-md mx-auto leading-relaxed">
-                Your hiring profile for <strong className="text-slate-900">{formData.name}</strong> has been submitted. Our compliance team will grant your green Verified Employer badge within 24 hours.
+                Your hiring profile for <strong className="text-slate-900">{formData.name}</strong> has been submitted for review. It will appear publicly only after our team approves it — no Verified Employer badge is granted automatically, and there is no fixed approval time.
               </p>
             </div>
 
@@ -273,15 +383,16 @@ export default function AddCompanyClient() {
                 <ArrowRight className="w-4 h-4" />
               </Link>
               <Link
-                href={`/companies/${submittedSlug}`}
+                href="/companies"
                 className="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition-colors"
               >
-                Preview Public Company Page
+                Browse Companies Directory
               </Link>
             </div>
           </div>
         ) : (
           <div className="space-y-6">
+            {authBanner}
             <StickyWebsiteBanner businessName={formData.name} />
             <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs grid grid-cols-4 gap-2 text-center text-xs">
               {[
@@ -302,7 +413,7 @@ export default function AddCompanyClient() {
                   }`}
                 >
                   <span>Step {s.num}</span>
-                  <span className="hidden sm:inline block text-[11px] font-normal">{s.label}</span>
+                  <span className="hidden sm:inline block text-xs font-normal">{s.label}</span>
                 </div>
               ))}
             </div>
@@ -328,7 +439,7 @@ export default function AddCompanyClient() {
                         placeholder="e.g. Acme Innovations LLC"
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                       />
-                      {errors.name && <p className="text-red-500 text-[11px] mt-1">{errors.name}</p>}
+                      {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
                     </div>
 
                     <div>
@@ -338,6 +449,7 @@ export default function AddCompanyClient() {
                         onChange={(e) => setFormData(p => ({ ...p, industry: e.target.value }))}
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                       >
+                        <option value="">Select an industry</option>
                         {INDUSTRIES.map(ind => (
                           <option key={ind} value={ind}>{ind}</option>
                         ))}
@@ -353,6 +465,7 @@ export default function AddCompanyClient() {
                         onChange={(e) => setFormData(p => ({ ...p, companySize: e.target.value }))}
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                       >
+                        <option value="">Select company size</option>
                         <option value="1 - 10 Employees">1 - 10 Employees (Startup)</option>
                         <option value="10 - 50 Employees">10 - 50 Employees</option>
                         <option value="50 - 200 Employees">50 - 200 Employees</option>
@@ -368,6 +481,7 @@ export default function AddCompanyClient() {
                         onChange={(e: any) => setFormData(p => ({ ...p, companyType: e.target.value }))}
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                       >
+                        <option value="">Select company type</option>
                         {COMPANY_TYPES.map(t => (
                           <option key={t} value={t}>{t}</option>
                         ))}
@@ -379,11 +493,14 @@ export default function AddCompanyClient() {
                       <input
                         type="text"
                         required
+                        inputMode="numeric"
+                        maxLength={4}
                         value={formData.establishedYear}
-                        onChange={(e) => setFormData(p => ({ ...p, establishedYear: e.target.value }))}
+                        onChange={(e) => setFormData(p => ({ ...p, establishedYear: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
                         placeholder="e.g. 2015"
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                       />
+                      {errors.establishedYear && <p className="text-red-500 text-xs mt-1">{errors.establishedYear}</p>}
                     </div>
                   </div>
                 </div>
@@ -410,6 +527,7 @@ export default function AddCompanyClient() {
                           <option key={state} value={state}>{state}</option>
                         ))}
                       </select>
+                      {errors.province && <p className="text-red-500 text-xs mt-1">{errors.province}</p>}
                     </div>
 
                     {/* Searchable City (narrowed to the selected state) */}
@@ -428,9 +546,9 @@ export default function AddCompanyClient() {
                         disabled={!formData.province}
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                       />
-                      {errors.city && <p className="text-red-500 text-[11px] mt-1">{errors.city}</p>}
+                      {errors.city && <p className="text-red-500 text-xs mt-1">{errors.city}</p>}
                       {citiesLoading && formData.province && (
-                        <p className="text-slate-400 text-[11px] mt-1">Loading cities…</p>
+                        <p className="text-slate-400 text-xs mt-1">Loading cities…</p>
                       )}
 
                       {isCityDropdownOpen && formData.province && (
@@ -513,9 +631,9 @@ export default function AddCompanyClient() {
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                       />
                       {errors.hrName ? (
-                        <p className="text-red-500 text-[11px] mt-1">{errors.hrName}</p>
+                        <p className="text-red-500 text-xs mt-1">{errors.hrName}</p>
                       ) : (
-                        <p className="text-[10px] text-slate-400 mt-0.5">Alphabetic letters only (no numbers like &quot;232&quot;).</p>
+                        <p className="text-xs text-slate-400 mt-0.5">Alphabetic letters only (no numbers like &quot;232&quot;).</p>
                       )}
                     </div>
 
@@ -542,7 +660,7 @@ export default function AddCompanyClient() {
                         placeholder="careers@company.com"
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                       />
-                      {errors.hrEmail && <p className="text-red-500 text-[11px] mt-1">{errors.hrEmail}</p>}
+                      {errors.hrEmail && <p className="text-red-500 text-xs mt-1">{errors.hrEmail}</p>}
                     </div>
 
                     <div>
@@ -557,9 +675,9 @@ export default function AddCompanyClient() {
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                       />
                       {errors.phone ? (
-                        <p className="text-red-500 text-[11px] mt-1">{errors.phone}</p>
+                        <p className="text-red-500 text-xs mt-1">{errors.phone}</p>
                       ) : (
-                        <p className="text-[10px] text-slate-400 mt-0.5">USA format: +1 (XXX) XXX-XXXX (10 digits).</p>
+                        <p className="text-xs text-slate-400 mt-0.5">USA format: +1 (XXX) XXX-XXXX (10 digits).</p>
                       )}
                     </div>
 
@@ -574,9 +692,9 @@ export default function AddCompanyClient() {
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                       />
                       {errors.whatsapp ? (
-                        <p className="text-red-500 text-[11px] mt-1">{errors.whatsapp}</p>
+                        <p className="text-red-500 text-xs mt-1">{errors.whatsapp}</p>
                       ) : (
-                        <p className="text-[10px] text-slate-400 mt-0.5">USA format: +1 (XXX) XXX-XXXX (10 digits).</p>
+                        <p className="text-xs text-slate-400 mt-0.5">USA format: +1 (XXX) XXX-XXXX (10 digits).</p>
                       )}
                     </div>
                   </div>
@@ -613,14 +731,14 @@ export default function AddCompanyClient() {
                           <img src={formData.logo} alt="Company logo preview" className="w-14 h-14 rounded-xl object-cover border border-slate-200" />
                           <div className="text-left">
                             <span className="text-xs font-bold text-emerald-600 block">✓ Custom Logo Uploaded</span>
-                            <span className="text-[10px] text-slate-500 block">Click box to change logo image</span>
+                            <span className="text-xs text-slate-500 block">Click box to change logo image</span>
                           </div>
                         </div>
                       ) : (
                         <div>
                           <Upload className="w-5 h-5 text-slate-400 mx-auto mb-1" />
                           <span className="text-xs text-slate-600 font-medium block">Click to upload company logo</span>
-                          <span className="text-[10px] text-slate-400 block mt-0.5">Supports PNG, JPG, WEBP</span>
+                          <span className="text-xs text-slate-400 block mt-0.5">Supports PNG, JPG, WEBP</span>
                         </div>
                       )}
                       <input
@@ -651,7 +769,8 @@ export default function AddCompanyClient() {
                       placeholder="Describe your company culture, main products/services, mission, and why candidates should join your team..."
                       className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                     />
-                    {errors.description && <p className="text-red-500 text-[11px] mt-1">{errors.description}</p>}
+                    {errors.description && <p className="text-red-500 text-xs mt-1">{errors.description}</p>}
+                    <p className="text-xs text-slate-500 mt-1">{descriptionWordCount} / 30 words minimum</p>
                   </div>
                 </div>
               )}
@@ -671,6 +790,7 @@ export default function AddCompanyClient() {
                   <div />
                 )}
 
+                <TurnstileWidget onToken={setTurnstileToken} className="flex justify-center" />
                 {currentStep < 4 ? (
                   <button
                     type="button"

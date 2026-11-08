@@ -577,7 +577,7 @@ export default function AdminCmsTabs({ activeTab }: AdminCmsTabsProps) {
                   type="text"
                   value={settings.announcementText}
                   onChange={(e) => setSettings({ ...settings, announcementText: e.target.value })}
-                  placeholder="e.g. Free listings open for all US small businesses and independent contractors."
+                  placeholder="e.g. Listings start at $1 for US small businesses and independent contractors."
                   className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                 />
               </div>

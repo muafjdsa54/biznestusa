@@ -7,25 +7,33 @@ import {
   Building2, MapPin, Phone, Star, ShieldCheck, Clock, ArrowRight, 
   Briefcase, LayoutGrid, List, ExternalLink, CheckCircle2, Sparkles, Award
 } from 'lucide-react'
-import { BusinessItem } from '@/lib/data'
+import type { PublicBusinessItem } from '@/lib/listings-api'
 
 interface CategoryListingsViewProps {
-  businesses: BusinessItem[]
+  businesses: PublicBusinessItem[]
   categoryName?: string
   cityName?: string
   subCategoryTitle?: string
+  /**
+   * Full filtered total across all pages. When the parent paginates and
+   * passes only the current page slice in `businesses`, the heading must
+   * still show the true total — otherwise it would read "(24)" on a
+   * 200-listing category.
+   */
+  totalCount?: number
 }
 
 export default function CategoryListingsView({
   businesses,
   categoryName,
   cityName,
-  subCategoryTitle
+  subCategoryTitle,
+  totalCount
 }: CategoryListingsViewProps) {
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list')
 
   // Filter strictly approved businesses as required
-  const approvedListings = businesses.filter(b => (b.status || 'approved').toLowerCase() === 'approved')
+  const approvedListings = businesses.filter(b => (b.status || '').toLowerCase() === 'approved')
 
   if (approvedListings.length === 0) {
     return (
@@ -60,7 +68,7 @@ export default function CategoryListingsView({
           <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
             <Building2 className="w-5 h-5 text-blue-600" />
             <span>
-              Verified {categoryName || 'Business'} Listings ({approvedListings.length})
+              Verified {categoryName || 'Business'} Listings ({totalCount ?? approvedListings.length})
             </span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
@@ -105,14 +113,14 @@ export default function CategoryListingsView({
         <div className="space-y-4">
           {approvedListings.map((biz) => {
             const isSeed = biz.source_type === 'seed_research' || biz.ownership_status === 'directory_seed'
-            const isBasicPlan = !isSeed && (biz.plan === 'review_1' || biz.hasSinglePage === false)
+            const isBasicPlan = !isSeed && biz.hasSinglePage === false
             const isAuthoritative = biz.plan === 'authoritative_10'
             const isStandard = biz.plan === 'priority_5' && !isSeed
 
             // Format hours snippet
             const hoursSnippet = biz.operatingHours 
-              ? (biz.operatingHours['Monday - Friday'] || biz.operatingHours['Monday - Saturday'] || biz.operatingHours['General Hours'] || biz.operatingHours['Monday'] || 'Mon-Sat 9AM-6PM')
-              : (typeof biz.hours === 'string' ? biz.hours : 'Hours on official site')
+              ? (biz.operatingHours['Monday - Friday'] || biz.operatingHours['Monday - Saturday'] || biz.operatingHours['General Hours'] || biz.operatingHours['Monday'] || '')
+              : (typeof biz.hours === 'string' ? biz.hours : '')
 
             return (
               <div
@@ -127,12 +135,20 @@ export default function CategoryListingsView({
               >
                 {/* LEFT PHOTO COLUMN (Matching Screenshot) */}
                 <div className="md:w-64 lg:w-72 relative min-h-[180px] md:min-h-full bg-slate-100 shrink-0">
-                  <img
-                    src={biz.coverImage || biz.logo || 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=600&q=80'}
+                  {biz.coverImage || biz.logo ? (
+                  <Image
+                    src={biz.coverImage || biz.logo}
                     alt={biz.name}
-                    className="w-full h-full object-cover absolute inset-0"
+                    fill
+                    sizes="(max-width: 768px) 100vw, 288px"
+                    className="object-cover"
                     loading="lazy"
                   />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center bg-slate-900 text-white text-5xl font-extrabold">
+                      {(biz.name || 'B').charAt(0).toUpperCase()}
+                    </div>
+                  )}
                   <div className="absolute inset-0 bg-gradient-to-t from-slate-950/40 via-transparent to-transparent md:hidden" />
                   
                   {/* Floating Badges */}
@@ -315,12 +331,12 @@ export default function CategoryListingsView({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {approvedListings.map((biz) => {
             const isSeed = biz.source_type === 'seed_research' || biz.ownership_status === 'directory_seed'
-            const isBasicPlan = !isSeed && (biz.plan === 'review_1' || biz.hasSinglePage === false)
+            const isBasicPlan = !isSeed && biz.hasSinglePage === false
             const isAuthoritative = biz.plan === 'authoritative_10'
 
             const hoursSnippet = biz.operatingHours 
-              ? (biz.operatingHours['Monday - Friday'] || biz.operatingHours['Monday - Saturday'] || biz.operatingHours['General Hours'] || biz.operatingHours['Monday'] || 'Mon-Sat 9AM-6PM')
-              : (typeof biz.hours === 'string' ? biz.hours : 'Hours on official site')
+              ? (biz.operatingHours['Monday - Friday'] || biz.operatingHours['Monday - Saturday'] || biz.operatingHours['General Hours'] || biz.operatingHours['Monday'] || '')
+              : (typeof biz.hours === 'string' ? biz.hours : '')
 
             return (
               <div

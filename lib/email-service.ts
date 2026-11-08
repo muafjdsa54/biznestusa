@@ -1,4 +1,8 @@
-// Email service - uses Resend via /api/send-business-email route
+// Email service — sends through Brevo via the server-side routes
+// (/api/send-business-email for owner mail, /api/send-contact-email for
+// visitor mail to the support inbox). See app/api/* for the Brevo wiring
+// (BREVO_API_KEY, sender noreply@biznestusa.com, reply-to support@).
+import { getAuthHeaders } from './client-auth'
 export interface EmailData {
   to: string
   businessName: string
@@ -36,7 +40,7 @@ export interface PriorityRequestEmailData {
   message: string
 }
 
-// Send business submission confirmation via Resend (server-side route)
+// Send business submission confirmation via Brevo (server-side route)
 export async function sendBusinessSubmissionEmail(data: EmailData) {
   try {
     if (!data.to) {
@@ -57,7 +61,7 @@ export async function sendBusinessSubmissionEmail(data: EmailData) {
 
     const res = await fetch('/api/send-business-email', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
       body: JSON.stringify(payload),
     })
 
@@ -97,25 +101,34 @@ export async function sendPriorityConfirmationEmail(data: PriorityEmailData) {
   }
 }
 
-// Send contact form email
+// Send contact form email via Brevo (server-side route) — the message is
+// already saved to Firestore by the caller, so a mail failure here only
+// logs and returns false; the visitor's message is never lost.
 export async function sendContactEmail(data: ContactEmailData) {
   try {
-    console.log('📧 SENDING CONTACT EMAIL:', {
-      name: data.name,
-      email: data.email,
-      phone: data.phone,
-      subject: data.subject,
-      message: data.message,
+    const res = await fetch('/api/send-contact-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: data.name,
+        email: data.email,
+        phone: data.phone,
+        subject: data.subject,
+        message: data.message,
+      }),
     })
-    
-    // Simulate email sending for now
-    // In production, integrate with EmailJS or SendGrid
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    
-    console.log('✅ Contact email sent successfully')
+
+    if (!res.ok) {
+      const err = await res.text()
+      console.error('[brevo] Contact email failed:', res.status, err)
+      return false
+    }
+
+    const result = await res.json()
+    console.log('[brevo] Contact email sent:', result?.id ?? 'ok')
     return true
   } catch (error) {
-    console.error('❌ Email sending error:', error)
+    console.error('[brevo] Contact email sending error:', error)
     return false
   }
 }

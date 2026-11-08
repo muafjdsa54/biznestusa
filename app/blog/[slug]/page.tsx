@@ -15,7 +15,7 @@ import {
 import { toCanonicalUrl } from '@/lib/directory-helpers'
 
 export const dynamicParams = true
-export const revalidate = 604800
+export const revalidate = 2592000 // Blog posts are immutable: 30-day ISR (was 7-day)
 
 interface BlogPostPageProps {
   params: Promise<{ slug: string }>
@@ -269,7 +269,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
                 Explore Verified Listings or Publish Your Profile
               </h3>
               <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                Connect with verified trade businesses and certified professionals across all 50 states on BizNest USA.
+                Connect with verified trade businesses and certified professionals across 39 states and Washington, D.C. on BizNest USA.
               </p>
               <div className="pt-2 flex flex-wrap gap-3">
                 <Link

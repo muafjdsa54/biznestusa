@@ -2,75 +2,190 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // ------------------------------------------------------------------
+    // BizNestUSA hardened Firestore rules — TARGET STATE (2026-11-08)
+    //
+    // PUBLISH ONLY AFTER the matching code fixes are deployed. The live
+    // code today fetches whole collections and filters in memory, and the
+    // submit forms still send status:'approved' (professionals) and run
+    // without sign-in. Publishing these rules before that code ships will
+    // break public listing pages and submissions. Deploy order:
+    //   1. code (login fails on bad password, email verification,
+    //      submit gated behind sign-in, status:'pending' on create,
+    //      public queries filter status=='approved', normalizers stop
+    //      defaulting missing status to 'approved')
+    //   2. THEN publish this file in the Firebase Console (project
+    //      biznestussa — the live site's Firebase project per the repo's
+    //      vercel.json; NOT 'biznestusa') — Firestore Database > Rules > Publish.
+    // Sections 11-13 (business_reviews, professional_reviews,
+    // business_claims) follow the same order: the review/claim code
+    // writes status:'pending' and reads approved-only, so publish the
+    // rules only together with that code — until then the new collections
+    // are denied by the catch-all and submissions fail closed.
+    // The seed import uses the CLIENT SDK (scripts/import-seed-businesses.mjs)
+    // and runs BEFORE these rules are published; seeds must carry
+    // status:'approved' in Firestore to stay publicly visible. It does NOT
+    // use the Admin SDK and does NOT bypass these rules — do not publish
+    // this file until the seed import (and any other client-SDK admin
+    // write) has finished, or those writes will be denied.
+    // ------------------------------------------------------------------
+
     // Helper: checks if requester is authenticated
     function signedIn() {
       return request.auth != null;
     }
 
-    // Helper: checks if requester is an authorized platform administrator
-    function isAdmin() {
-      return signedIn()
-        && (
-          request.auth.uid == '0LM7RVOwGIMVK4rwVD6muuzPYij1' ||
-          request.auth.token.admin == true
-        );
+    // Helper: the caller's email is verified (Firebase Auth token claim).
+    // Unverified accounts can sign in but cannot own, create or edit.
+    function emailVerified() {
+      return signedIn() && request.auth.token.email_verified == true;
     }
 
-    // Helper: checks if user is the resource creator / owner
+    // Helper: checks if requester is an authorized platform administrator.
+    // SINGLE admin path: the hardcoded owner UID only. There is NO custom
+    // token claim path (token.admin) — a custom claim can only be set via
+    // the Admin SDK, which this project does not run, and any second path
+    // is a privilege-escalation risk if a claim is ever minted by mistake.
+    function isAdmin() {
+      return signedIn()
+        && request.auth.uid == '0LM7RVOwGIMVK4rwVD6muuzPYij1';
+    }
+
+    // Helper: checks if user is the resource creator / owner.
+    // Ownership requires a VERIFIED email — an attacker who registers with
+    // someone else's email cannot take over their listings.
     function hasOwner() {
-      return signedIn() && (
+      return emailVerified() && (
         resource.data.userId == request.auth.uid ||
         resource.data.email == request.auth.token.email ||
         resource.data.ownerEmail == request.auth.token.email
       );
     }
 
+    // Helper: a new document must carry the caller's own identity, so no
+    // one can create a listing under someone else's email or userId.
+    function ownerMatchesCaller() {
+      return emailVerified() && (
+        request.resource.data.userId == request.auth.uid ||
+        request.resource.data.email == request.auth.token.email ||
+        request.resource.data.ownerEmail == request.auth.token.email
+      );
+    }
+
+    // Privileged fields no caller may set when creating a listing.
+    // A listing is born 'pending'; only an admin can approve, feature,
+    // verify or claim it afterwards.
+    // Pricing (b) exception: the paid flow must record the payment state
+    // on the listing so the admin can verify it. paymentStatus may be
+    // set on create ONLY as a pending value
+    // ('PAYMENT_VERIFICATION_PENDING' / 'PENDING_PAYMENT') — a caller
+    // can never self-approve by sending 'VERIFIED' / 'PAID'. planPrice
+    // may be set ONLY as 1, 5 or 10 (the three live tiers).
+    function noPrivilegedFieldsOnCreate() {
+      return !request.resource.data.keys().hasAny([
+        'verified', 'isFeatured', 'isClaimed',
+        'claim_status', 'ownership_status',
+        'approvedAt', 'approvedBy', 'rejectedAt', 'rejectionReason'
+      ])
+        && (!request.resource.data.keys().hasAny(['paymentStatus'])
+          || request.resource.data.paymentStatus in ['PAYMENT_VERIFICATION_PENDING', 'PENDING_PAYMENT'])
+        && (!request.resource.data.keys().hasAny(['planPrice'])
+          || request.resource.data.planPrice in [1, 5, 10]);
+    }
+
+    // Privileged fields no non-admin may change when updating a listing.
+    // Owners may edit their own content (phone, description, hours...),
+    // but never their status, verification, ownership or payment state.
+    function noPrivilegedFieldsOnUpdate() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        'status', 'verified', 'isFeatured', 'isClaimed',
+        'claim_status', 'ownership_status',
+        'approvedAt', 'approvedBy', 'rejectedAt', 'rejectionReason',
+        'paymentStatus', 'planPrice',
+        'userId', 'email', 'ownerEmail'
+      ]);
+    }
+
+    // Shared shape for the four public listing collections.
+    // Read: the public sees APPROVED listings only. Owners and admins see
+    // their own / all listings (incl. pending) — but the client must query
+    // with where('status','==','approved') for public lists, or the rules
+    // deny the whole query.
+    // Create: signed-in + verified email, the doc carries the caller's
+    // identity, status is 'pending', no privileged fields.
+    // Update: admin anything; owner everything except privileged fields.
+    // Delete: admin or owner.
+    function listingRead() {
+      return resource.data.status == 'approved' || isAdmin() || hasOwner();
+    }
+
+    function listingCreate() {
+      return ownerMatchesCaller()
+        && request.resource.data.status == 'pending'
+        && noPrivilegedFieldsOnCreate();
+    }
+
+    function listingUpdate() {
+      return isAdmin() || (hasOwner() && noPrivilegedFieldsOnUpdate());
+    }
+
     // 1. BUSINESSES DIRECTORY
     match /businesses/{businessId} {
-      // Public directory visitors can view businesses
-      allow read: if true;
-      // Anyone can submit a listing (creates with pending status)
-      allow create: if true;
-      // Only the listing owner or administrator can modify or delete
-      allow update, delete: if isAdmin() || hasOwner();
+      allow read: if listingRead();
+      allow create: if listingCreate();
+      allow update: if listingUpdate();
+      allow delete: if isAdmin() || hasOwner();
     }
 
     // 2. PROFESSIONALS DIRECTORY
     match /professionals/{professionalId} {
-      allow read: if true;
-      allow create: if true;
-      allow update, delete: if isAdmin() || hasOwner();
+      allow read: if listingRead();
+      allow create: if listingCreate();
+      allow update: if listingUpdate();
+      allow delete: if isAdmin() || hasOwner();
     }
 
     // 3. COMPANIES
     match /companies/{companyId} {
-      allow read: if true;
-      allow create: if true;
-      allow update, delete: if isAdmin() || hasOwner();
+      allow read: if listingRead();
+      allow create: if listingCreate();
+      allow update: if listingUpdate();
+      allow delete: if isAdmin() || hasOwner();
     }
 
     // 4. JOBS
     match /jobs/{jobId} {
-      allow read: if true;
-      allow create: if true;
-      allow update, delete: if isAdmin() || hasOwner();
+      allow read: if listingRead();
+      allow create: if listingCreate();
+      allow update: if listingUpdate();
+      allow delete: if isAdmin() || hasOwner();
     }
 
     // 5. JOB APPLICATIONS
-    match /jobApplications/{applicationId} {
-      // Job seekers can submit job applications
-      allow create: if true;
-      // Only applicant, employer, or admin can read/manage application
-      allow read, update, delete: if isAdmin() || hasOwner() || (signedIn() && resource.data.applicantEmail == request.auth.token.email);
+    // NOTE: the code writes 'job_applications' (snake_case). The old rules
+    // matched 'jobApplications' (camelCase), which nothing uses — that
+    // collection was effectively denied by the catch-all, so applications
+    // never persisted. This match uses the real collection name.
+    match /job_applications/{applicationId} {
+      allow create: if emailVerified()
+        && request.resource.data.applicantEmail == request.auth.token.email;
+      allow read, update, delete: if isAdmin() || hasOwner()
+        || (signedIn() && resource.data.applicantEmail == request.auth.token.email);
     }
 
-    // 6. CONTACT MESSAGES & INQUIRIES
+    // 6. PROFESSIONAL VERIFICATION REQUESTS (was missing entirely)
+    match /professional_verifications/{verificationId} {
+      allow create: if emailVerified()
+        && (request.resource.data.userId == request.auth.uid
+          || request.resource.data.email == request.auth.token.email);
+      allow read, update, delete: if isAdmin() || hasOwner();
+    }
+
+    // 7. CONTACT MESSAGES & INQUIRIES
+    // Contact form is public (visitors are not signed in), so create stays
+    // open; reads are admin-only. Rate limiting / CAPTCHA belongs in code.
     match /contact_messages/{messageId} {
-      allow create: if true;
-      allow read, update, delete: if isAdmin();
-    }
-
-    match /contactMessages/{messageId} {
       allow create: if true;
       allow read, update, delete: if isAdmin();
     }
@@ -80,12 +195,12 @@ service cloud.firestore {
       allow read, update, delete: if isAdmin() || hasOwner() || (signedIn() && resource.data.senderEmail == request.auth.token.email);
     }
 
-    // 7. ADMIN USERS & SYSTEM CONFIG
+    // 8. ADMIN USERS & SYSTEM CONFIG
     match /adminUsers/{userId} {
       allow read, write: if isAdmin();
     }
 
-    // 8. CMS CONTENT & PLATFORM SETTINGS
+    // 9. CMS CONTENT & PLATFORM SETTINGS
     match /cms_categories/{categoryId} {
       allow read: if true;
       allow write: if isAdmin();
@@ -101,15 +216,148 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // 9. BUSINESS PAYMENTS & AUDIT LOGS
+    // platform_settings holds public site settings (support contact etc.).
+    // If it ever holds secrets, change read to isAdmin() only.
+    match /platform_settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 10. BUSINESS PAYMENTS & AUDIT LOGS
+    // Business blog posts (was missing entirely — dashboard post-submit
+    // could never persist). Posts are created 'pending' into the
+    // moderation queue, like reviews/claims — never 'published' straight
+    // from the client; an admin approves them afterwards. They become
+    // public content only once approved.
+    match /business_blog_posts/{postId} {
+      allow create: if emailVerified()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'pending';
+      allow read: if true; // NOTE (traced 2026-11-08 — do NOT tighten to
+      // `status == 'published' || isAdmin() || hasOwner()` without the
+      // code changes below; the rule change alone breaks two live paths):
+      // (1) OWNER DASHBOARD: app/dashboard/page.tsx:460-475 fetchUserPosts
+      // calls GET /api/business/posts (app/api/business/posts/route.ts,
+      // no auth header) -> getBusinessBlogPosts (lib/user-post-service.ts:
+      // 122-135, where businessId only, NO status filter) via the
+      // unauthenticated client SDK (lib/firebase.ts). lib/server-auth.ts
+      // documents that token verification does NOT authenticate the
+      // route's Firestore client, so request.auth == null, hasOwner() /
+      // isAdmin() are false, and a query that could return pending /
+      // rejected docs is denied wholesale (rules are not filters) ->
+      // getBusinessBlogPosts catches and returns [] -> dashboard shows
+      // "No business posts written yet" and the quota counts
+      // (dashboard :314, :322-330) read 0. Fixing it needs the posts
+      // read re-plumbed behind authenticated access with a
+      // userId-constrained query (Admin SDK or Firestore REST with the
+      // user token), then re-tested before publishing.
+      // (2) PUBLIC DETAIL was the same shape — getBusinessPostBySlug
+      // (user-post-service.ts:225-240, slug only) from
+      // app/blog/[slug]/page.tsx:54,298 — but it now filters
+      // status=='published' in code, so it is safe under a tightened
+      // rule. ADMIN is fine either way: getPendingBusinessPosts
+      // (:140-154, status=='pending') runs as the signed-in admin, so
+      // isAdmin() permits it. Public lists are already published-only:
+      // getPublishedPostsByBusinessId (:187-203) and
+      // getAllPublishedBusinessPosts (:206-222). Posts carry no owner
+      // PII (title/content/excerpt/authorName only), so the open read
+      // leaks at most pending post text by direct doc get.
+      allow update, delete: if isAdmin() || (hasOwner() && noPrivilegedFieldsOnUpdate());
+    }
     match /payments/{paymentId} {
       allow read: if isAdmin() || (signedIn() && (
         resource.data.user_id == request.auth.uid ||
         resource.data.userId == request.auth.uid ||
         resource.data.user_email == request.auth.token.email
       ));
-      allow create: if signedIn();
+      // Create is owner-or-admin only: a caller may record a payment only
+      // for themselves (uid/email match on the new doc), never for another
+      // user. Any signed-in user could previously fabricate a payment
+      // record under someone else's identity.
+      allow create: if signedIn() && emailVerified() && (
+        request.resource.data.user_id == request.auth.uid ||
+        request.resource.data.userId == request.auth.uid ||
+        request.resource.data.user_email == request.auth.token.email ||
+        request.resource.data.email == request.auth.token.email
+      );
       allow update, delete: if isAdmin();
+    }
+
+    // Per-business payment records (was missing entirely)
+    match /business_payments/{paymentId} {
+      allow read: if isAdmin() || (signedIn() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.user_email == request.auth.token.email ||
+        resource.data.email == request.auth.token.email
+      ));
+      // Same owner-or-admin-only create as /payments (see above).
+      allow create: if signedIn() && emailVerified() && (
+        request.resource.data.userId == request.auth.uid ||
+        request.resource.data.user_email == request.auth.token.email ||
+        request.resource.data.email == request.auth.token.email
+      );
+      allow update, delete: if isAdmin();
+    }
+
+    // 11. BUSINESS REVIEWS (moderation queue: pending -> approved/rejected)
+    // Read: the public sees APPROVED reviews only; the author (verified
+    // email / uid match via hasOwner) and admins may read their own /
+    // all reviews, including pending ones.
+    // Create: signed-in + verified email, the doc carries the caller's own
+    // identity, status is 'pending', rating 1-5, no privileged fields.
+    // Update (approve/reject): admin only — an author can never change a
+    // review's status. Delete: admin, or the author for their own review.
+    match /business_reviews/{reviewId} {
+      allow read: if resource.data.status == 'approved' || isAdmin() || hasOwner();
+      allow create: if emailVerified()
+        && (request.resource.data.userId == request.auth.uid
+          || request.resource.data.email == request.auth.token.email)
+        && request.resource.data.status == 'pending'
+        && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5
+        && request.resource.data.keys().hasAll(['businessSlug', 'userName', 'rating', 'comment'])
+        && !request.resource.data.keys().hasAny([
+          'approvedAt', 'approvedBy', 'rejectedAt', 'rejectionReason'
+        ]);
+      allow update: if isAdmin();
+      allow delete: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+    }
+
+    // 12. PROFESSIONAL REVIEWS — same moderation-queue pattern as businesses.
+    match /professional_reviews/{reviewId} {
+      allow read: if resource.data.status == 'approved' || isAdmin() || hasOwner();
+      allow create: if emailVerified()
+        && (request.resource.data.userId == request.auth.uid
+          || request.resource.data.email == request.auth.token.email)
+        && request.resource.data.status == 'pending'
+        && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5
+        && request.resource.data.keys().hasAll(['professionalUsername', 'userName', 'rating', 'comment'])
+        && !request.resource.data.keys().hasAny([
+          'approvedAt', 'approvedBy', 'rejectedAt', 'rejectionReason'
+        ]);
+      allow update: if isAdmin();
+      allow delete: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+    }
+
+    // 13. BUSINESS CLAIMS — sensitive by design (EIN / license number +
+    // proof document). NEVER public: read is admin + the claimant only.
+    // Create: signed-in + verified email, caller's own identity, status
+    // 'pending'. Update (approve/reject): admin only. Approving a claim
+    // only flips the claim's status; setting isClaimed / claim_status on
+    // the business itself is a separate step (approveBusiness).
+    match /business_claims/{claimId} {
+      allow read: if isAdmin() || hasOwner();
+      allow create: if emailVerified()
+        && (request.resource.data.userId == request.auth.uid
+          || request.resource.data.email == request.auth.token.email)
+        && request.resource.data.status == 'pending'
+        && request.resource.data.keys().hasAll(['businessSlug', 'claimantName', 'claimantPhone', 'taxIdOrLicense'])
+        && !request.resource.data.keys().hasAny([
+          'approvedAt', 'approvedBy', 'rejectedAt', 'rejectionReason'
+        ]);
+      allow update: if isAdmin();
+      allow delete: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
     }
 
     match /payment_audit_logs/{logId} {
